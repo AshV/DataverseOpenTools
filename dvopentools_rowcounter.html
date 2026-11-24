@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dataverse Row Counter</title>
+
+  <!-- ══ 1. MANIFEST ══════════════════════════════════════════
+       Discovered automatically by dvopentools_host.html
+  ═══════════════════════════════════════════════════════════ -->
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "row-counter",
+    "name":           "Row Counter",
+    "version":        "1.0.0",
+    "description":    "Count records across Dataverse tables (Total, Active, Inactive, Custom Filter) with HTTP headers inspection & CSV export.",
+    "icon":           "📊",
+    "category":       "Data",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.0"
+  }
+  </script>
+
+  <!-- ══ 2. STYLES ════════════════════════════════════════════
+       Self-contained, zero external dependencies, light/dark mode.
+  ═══════════════════════════════════════════════════════════ -->
+  <style>
+    :root {
+      --bg:             #ffffff;
+      --bg-alt:         #f8f9fa;
+      --bg-card:        #ffffff;
+      --border:         #e1dfdd;
+      --border-subtle:  #edebe9;
+      --text:           #201f1e;
+      --text-sec:       #605e5c;
+      --text-muted:     #8a8886;
+      --primary:        #0078d4;
+      --primary-hover:  #106ebe;
+      --primary-subtle: #eff6fc;
+
+      --status-success: #107c10;
+      --status-warn:    #d97706;
+      --status-error:   #d13438;
+
+      --badge-custom-bg: #e8f4fd;
+      --badge-custom-color: #0078d4;
+      --badge-std-bg:    #f3f2f1;
+      --badge-std-color: #605e5c;
+
+      --modal-overlay:  rgba(0, 0, 0, 0.45);
+      --shadow-sm:      0 1.6px 3.6px 0 rgba(0,0,0,0.13), 0 0.3px 0.9px 0 rgba(0,0,0,0.11);
+      --shadow-md:      0 6.4px 14.4px 0 rgba(0,0,0,0.13), 0 1.2px 3.6px 0 rgba(0,0,0,0.11);
+    }
+
+    body.dark {
+      --bg:             #1e1e1e;
+      --bg-alt:         #252526;
+      --bg-card:        #2d2d2d;
+      --border:         #3e3e42;
+      --border-subtle:  #333337;
+      --text:           #d4d4d4;
+      --text-sec:       #a6a6a6;
+      --text-muted:     #767676;
+      --primary:        #2886de;
+      --primary-hover:  #4797e2;
+      --primary-subtle: #19324d;
+
+      --status-success: #57b35e;
+      --status-warn:    #fbbf24;
+      --status-error:   #f1707b;
+
+      --badge-custom-bg: #14324f;
+      --badge-custom-color: #60b4ff;
+      --badge-std-bg:    #383838;
+      --badge-std-color: #a6a6a6;
+
+      --modal-overlay:  rgba(0, 0, 0, 0.7);
+      --shadow-sm:      0 2px 4px rgba(0,0,0,0.4);
+      --shadow-md:      0 8px 18px rgba(0,0,0,0.6);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* ─── Topbar & Actions ────────────────────────────────────────── */
+    .topbar {
+      padding: 10px 14px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .row-primary {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .tool-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      white-space: nowrap;
+    }
+
+    .spacer { flex: 1; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-card);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) {
+      background: var(--bg-alt);
+      border-color: var(--primary);
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .btn.primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+    .btn.icon-only {
+      padding: 5px 8px;
+    }
+
+    .header-inspector-btn {
+      position: relative;
+    }
+    .badge-pill {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      background: var(--status-success);
+      color: #fff;
+      margin-left: 4px;
+    }
+
+    /* ─── Filter & Batch Toolbar ──────────────────────────────────── */
+    .row-secondary {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+
+    .search-input {
+      padding: 5px 9px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 12px;
+      background: var(--bg-card);
+      color: var(--text);
+      width: 220px;
+    }
+    .search-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .seg-group {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      background: var(--bg-alt);
+    }
+    .seg-btn {
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--text-sec);
+      cursor: pointer;
+      transition: all 0.1s;
+    }
+    .seg-btn:hover {
+      color: var(--text);
+    }
+    .seg-btn.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    /* ─── Stats Ribbon ────────────────────────────────────────────── */
+    .stats-ribbon {
+      padding: 6px 14px;
+      background: var(--bg-alt);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .stat-label {
+      color: var(--text-sec);
+    }
+    .stat-value {
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .progress-bar-wrap {
+      flex: 1;
+      max-width: 200px;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      display: none;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--primary);
+      width: 0%;
+      transition: width 0.2s ease;
+    }
+
+    /* ─── Main Content / Table ────────────────────────────────────── */
+    .content-area {
+      flex: 1;
+      overflow: auto;
+      background: var(--bg);
+      position: relative;
+    }
+    .content-area::-webkit-scrollbar { width: 8px; height: 8px; }
+    .content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      text-align: left;
+    }
+    .data-table th {
+      position: sticky;
+      top: 0;
+      background: var(--bg-alt);
+      border-bottom: 2px solid var(--border);
+      padding: 8px 12px;
+      font-weight: 600;
+      color: var(--text-sec);
+      white-space: nowrap;
+      z-index: 5;
+      cursor: pointer;
+    }
+    .data-table th:hover {
+      color: var(--text);
+    }
+    .data-table td {
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      white-space: nowrap;
+    }
+    .data-table tr:hover td {
+      background: var(--bg-alt);
+    }
+
+    .table-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .table-badge.custom {
+      background: var(--badge-custom-bg);
+      color: var(--badge-custom-color);
+    }
+    .table-badge.standard {
+      background: var(--badge-std-bg);
+      color: var(--badge-std-color);
+    }
+
+    .count-cell {
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-weight: 600;
+      font-size: 12px;
+      text-align: right;
+    }
+    .count-cell.total { color: var(--primary); }
+    .count-cell.active { color: var(--status-success); }
+    .count-cell.inactive { color: var(--text-muted); }
+
+    .btn-table-action {
+      padding: 2px 8px;
+      font-size: 11px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .btn-table-action:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* Spinner */
+    .spin {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Bottom/Drawer: HTTP Telemetry & Headers Inspector ───────── */
+    .inspector-panel {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 290px;
+      background: var(--bg-card);
+      border-top: 2px solid var(--primary);
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.18);
+      display: flex;
+      flex-direction: column;
+      z-index: 40;
+      transform: translateY(100%);
+      transition: transform 0.25s cubic-bezier(0.1, 0.9, 0.2, 1);
+    }
+    .inspector-panel.open {
+      transform: translateY(0);
+    }
+
+    .inspector-header {
+      padding: 8px 14px;
+      background: var(--bg-alt);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+    }
+    .inspector-title {
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .inspector-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      overflow: hidden;
+    }
+    .inspector-col {
+      padding: 10px 14px;
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .inspector-col:last-child { border-right: none; }
+    .inspector-col-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .headers-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+    }
+    .headers-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--border-subtle);
+      word-break: break-all;
+    }
+    .headers-table td.header-key {
+      font-weight: 600;
+      color: var(--primary);
+      width: 42%;
+      user-select: text;
+    }
+    .headers-table td.header-val {
+      color: var(--text);
+      user-select: text;
+    }
+    .headers-table tr.highlight-header td {
+      background: rgba(0, 120, 212, 0.08);
+      font-weight: 700;
+    }
+
+    .meta-code {
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-size: 11px;
+      overflow: auto;
+      white-space: pre-wrap;
+      user-select: text;
+      max-height: 180px;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      gap: 4px 10px;
+      font-size: 12px;
+    }
+    .detail-label { font-weight: 600; color: var(--text-sec); }
+    .detail-val { color: var(--text); user-select: text; font-family: 'Cascadia Code', monospace; }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════════ TOPBAR ══════════════ -->
+  <header class="topbar">
+    <div class="row-primary">
+      <div class="tool-brand">
+        <span>📊</span> Dataverse Row Counter
+      </div>
+
+      <div class="spacer"></div>
+
+      <!-- Actions -->
+      <button class="btn primary" id="btn-count-all" disabled title="Count all currently filtered tables">
+        <span>▶</span> Count Visible (<span id="btn-count-num">0</span>)
+      </button>
+
+      <button class="btn" id="btn-count-custom" disabled title="Quick count all custom tables">
+        Count Custom Only
+      </button>
+
+      <button class="btn" id="btn-export-csv" title="Export counted tables to CSV">
+        📥 Export CSV
+      </button>
+
+      <button class="btn" id="btn-sample-toggle" title="Load sample table counts if testing locally">
+        🧪 Sample Data
+      </button>
+
+      <button class="btn header-inspector-btn" id="btn-toggle-inspector" title="View HTTP Response Headers & Telemetry">
+        🌐 HTTP Headers <span class="badge-pill" id="http-status-pill">200 OK</span>
+      </button>
+    </div>
+
+    <!-- Secondary Row: Filters -->
+    <div class="row-secondary">
+      <input type="text" class="search-input" id="search-input" placeholder="Search tables (name, logical name)…">
+
+      <!-- Table Scope Segment -->
+      <div class="seg-group">
+        <button class="seg-btn active" data-scope="all">All Tables</button>
+        <button class="seg-btn" data-scope="custom">Custom Only</button>
+        <button class="seg-btn" data-scope="standard">Standard Only</button>
+        <button class="seg-btn" data-scope="counted">Counted Only</button>
+      </div>
+
+      <div class="spacer"></div>
+
+      <button class="btn icon-only" id="btn-reload-meta" title="Reload Entity Metadata from Dataverse">
+        <span id="spin-reload">↻</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ══════════════ STATS RIBBON ══════════════ -->
+  <div class="stats-ribbon">
+    <div class="stat-item">
+      <span class="stat-label">Tables:</span>
+      <span class="stat-value" id="stat-total-tables">0</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">Counted:</span>
+      <span class="stat-value" id="stat-counted-tables">0</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-label">Total Rows:</span>
+      <span class="stat-value" id="stat-total-rows">0</span>
+    </div>
+
+    <div class="progress-bar-wrap" id="progress-wrap">
+      <div class="progress-bar-fill" id="progress-fill"></div>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="stat-item" id="stat-rate-limit" style="font-size:11px;color:var(--text-sec);display:none;">
+      <span>Rate Limit Remaining:</span>
+      <strong id="stat-rate-val">—</strong>
+    </div>
+  </div>
+
+  <!-- ══════════════ CONTENT / DATA TABLE ══════════════ -->
+  <main class="content-area">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th data-sort="displayName">Display Name ▾</th>
+          <th data-sort="logicalName">Logical Name</th>
+          <th data-sort="entitySetName">Entity Set Name</th>
+          <th data-sort="isCustom">Type</th>
+          <th data-sort="totalCount" style="text-align:right;">Total Rows</th>
+          <th data-sort="activeCount" style="text-align:right;">Active</th>
+          <th data-sort="inactiveCount" style="text-align:right;">Inactive</th>
+          <th style="text-align:center;width:90px;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="table-body">
+        <tr>
+          <td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">
+            Connecting to Dataverse and loading table metadata…
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </main>
+
+  <!-- ══════════════ HTTP HEADERS & TELEMETRY DRAWER ══════════════ -->
+  <aside class="inspector-panel" id="inspector-panel">
+    <div class="inspector-header">
+      <div class="inspector-title">
+        <span>🌐</span> Dataverse HTTP Telemetry &amp; Response Headers
+      </div>
+      <div class="spacer"></div>
+      <span id="inspector-summary" style="color:var(--text-sec);font-family:monospace;font-size:11px;">
+        GET /EntityDefinitions
+      </span>
+      <button class="btn icon-only" id="inspector-close-btn" title="Close drawer">✕</button>
+    </div>
+    <div class="inspector-body">
+      <!-- Col 1: HTTP Response Headers -->
+      <div class="inspector-col">
+        <div class="inspector-col-title">
+          <span>HTTP Response Headers</span>
+          <button class="btn icon-only" id="btn-copy-headers" title="Copy all headers">📋</button>
+        </div>
+        <table class="headers-table">
+          <tbody id="headers-table-body">
+            <!-- Headers injected here -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Col 2: Telemetry & Rate Limits -->
+      <div class="inspector-col">
+        <div class="inspector-col-title">
+          <span>OData Telemetry &amp; Rate Limits</span>
+        </div>
+        <div class="detail-grid" style="margin-bottom:8px;">
+          <div class="detail-label">Status:</div>
+          <div class="detail-val" id="tel-status">200 OK</div>
+
+          <div class="detail-label">Latency:</div>
+          <div class="detail-val" id="tel-latency">85 ms</div>
+
+          <div class="detail-label">Endpoint:</div>
+          <div class="detail-val" id="tel-endpoint">/EntityDefinitions</div>
+
+          <div class="detail-label">Rate Remaining:</div>
+          <div class="detail-val" id="tel-rate">—</div>
+        </div>
+        <div class="inspector-col-title" style="margin-top:6px;">
+          <span>Last Raw Request URL</span>
+        </div>
+        <pre class="meta-code" id="tel-url-box">—</pre>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ════════════════════════════════════════════════════════════
+       TOOL SCRIPT
+  ════════════════════════════════════════════════════════════ -->
+  <script>
+    'use strict';
+
+    /* ─── 1. Constants & State ──────────────────────────────── */
+    const MANIFEST_ID = 'row-counter';
+    const HOST_ORIGIN = window.location.origin;
+    const TOOL_STORE  = `dvopentools::tool::${MANIFEST_ID}::`;
+
+    let context = null;
+    let entities = [];         // all discovered entities [{displayName, logicalName, entitySetName, isCustom, totalCount, activeCount, inactiveCount, state}]
+    let activeScope = 'all';   // 'all' | 'custom' | 'standard' | 'counted'
+    let searchQuery = '';
+    let sortColumn  = 'displayName';
+    let sortAsc     = true;
+    let isBatching  = false;
+    let cancelBatch = false;
+
+    // Telemetry state
+    let lastTelemetry = {
+      url: '',
+      status: 200,
+      statusText: 'OK',
+      latency: 0,
+      headers: {}
+    };
+
+    /* ─── 2. Host Communication ─────────────────────────────── */
+    function toHost(type, payload = {}) {
+      window.parent.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
+    }
+    function notify(message, level = 'info', duration = 3500) {
+      toHost('NOTIFY', { message, level, duration });
+    }
+    function setTitle(title) {
+      toHost('SET_TITLE', { title });
+    }
+
+    // Step A: Signal readiness immediately
+    toHost('TOOL_READY');
+
+    // Step B: Listen for host messages
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN) return;
+      if (e.data?.source !== 'dvopentools-host') return;
+
+      const { type, payload } = e.data;
+      if (type === 'CONTEXT_INIT') {
+        context = payload;
+        onContextReady();
+      }
+      if (type === 'THEME_CHANGE') {
+        applyTheme(payload.theme);
+      }
+      if (type === 'TOOL_FOCUS') {
+        // Tab focused
+      }
+    });
+
+    function applyTheme(theme) {
+      document.body.classList.toggle('dark', theme === 'dark');
+    }
+
+    /* ─── 3. Tiered Storage Helper ──────────────────────────── */
+    const _store = (() => {
+      function canUse(s) {
+        try { const k = '__dvot__'; s.setItem(k, '1'); s.removeItem(k); return true; } catch { return false; }
+      }
+      const _ls  = typeof localStorage  !== 'undefined' && canUse(localStorage)  ? localStorage  : null;
+      const _ss  = typeof sessionStorage !== 'undefined' && canUse(sessionStorage) ? sessionStorage : null;
+      const _mem = Object.create(null);
+      const _b   = _ls || _ss;
+      return {
+        type: _ls ? 'localStorage' : _ss ? 'sessionStorage' : 'memory',
+        get(k)   { if (_b) try { return JSON.parse(_b.getItem(k)); } catch {} return _mem[k] ?? null; },
+        set(k,v) { if (_b) try { _b.setItem(k, JSON.stringify(v)); return; } catch {} _mem[k] = v; },
+        del(k)   { if (_b) try { _b.removeItem(k); } catch {} delete _mem[k]; }
+      };
+    })();
+
+    function toolStore(key, value) {
+      const k = TOOL_STORE + key;
+      if (value === undefined) return _store.get(k);
+      _store.set(k, value);
+    }
+
+    /* ─── 4. Context Ready ──────────────────────────────────── */
+    async function onContextReady() {
+      applyTheme(context.theme);
+
+      // Restore saved scope
+      const savedScope = toolStore('scope');
+      if (savedScope) {
+        activeScope = savedScope;
+        document.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.scope === activeScope));
+      }
+
+      await loadEntityMetadata();
+    }
+
+    /* ─── 5. Dataverse Fetch with HTTP Headers Capture ──────── */
+    async function dvFetchWithHeaders(path, opts = {}) {
+      const url = `${context.environmentUrl}/api/data/v${context.apiVersion}${path}`;
+      const t0  = performance.now();
+
+      const defaultHeaders = {
+        'OData-MaxVersion': '4.0',
+        'OData-Version':    '4.0',
+        'Accept':           'application/json',
+        'Content-Type':     'application/json',
+        'Prefer':           'odata.include-annotations="*"',
+      };
+
+      const res = await fetch(url, {
+        ...opts,
+        headers: { ...defaultHeaders, ...opts.headers }
+      });
+
+      const t1 = performance.now();
+      const latency = Math.round(t1 - t0);
+
+      const capturedHeaders = {};
+      res.headers.forEach((val, key) => {
+        capturedHeaders[key.toLowerCase()] = val;
+      });
+
+      // Handle raw text return (e.g. from /$count)
+      const isCount = path.includes('/$count');
+      let result = null;
+      if (isCount) {
+        const text = await res.text();
+        result = parseInt(text.trim(), 10);
+      } else {
+        try {
+          result = await res.json();
+        } catch {
+          result = {};
+        }
+      }
+
+      // Update telemetry
+      lastTelemetry = {
+        url,
+        status: res.status,
+        statusText: res.statusText || 'OK',
+        latency,
+        headers: capturedHeaders
+      };
+      updateTelemetryUI();
+
+      if (!res.ok) {
+        const msg = result?.error?.message || `${res.status} ${res.statusText}`;
+        throw new Error(msg);
+      }
+
+      return result;
+    }
+
+    function updateTelemetryUI() {
+      const pill = document.getElementById('http-status-pill');
+      pill.textContent = `${lastTelemetry.status} ${lastTelemetry.statusText} (${lastTelemetry.latency}ms)`;
+      pill.style.background = lastTelemetry.status >= 200 && lastTelemetry.status < 300
+        ? 'var(--status-success)' : 'var(--status-error)';
+
+      document.getElementById('tel-status').textContent = `${lastTelemetry.status} ${lastTelemetry.statusText}`;
+      document.getElementById('tel-latency').textContent = `${lastTelemetry.latency} ms`;
+      document.getElementById('tel-endpoint').textContent = lastTelemetry.url.replace(context?.environmentUrl || '', '');
+      document.getElementById('tel-url-box').textContent = lastTelemetry.url;
+
+      const rateLimit = lastTelemetry.headers['x-ms-ratelimit-time-remaining-xrm-requests'];
+      if (rateLimit) {
+        document.getElementById('tel-rate').textContent = rateLimit;
+        document.getElementById('stat-rate-limit').style.display = 'flex';
+        document.getElementById('stat-rate-val').textContent = rateLimit;
+      }
+
+      document.getElementById('inspector-summary').textContent =
+        `Status ${lastTelemetry.status} | Latency: ${lastTelemetry.latency}ms | Headers: ${Object.keys(lastTelemetry.headers).length}`;
+
+      const tbody = document.getElementById('headers-table-body');
+      tbody.innerHTML = '';
+
+      const priorityHeaders = [
+        'preference-applied', 'odata-version', 'etag', 'x-ms-request-id',
+        'x-ms-ratelimit-time-remaining-xrm-requests', 'retry-after', 'content-type', 'date'
+      ];
+
+      const sortedKeys = Object.keys(lastTelemetry.headers).sort((a, b) => {
+        const ia = priorityHeaders.indexOf(a);
+        const ib = priorityHeaders.indexOf(b);
+        if (ia !== -1 && ib !== -1) return ia - ib;
+        if (ia !== -1) return -1;
+        if (ib !== -1) return 1;
+        return a.localeCompare(b);
+      });
+
+      for (const k of sortedKeys) {
+        const tr = document.createElement('tr');
+        if (priorityHeaders.includes(k)) tr.className = 'highlight-header';
+        tr.innerHTML = `<td class="header-key">${esc(k)}</td><td class="header-val">${esc(lastTelemetry.headers[k])}</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+
+    /* ─── 6. Metadata Loading ───────────────────────────────── */
+    async function loadEntityMetadata() {
+      const spin = document.getElementById('spin-reload');
+      spin.style.animation = 'spin .7s linear infinite';
+
+      try {
+        const data = await dvFetchWithHeaders(
+          `/EntityDefinitions?$select=LogicalName,DisplayName,EntitySetName,PrimaryIdAttribute,IsCustomEntity,IsIntersect&$filter=IsIntersect eq false and PrimaryIdAttribute ne null&$orderby=LogicalName asc`
+        );
+
+        const list = data.value || [];
+        entities = list
+          .filter(e => e.EntitySetName)
+          .map(e => ({
+            displayName:   e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+            logicalName:   e.LogicalName,
+            entitySetName: e.EntitySetName,
+            isCustom:      !!e.IsCustomEntity,
+            totalCount:    null,
+            activeCount:   null,
+            inactiveCount: null,
+            loading:       false
+          }));
+
+        // Enable buttons
+        document.getElementById('btn-count-all').disabled    = false;
+        document.getElementById('btn-count-custom').disabled = false;
+
+        notify(`Discovered ${entities.length} Dataverse tables`, 'success');
+      } catch (err) {
+        console.warn('[RowCounter] Metadata load failed:', err);
+        notify(`Metadata: ${err.message}`, 'warning');
+        if (!entities.length) {
+          useSampleData();
+        }
+      } finally {
+        spin.style.animation = 'none';
+        renderTable();
+      }
+    }
+
+    /* ─── 7. Sample Data Mode ───────────────────────────────── */
+    function useSampleData() {
+      const sampleDefs = [
+        { displayName: 'Account', logicalName: 'account', entitySetName: 'accounts', isCustom: false, totalCount: 1420, activeCount: 1380, inactiveCount: 40 },
+        { displayName: 'Contact', logicalName: 'contact', entitySetName: 'contacts', isCustom: false, totalCount: 5210, activeCount: 5100, inactiveCount: 110 },
+        { displayName: 'Opportunity', logicalName: 'opportunity', entitySetName: 'opportunities', isCustom: false, totalCount: 890, activeCount: 720, inactiveCount: 170 },
+        { displayName: 'Invoice Approval', logicalName: 'cr_invoiceapproval', entitySetName: 'cr_invoiceapprovals', isCustom: true, totalCount: 320, activeCount: 315, inactiveCount: 5 },
+        { displayName: 'Project Task', logicalName: 'msdyn_projecttask', entitySetName: 'msdyn_projecttasks', isCustom: false, totalCount: 2450, activeCount: 2100, inactiveCount: 350 },
+        { displayName: 'Asset Register', logicalName: 'cr_assetregister', entitySetName: 'cr_assetregisters', isCustom: true, totalCount: 185, activeCount: 180, inactiveCount: 5 },
+        { displayName: 'System User', logicalName: 'systemuser', entitySetName: 'systemusers', isCustom: false, totalCount: 48, activeCount: 45, inactiveCount: 3 },
+        { displayName: 'Audit Log', logicalName: 'audit', entitySetName: 'audits', isCustom: false, totalCount: 68400, activeCount: 68400, inactiveCount: 0 },
+        { displayName: 'Cloud Flow', logicalName: 'workflow', entitySetName: 'workflows', isCustom: false, totalCount: 74, activeCount: 68, inactiveCount: 6 },
+        { displayName: 'Vendor Contract', logicalName: 'cr_vendorcontract', entitySetName: 'cr_vendorcontracts', isCustom: true, totalCount: 92, activeCount: 85, inactiveCount: 7 }
+      ];
+
+      entities = sampleDefs.map(d => ({ ...d, loading: false }));
+      document.getElementById('btn-count-all').disabled    = false;
+      document.getElementById('btn-count-custom').disabled = false;
+
+      notify('Loaded 10 sample tables with row counts.', 'info');
+      renderTable();
+    }
+
+    /* ─── 8. Counting Engine ────────────────────────────────── */
+    async function countSingleEntity(item) {
+      if (item.loading) return;
+      item.loading = true;
+      renderRow(item.logicalName);
+
+      try {
+        // Total count
+        const total = await dvFetchWithHeaders(`/${item.entitySetName}/$count`);
+        item.totalCount = isNaN(total) ? 0 : total;
+
+        // Attempt Active count (statecode eq 0)
+        try {
+          const active = await dvFetchWithHeaders(`/${item.entitySetName}/$count?$filter=statecode eq 0`);
+          item.activeCount = isNaN(active) ? null : active;
+        } catch {
+          item.activeCount = null; // entity does not have statecode
+        }
+
+        // Attempt Inactive count (statecode eq 1)
+        try {
+          const inactive = await dvFetchWithHeaders(`/${item.entitySetName}/$count?$filter=statecode eq 1`);
+          item.inactiveCount = isNaN(inactive) ? null : inactive;
+        } catch {
+          item.inactiveCount = null;
+        }
+      } catch (err) {
+        console.warn(`[RowCounter] Count failed for ${item.logicalName}:`, err);
+        notify(`${item.displayName}: ${err.message}`, 'error');
+        item.totalCount = 'Error';
+      } finally {
+        item.loading = false;
+        renderRow(item.logicalName);
+        updateStats();
+      }
+    }
+
+    async function runBatchCount(items) {
+      if (isBatching) {
+        // Toggle cancel
+        cancelBatch = true;
+        return;
+      }
+
+      isBatching = true;
+      cancelBatch = false;
+
+      const btnAll = document.getElementById('btn-count-all');
+      btnAll.textContent = '⏹ Stop Counting';
+      btnAll.style.background = 'var(--status-error)';
+
+      const progressWrap = document.getElementById('progress-wrap');
+      const progressFill = document.getElementById('progress-fill');
+      progressWrap.style.display = 'block';
+      progressFill.style.width = '0%';
+
+      let completed = 0;
+      for (const item of items) {
+        if (cancelBatch) break;
+        await countSingleEntity(item);
+        completed++;
+        progressFill.style.width = `${Math.round((completed / items.length) * 100)}%`;
+      }
+
+      isBatching = false;
+      progressWrap.style.display = 'none';
+      btnAll.textContent = `▶ Count Visible (${getFilteredEntities().length})`;
+      btnAll.style.background = 'var(--primary)';
+
+      notify(`Completed counting ${completed} tables`, 'success');
+      setTitle(`Row Counter (${completed} counted)`);
+    }
+
+    /* ─── 9. Filtering & Table Rendering ────────────────────── */
+    function getFilteredEntities() {
+      const q = searchQuery.toLowerCase();
+      return entities.filter(e => {
+        // Scope filter
+        if (activeScope === 'custom'   && !e.isCustom) return false;
+        if (activeScope === 'standard' && e.isCustom)  return false;
+        if (activeScope === 'counted'  && e.totalCount === null) return false;
+
+        // Search text
+        if (q && !e.displayName.toLowerCase().includes(q) && !e.logicalName.toLowerCase().includes(q)) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    function renderTable() {
+      const filtered = getFilteredEntities();
+
+      // Sort
+      filtered.sort((a, b) => {
+        let va = a[sortColumn];
+        let vb = b[sortColumn];
+
+        if (va === null || va === undefined) va = -1;
+        if (vb === null || vb === undefined) vb = -1;
+
+        if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+        return sortAsc ? va - vb : vb - va;
+      });
+
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = '';
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">No tables found matching criteria.</td></tr>`;
+        updateStats();
+        return;
+      }
+
+      for (const e of filtered) {
+        tbody.appendChild(createRowElement(e));
+      }
+
+      updateStats();
+    }
+
+    function createRowElement(e) {
+      const tr = document.createElement('tr');
+      tr.id = `row-${e.logicalName}`;
+
+      const totalDisplay    = e.loading ? '<span class="spin"></span>' : (e.totalCount === null ? '—' : Number(e.totalCount).toLocaleString());
+      const activeDisplay   = e.loading ? '…' : (e.activeCount === null ? '—' : Number(e.activeCount).toLocaleString());
+      const inactiveDisplay = e.loading ? '…' : (e.inactiveCount === null ? '—' : Number(e.inactiveCount).toLocaleString());
+
+      tr.innerHTML = `
+        <td><strong>${esc(e.displayName)}</strong></td>
+        <td><code>${esc(e.logicalName)}</code></td>
+        <td><code>${esc(e.entitySetName)}</code></td>
+        <td><span class="table-badge ${e.isCustom ? 'custom' : 'standard'}">${e.isCustom ? 'Custom' : 'Standard'}</span></td>
+        <td class="count-cell total">${totalDisplay}</td>
+        <td class="count-cell active">${activeDisplay}</td>
+        <td class="count-cell inactive">${inactiveDisplay}</td>
+        <td style="text-align:center;">
+          <button class="btn-table-action" data-logical="${esc(e.logicalName)}" ${e.loading ? 'disabled' : ''}>
+            ${e.totalCount !== null ? '↻ Re-count' : '⚡ Count'}
+          </button>
+        </td>
+      `;
+
+      tr.querySelector('.btn-table-action').addEventListener('click', () => {
+        countSingleEntity(e);
+      });
+
+      return tr;
+    }
+
+    function renderRow(logicalName) {
+      const e = entities.find(x => x.logicalName === logicalName);
+      if (!e) return;
+      const oldTr = document.getElementById(`row-${logicalName}`);
+      if (oldTr) {
+        const newTr = createRowElement(e);
+        oldTr.replaceWith(newTr);
+      }
+    }
+
+    function updateStats() {
+      const filtered = getFilteredEntities();
+      document.getElementById('stat-total-tables').textContent = entities.length;
+      document.getElementById('btn-count-num').textContent     = filtered.length;
+
+      const counted = entities.filter(e => typeof e.totalCount === 'number');
+      document.getElementById('stat-counted-tables').textContent = counted.length;
+
+      const sumRows = counted.reduce((sum, e) => sum + (e.totalCount || 0), 0);
+      document.getElementById('stat-total-rows').textContent = sumRows.toLocaleString();
+    }
+
+    /* ─── 10. CSV Export ────────────────────────────────────── */
+    function exportToCsv() {
+      const counted = entities.filter(e => e.totalCount !== null);
+      if (counted.length === 0) {
+        notify('No counted tables to export. Run some counts first!', 'warning');
+        return;
+      }
+
+      const headers = ['Display Name', 'Logical Name', 'Entity Set Name', 'Is Custom', 'Total Rows', 'Active Rows', 'Inactive Rows'];
+      const rows = counted.map(e => [
+        `"${e.displayName.replace(/"/g, '""')}"`,
+        e.logicalName,
+        e.entitySetName,
+        e.isCustom ? 'Yes' : 'No',
+        e.totalCount ?? '',
+        e.activeCount ?? '',
+        e.inactiveCount ?? ''
+      ]);
+
+      const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `dataverse_row_counts_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      notify(`Exported ${counted.length} tables to CSV`, 'success');
+    }
+
+    function esc(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    /* ─── 11. Event Listeners ───────────────────────────────── */
+    // Search input
+    document.getElementById('search-input').addEventListener('input', e => {
+      searchQuery = e.target.value.trim();
+      renderTable();
+    });
+
+    // Scope segment
+    document.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeScope = btn.dataset.scope;
+        toolStore('scope', activeScope);
+        renderTable();
+      });
+    });
+
+    // Batch Count buttons
+    document.getElementById('btn-count-all').addEventListener('click', () => {
+      const filtered = getFilteredEntities();
+      runBatchCount(filtered);
+    });
+
+    document.getElementById('btn-count-custom').addEventListener('click', () => {
+      const customOnes = entities.filter(e => e.isCustom);
+      runBatchCount(customOnes);
+    });
+
+    document.getElementById('btn-reload-meta').addEventListener('click', () => {
+      if (context) loadEntityMetadata();
+      else notify('Waiting for Dataverse context…', 'warning');
+    });
+
+    document.getElementById('btn-export-csv').addEventListener('click', exportToCsv);
+    document.getElementById('btn-sample-toggle').addEventListener('click', useSampleData);
+
+    // Sorting
+    document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.sort;
+        if (sortColumn === col) {
+          sortAsc = !sortAsc;
+        } else {
+          sortColumn = col;
+          sortAsc = true;
+        }
+        // Update th arrows
+        document.querySelectorAll('.data-table th').forEach(h => {
+          h.textContent = h.textContent.replace(/[▾▴]/g, '').trim();
+        });
+        th.textContent = `${th.textContent} ${sortAsc ? '▾' : '▴'}`;
+        renderTable();
+      });
+    });
+
+    // HTTP Inspector
+    const inspector = document.getElementById('inspector-panel');
+    document.getElementById('btn-toggle-inspector').addEventListener('click', () => {
+      inspector.classList.toggle('open');
+    });
+    document.getElementById('inspector-close-btn').addEventListener('click', () => {
+      inspector.classList.remove('open');
+    });
+
+    document.getElementById('btn-copy-headers').addEventListener('click', () => {
+      const text = Object.entries(lastTelemetry.headers).map(([k, v]) => `${k}: ${v}`).join('\n');
+      navigator.clipboard?.writeText(text).then(() => notify('Copied all headers to clipboard', 'success'));
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') inspector.classList.remove('open');
+    });
+  </script>
+</body>
+</html>
