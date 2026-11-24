@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -26,61 +27,87 @@
   ═══════════════════════════════════════════════════════════ -->
   <style>
     :root {
-      --bg:             #ffffff;
-      --bg-alt:         #f8f9fa;
-      --bg-card:        #ffffff;
-      --border:         #e1dfdd;
-      --border-subtle:  #edebe9;
-      --text:           #201f1e;
-      --text-sec:       #605e5c;
-      --text-muted:     #8a8886;
-      --primary:        #0078d4;
-      --primary-hover:  #106ebe;
+      --bg: #ffffff;
+      --bg-alt: #f8f9fa;
+      --bg-card: #ffffff;
+      --border: #e1dfdd;
+      --border-subtle: #edebe9;
+      --text: #201f1e;
+      --text-sec: #605e5c;
+      --text-muted: #8a8886;
+      --primary: #0078d4;
+      --primary-hover: #106ebe;
       --primary-subtle: #eff6fc;
 
       --status-success: #107c10;
-      --status-warn:    #d97706;
-      --status-error:   #d13438;
+      --status-warn: #d97706;
+      --status-error: #d13438;
 
       --badge-custom-bg: #e8f4fd;
       --badge-custom-color: #0078d4;
-      --badge-std-bg:    #f3f2f1;
+      --badge-std-bg: #f3f2f1;
       --badge-std-color: #605e5c;
 
-      --modal-overlay:  rgba(0, 0, 0, 0.45);
-      --shadow-sm:      0 1.6px 3.6px 0 rgba(0,0,0,0.13), 0 0.3px 0.9px 0 rgba(0,0,0,0.11);
-      --shadow-md:      0 6.4px 14.4px 0 rgba(0,0,0,0.13), 0 1.2px 3.6px 0 rgba(0,0,0,0.11);
+      --method-totalrec-bg: rgba(135, 100, 184, 0.15);
+      --method-totalrec-color: #724b9f;
+      --method-fetchxml-bg: rgba(16, 124, 16, 0.15);
+      --method-fetchxml-color: #107c10;
+      --method-fallback-bg: rgba(217, 119, 6, 0.15);
+      --method-fallback-color: #b45309;
+
+      --modal-overlay: rgba(0, 0, 0, 0.45);
+      --shadow-sm: 0 1.6px 3.6px 0 rgba(0, 0, 0, 0.13), 0 0.3px 0.9px 0 rgba(0, 0, 0, 0.11);
+      --shadow-md: 0 6.4px 14.4px 0 rgba(0, 0, 0, 0.13), 0 1.2px 3.6px 0 rgba(0, 0, 0, 0.11);
     }
 
     body.dark {
-      --bg:             #1e1e1e;
-      --bg-alt:         #252526;
-      --bg-card:        #2d2d2d;
-      --border:         #3e3e42;
-      --border-subtle:  #333337;
-      --text:           #d4d4d4;
-      --text-sec:       #a6a6a6;
-      --text-muted:     #767676;
-      --primary:        #2886de;
-      --primary-hover:  #4797e2;
+      --bg: #1e1e1e;
+      --bg-alt: #252526;
+      --bg-card: #2d2d2d;
+      --border: #3e3e42;
+      --border-subtle: #333337;
+      --text: #d4d4d4;
+      --text-sec: #a6a6a6;
+      --text-muted: #767676;
+      --primary: #2886de;
+      --primary-hover: #4797e2;
       --primary-subtle: #19324d;
 
       --status-success: #57b35e;
-      --status-warn:    #fbbf24;
-      --status-error:   #f1707b;
+      --status-warn: #fbbf24;
+      --status-error: #f1707b;
 
       --badge-custom-bg: #14324f;
       --badge-custom-color: #60b4ff;
-      --badge-std-bg:    #383838;
+      --badge-std-bg: #383838;
       --badge-std-color: #a6a6a6;
 
-      --modal-overlay:  rgba(0, 0, 0, 0.7);
-      --shadow-sm:      0 2px 4px rgba(0,0,0,0.4);
-      --shadow-md:      0 8px 18px rgba(0,0,0,0.6);
+      --method-totalrec-bg: rgba(180, 140, 240, 0.2);
+      --method-totalrec-color: #c49eff;
+      --method-fetchxml-bg: rgba(87, 179, 94, 0.2);
+      --method-fetchxml-color: #79d780;
+      --method-fallback-bg: rgba(251, 191, 36, 0.2);
+      --method-fallback-color: #fbbf24;
+
+      --modal-overlay: rgba(0, 0, 0, 0.7);
+      --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.4);
+      --shadow-md: 0 8px 18px rgba(0, 0, 0, 0.6);
     }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; overflow: hidden; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      height: 100%;
+      overflow: hidden;
+    }
+
     body {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
       font-size: 13px;
@@ -118,7 +145,9 @@
       white-space: nowrap;
     }
 
-    .spacer { flex: 1; }
+    .spacer {
+      flex: 1;
+    }
 
     .btn {
       display: inline-flex;
@@ -135,22 +164,27 @@
       transition: all 0.15s ease;
       white-space: nowrap;
     }
+
     .btn:hover:not(:disabled) {
       background: var(--bg-alt);
       border-color: var(--primary);
     }
+
     .btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
+
     .btn.primary {
       background: var(--primary);
       color: #fff;
       border-color: var(--primary);
     }
+
     .btn.primary:hover:not(:disabled) {
       background: var(--primary-hover);
     }
+
     .btn.icon-only {
       padding: 5px 8px;
     }
@@ -158,6 +192,7 @@
     .header-inspector-btn {
       position: relative;
     }
+
     .badge-pill {
       display: inline-block;
       padding: 1px 6px;
@@ -188,6 +223,7 @@
       color: var(--text);
       width: 220px;
     }
+
     .search-input:focus {
       outline: none;
       border-color: var(--primary);
@@ -200,6 +236,7 @@
       overflow: hidden;
       background: var(--bg-alt);
     }
+
     .seg-btn {
       padding: 4px 10px;
       font-size: 11px;
@@ -210,9 +247,11 @@
       cursor: pointer;
       transition: all 0.1s;
     }
+
     .seg-btn:hover {
       color: var(--text);
     }
+
     .seg-btn.active {
       background: var(--primary);
       color: #fff;
@@ -229,14 +268,17 @@
       font-size: 12px;
       flex-shrink: 0;
     }
+
     .stat-item {
       display: flex;
       align-items: center;
       gap: 6px;
     }
+
     .stat-label {
       color: var(--text-sec);
     }
+
     .stat-value {
       font-weight: 700;
       color: var(--text);
@@ -251,6 +293,7 @@
       overflow: hidden;
       display: none;
     }
+
     .progress-bar-fill {
       height: 100%;
       background: var(--primary);
@@ -265,8 +308,16 @@
       background: var(--bg);
       position: relative;
     }
-    .content-area::-webkit-scrollbar { width: 8px; height: 8px; }
-    .content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .content-area::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    .content-area::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
 
     .data-table {
       width: 100%;
@@ -274,6 +325,7 @@
       font-size: 12px;
       text-align: left;
     }
+
     .data-table th {
       position: sticky;
       top: 0;
@@ -286,14 +338,17 @@
       z-index: 5;
       cursor: pointer;
     }
+
     .data-table th:hover {
       color: var(--text);
     }
+
     .data-table td {
       padding: 7px 12px;
       border-bottom: 1px solid var(--border-subtle);
       white-space: nowrap;
     }
+
     .data-table tr:hover td {
       background: var(--bg-alt);
     }
@@ -305,10 +360,12 @@
       font-size: 10px;
       font-weight: 600;
     }
+
     .table-badge.custom {
       background: var(--badge-custom-bg);
       color: var(--badge-custom-color);
     }
+
     .table-badge.standard {
       background: var(--badge-std-bg);
       color: var(--badge-std-color);
@@ -320,9 +377,42 @@
       font-size: 12px;
       text-align: right;
     }
-    .count-cell.total { color: var(--primary); }
-    .count-cell.active { color: var(--status-success); }
-    .count-cell.inactive { color: var(--text-muted); }
+
+    .count-cell.total {
+      color: var(--primary);
+    }
+
+    .count-cell.active {
+      color: var(--status-success);
+    }
+
+    .count-cell.inactive {
+      color: var(--text-muted);
+    }
+
+    .method-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .method-badge.total-rec {
+      background: var(--method-totalrec-bg);
+      color: var(--method-totalrec-color);
+    }
+
+    .method-badge.fetchxml {
+      background: var(--method-fetchxml-bg);
+      color: var(--method-fetchxml-color);
+    }
+
+    .method-badge.count-fallback {
+      background: var(--method-fallback-bg);
+      color: var(--method-fallback-color);
+    }
 
     .btn-table-action {
       padding: 2px 8px;
@@ -333,6 +423,7 @@
       color: var(--text);
       cursor: pointer;
     }
+
     .btn-table-action:hover {
       border-color: var(--primary);
       color: var(--primary);
@@ -348,7 +439,12 @@
       border-radius: 50%;
       animation: spin .7s linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
 
     /* ─── Bottom/Drawer: HTTP Telemetry & Headers Inspector ───────── */
     .inspector-panel {
@@ -359,13 +455,14 @@
       height: 290px;
       background: var(--bg-card);
       border-top: 2px solid var(--primary);
-      box-shadow: 0 -4px 16px rgba(0,0,0,0.18);
+      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.18);
       display: flex;
       flex-direction: column;
       z-index: 40;
       transform: translateY(100%);
       transition: transform 0.25s cubic-bezier(0.1, 0.9, 0.2, 1);
     }
+
     .inspector-panel.open {
       transform: translateY(0);
     }
@@ -379,18 +476,21 @@
       gap: 12px;
       font-size: 12px;
     }
+
     .inspector-title {
       font-weight: 700;
       display: flex;
       align-items: center;
       gap: 6px;
     }
+
     .inspector-body {
       flex: 1;
       display: grid;
       grid-template-columns: 1fr 1fr;
       overflow: hidden;
     }
+
     .inspector-col {
       padding: 10px 14px;
       overflow-y: auto;
@@ -399,7 +499,11 @@
       flex-direction: column;
       gap: 6px;
     }
-    .inspector-col:last-child { border-right: none; }
+
+    .inspector-col:last-child {
+      border-right: none;
+    }
+
     .inspector-col-title {
       font-size: 11px;
       font-weight: 700;
@@ -418,21 +522,25 @@
       font-size: 11px;
       font-family: 'Cascadia Code', 'Consolas', monospace;
     }
+
     .headers-table td {
       padding: 4px 6px;
       border-bottom: 1px solid var(--border-subtle);
       word-break: break-all;
     }
+
     .headers-table td.header-key {
       font-weight: 600;
       color: var(--primary);
       width: 42%;
       user-select: text;
     }
+
     .headers-table td.header-val {
       color: var(--text);
       user-select: text;
     }
+
     .headers-table tr.highlight-header td {
       background: rgba(0, 120, 212, 0.08);
       font-weight: 700;
@@ -457,10 +565,20 @@
       gap: 4px 10px;
       font-size: 12px;
     }
-    .detail-label { font-weight: 600; color: var(--text-sec); }
-    .detail-val { color: var(--text); user-select: text; font-family: 'Cascadia Code', monospace; }
+
+    .detail-label {
+      font-weight: 600;
+      color: var(--text-sec);
+    }
+
+    .detail-val {
+      color: var(--text);
+      user-select: text;
+      font-family: 'Cascadia Code', monospace;
+    }
   </style>
 </head>
+
 <body>
 
   <!-- ══════════════ TOPBAR ══════════════ -->
@@ -553,12 +671,13 @@
           <th data-sort="totalCount" style="text-align:right;">Total Rows</th>
           <th data-sort="activeCount" style="text-align:right;">Active</th>
           <th data-sort="inactiveCount" style="text-align:right;">Inactive</th>
+          <th data-sort="method" style="text-align:center;">Method</th>
           <th style="text-align:center;width:90px;">Action</th>
         </tr>
       </thead>
       <tbody id="table-body">
         <tr>
-          <td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">
+          <td colspan="9" style="text-align:center;padding:30px;color:var(--text-sec);">
             Connecting to Dataverse and loading table metadata…
           </td>
         </tr>
@@ -627,15 +746,15 @@
     /* ─── 1. Constants & State ──────────────────────────────── */
     const MANIFEST_ID = 'row-counter';
     const HOST_ORIGIN = window.location.origin;
-    const TOOL_STORE  = `dvopentools::tool::${MANIFEST_ID}::`;
+    const TOOL_STORE = `dvopentools::tool::${MANIFEST_ID}::`;
 
     let context = null;
     let entities = [];         // all discovered entities [{displayName, logicalName, entitySetName, isCustom, totalCount, activeCount, inactiveCount, state}]
     let activeScope = 'all';   // 'all' | 'custom' | 'standard' | 'counted'
     let searchQuery = '';
-    let sortColumn  = 'displayName';
-    let sortAsc     = true;
-    let isBatching  = false;
+    let sortColumn = 'displayName';
+    let sortAsc = true;
+    let isBatching = false;
     let cancelBatch = false;
 
     // Telemetry state
@@ -688,15 +807,15 @@
       function canUse(s) {
         try { const k = '__dvot__'; s.setItem(k, '1'); s.removeItem(k); return true; } catch { return false; }
       }
-      const _ls  = typeof localStorage  !== 'undefined' && canUse(localStorage)  ? localStorage  : null;
-      const _ss  = typeof sessionStorage !== 'undefined' && canUse(sessionStorage) ? sessionStorage : null;
+      const _ls = typeof localStorage !== 'undefined' && canUse(localStorage) ? localStorage : null;
+      const _ss = typeof sessionStorage !== 'undefined' && canUse(sessionStorage) ? sessionStorage : null;
       const _mem = Object.create(null);
-      const _b   = _ls || _ss;
+      const _b = _ls || _ss;
       return {
         type: _ls ? 'localStorage' : _ss ? 'sessionStorage' : 'memory',
-        get(k)   { if (_b) try { return JSON.parse(_b.getItem(k)); } catch {} return _mem[k] ?? null; },
-        set(k,v) { if (_b) try { _b.setItem(k, JSON.stringify(v)); return; } catch {} _mem[k] = v; },
-        del(k)   { if (_b) try { _b.removeItem(k); } catch {} delete _mem[k]; }
+        get(k) { if (_b) try { return JSON.parse(_b.getItem(k)); } catch { } return _mem[k] ?? null; },
+        set(k, v) { if (_b) try { _b.setItem(k, JSON.stringify(v)); return; } catch { } _mem[k] = v; },
+        del(k) { if (_b) try { _b.removeItem(k); } catch { } delete _mem[k]; }
       };
     })();
 
@@ -723,14 +842,14 @@
     /* ─── 5. Dataverse Fetch with HTTP Headers Capture ──────── */
     async function dvFetchWithHeaders(path, opts = {}) {
       const url = `${context.environmentUrl}/api/data/v${context.apiVersion}${path}`;
-      const t0  = performance.now();
+      const t0 = performance.now();
 
       const defaultHeaders = {
         'OData-MaxVersion': '4.0',
-        'OData-Version':    '4.0',
-        'Accept':           'application/json',
-        'Content-Type':     'application/json',
-        'Prefer':           'odata.include-annotations="*"',
+        'OData-Version': '4.0',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Prefer': 'odata.include-annotations="*"',
       };
 
       const res = await fetch(url, {
@@ -838,18 +957,20 @@
         entities = list
           .filter(e => e.EntitySetName)
           .map(e => ({
-            displayName:   e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
-            logicalName:   e.LogicalName,
+            displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+            logicalName: e.LogicalName,
             entitySetName: e.EntitySetName,
-            isCustom:      !!e.IsCustomEntity,
-            totalCount:    null,
-            activeCount:   null,
+            primaryId: e.PrimaryIdAttribute || (e.LogicalName + 'id'),
+            isCustom: !!e.IsCustomEntity,
+            totalCount: null,
+            activeCount: null,
             inactiveCount: null,
-            loading:       false
+            method: null,
+            loading: false
           }));
 
         // Enable buttons
-        document.getElementById('btn-count-all').disabled    = false;
+        document.getElementById('btn-count-all').disabled = false;
         document.getElementById('btn-count-custom').disabled = false;
 
         notify(`Discovered ${entities.length} Dataverse tables`, 'success');
@@ -868,66 +989,164 @@
     /* ─── 7. Sample Data Mode ───────────────────────────────── */
     function useSampleData() {
       const sampleDefs = [
-        { displayName: 'Account', logicalName: 'account', entitySetName: 'accounts', isCustom: false, totalCount: 1420, activeCount: 1380, inactiveCount: 40 },
-        { displayName: 'Contact', logicalName: 'contact', entitySetName: 'contacts', isCustom: false, totalCount: 5210, activeCount: 5100, inactiveCount: 110 },
-        { displayName: 'Opportunity', logicalName: 'opportunity', entitySetName: 'opportunities', isCustom: false, totalCount: 890, activeCount: 720, inactiveCount: 170 },
-        { displayName: 'Invoice Approval', logicalName: 'cr_invoiceapproval', entitySetName: 'cr_invoiceapprovals', isCustom: true, totalCount: 320, activeCount: 315, inactiveCount: 5 },
-        { displayName: 'Project Task', logicalName: 'msdyn_projecttask', entitySetName: 'msdyn_projecttasks', isCustom: false, totalCount: 2450, activeCount: 2100, inactiveCount: 350 },
-        { displayName: 'Asset Register', logicalName: 'cr_assetregister', entitySetName: 'cr_assetregisters', isCustom: true, totalCount: 185, activeCount: 180, inactiveCount: 5 },
-        { displayName: 'System User', logicalName: 'systemuser', entitySetName: 'systemusers', isCustom: false, totalCount: 48, activeCount: 45, inactiveCount: 3 },
-        { displayName: 'Audit Log', logicalName: 'audit', entitySetName: 'audits', isCustom: false, totalCount: 68400, activeCount: 68400, inactiveCount: 0 },
-        { displayName: 'Cloud Flow', logicalName: 'workflow', entitySetName: 'workflows', isCustom: false, totalCount: 74, activeCount: 68, inactiveCount: 6 },
-        { displayName: 'Vendor Contract', logicalName: 'cr_vendorcontract', entitySetName: 'cr_vendorcontracts', isCustom: true, totalCount: 92, activeCount: 85, inactiveCount: 7 }
+        { displayName: 'Account', logicalName: 'account', entitySetName: 'accounts', primaryId: 'accountid', isCustom: false, totalCount: 1420, activeCount: 1380, inactiveCount: 40, method: 'RetrieveTotalRecordCount' },
+        { displayName: 'Contact', logicalName: 'contact', entitySetName: 'contacts', primaryId: 'contactid', isCustom: false, totalCount: 5210, activeCount: 5100, inactiveCount: 110, method: 'RetrieveTotalRecordCount' },
+        { displayName: 'Opportunity', logicalName: 'opportunity', entitySetName: 'opportunities', primaryId: 'opportunityid', isCustom: false, totalCount: 890, activeCount: 720, inactiveCount: 170, method: 'FetchXML Aggregate' },
+        { displayName: 'Invoice Approval', logicalName: 'cr_invoiceapproval', entitySetName: 'cr_invoiceapprovals', primaryId: 'cr_invoiceapprovalid', isCustom: true, totalCount: 320, activeCount: 315, inactiveCount: 5, method: 'RetrieveTotalRecordCount' },
+        { displayName: 'Project Task', logicalName: 'msdyn_projecttask', entitySetName: 'msdyn_projecttasks', primaryId: 'msdyn_projecttaskid', isCustom: false, totalCount: 2450, activeCount: 2100, inactiveCount: 350, method: 'FetchXML Aggregate' },
+        { displayName: 'Asset Register', logicalName: 'cr_assetregister', entitySetName: 'cr_assetregisters', primaryId: 'cr_assetregisterid', isCustom: true, totalCount: 185, activeCount: 180, inactiveCount: 5, method: 'RetrieveTotalRecordCount' },
+        { displayName: 'System User', logicalName: 'systemuser', entitySetName: 'systemusers', primaryId: 'systemuserid', isCustom: false, totalCount: 48, activeCount: 45, inactiveCount: 3, method: 'RetrieveTotalRecordCount' },
+        { displayName: 'Audit Log', logicalName: 'audit', entitySetName: 'audits', primaryId: 'auditid', isCustom: false, totalCount: 68400, activeCount: 68400, inactiveCount: 0, method: '$count (Fallback)' },
+        { displayName: 'Cloud Flow', logicalName: 'workflow', entitySetName: 'workflows', primaryId: 'workflowid', isCustom: false, totalCount: 74, activeCount: 68, inactiveCount: 6, method: 'RetrieveTotalRecordCount' },
+        { displayName: 'Vendor Contract', logicalName: 'cr_vendorcontract', entitySetName: 'cr_vendorcontracts', primaryId: 'cr_vendorcontractid', isCustom: true, totalCount: 92, activeCount: 85, inactiveCount: 7, method: 'FetchXML Aggregate' }
       ];
 
       entities = sampleDefs.map(d => ({ ...d, loading: false }));
-      document.getElementById('btn-count-all').disabled    = false;
+      document.getElementById('btn-count-all').disabled = false;
       document.getElementById('btn-count-custom').disabled = false;
 
       notify('Loaded 10 sample tables with row counts.', 'info');
       renderTable();
     }
 
-    /* ─── 8. Counting Engine ────────────────────────────────── */
+    /* ─── 8. Multi-Tiered Counting Engine ───────────────────────
+       Strategy Priority:
+         1. Microsoft.Dynamics.CRM.RetrieveTotalRecordCount (Dataverse fast snapshot action)
+         2. FetchXML Aggregate (fast DB index aggregate on primary key, with statecode filter)
+         3. $count (last resort fallback)
+    ──────────────────────────────────────────────────────────── */
+
+    // Parse response from RetrieveTotalRecordCount
+    function parseRetrieveTotalRecordCount(resp, logicalName) {
+      if (!resp?.EntityRecordCountCollection) return null;
+      const coll = resp.EntityRecordCountCollection;
+      // Case 1: Keys & Values arrays
+      if (Array.isArray(coll.Keys) && Array.isArray(coll.Values)) {
+        const idx = coll.Keys.findIndex(k => k && k.toLowerCase() === logicalName.toLowerCase());
+        if (idx !== -1) {
+          const num = Number(coll.Values[idx]);
+          return num >= 0 ? num : null;
+        }
+      }
+      // Case 2: Key-value dictionary
+      for (const [k, v] of Object.entries(coll)) {
+        if (k.toLowerCase() === logicalName.toLowerCase()) {
+          const num = Number(v);
+          return num >= 0 ? num : null;
+        }
+      }
+      return null;
+    }
+
+    // Helper: Execute FetchXML Aggregate
+    async function queryFetchXmlCount(entitySetName, logicalName, primaryId, filterStateCode = null) {
+      const filterClause = filterStateCode !== null
+        ? `<filter><condition attribute='statecode' operator='eq' value='${filterStateCode}'/></filter>`
+        : '';
+
+      const fetchXml = `<fetch aggregate='true'><entity name='${logicalName}'><attribute name='${primaryId}' aggregate='count' alias='recordcount'/>${filterClause}</entity></fetch>`;
+      const res = await dvFetchWithHeaders(`/${entitySetName}?fetchXml=${encodeURIComponent(fetchXml)}`);
+
+      if (res?.value?.[0]) {
+        const row = res.value[0];
+        const val = row.recordcount ?? row.recordcount_x0020_ ?? Object.values(row)[0];
+        const num = Number(val);
+        if (!isNaN(num)) return num;
+      }
+      return null;
+    }
+
+    // Single Entity Counting
     async function countSingleEntity(item) {
       if (item.loading) return;
       item.loading = true;
       renderRow(item.logicalName);
 
+      let totalFound = false;
+      const primaryId = item.primaryId || `${item.logicalName}id`;
+
+      // ── Priority 1: RetrieveTotalRecordCount ─────────────────
       try {
-        // Total count
-        const total = await dvFetchWithHeaders(`/${item.entitySetName}/$count`);
-        item.totalCount = isNaN(total) ? 0 : total;
-
-        // Attempt Active count (statecode eq 0)
-        try {
-          const active = await dvFetchWithHeaders(`/${item.entitySetName}/$count?$filter=statecode eq 0`);
-          item.activeCount = isNaN(active) ? null : active;
-        } catch {
-          item.activeCount = null; // entity does not have statecode
-        }
-
-        // Attempt Inactive count (statecode eq 1)
-        try {
-          const inactive = await dvFetchWithHeaders(`/${item.entitySetName}/$count?$filter=statecode eq 1`);
-          item.inactiveCount = isNaN(inactive) ? null : inactive;
-        } catch {
-          item.inactiveCount = null;
+        const resp = await dvFetchWithHeaders('/RetrieveTotalRecordCount', {
+          method: 'POST',
+          body: JSON.stringify({ EntityNames: [item.logicalName] })
+        });
+        const total = parseRetrieveTotalRecordCount(resp, item.logicalName);
+        if (total !== null) {
+          item.totalCount = total;
+          item.method = 'RetrieveTotalRecordCount';
+          totalFound = true;
         }
       } catch (err) {
-        console.warn(`[RowCounter] Count failed for ${item.logicalName}:`, err);
-        notify(`${item.displayName}: ${err.message}`, 'error');
-        item.totalCount = 'Error';
-      } finally {
-        item.loading = false;
-        renderRow(item.logicalName);
-        updateStats();
+        // Continue to Priority 2
       }
+
+      // ── Priority 2: FetchXML Aggregate ───────────────────────
+      if (!totalFound) {
+        try {
+          const fxmlTotal = await queryFetchXmlCount(item.entitySetName, item.logicalName, primaryId);
+          if (fxmlTotal !== null) {
+            item.totalCount = fxmlTotal;
+            item.method = 'FetchXML Aggregate';
+            totalFound = true;
+          }
+        } catch (err) {
+          // Continue to Priority 3
+        }
+      }
+
+      // Active / Inactive breakdown via FetchXML Aggregate
+      try {
+        const active = await queryFetchXmlCount(item.entitySetName, item.logicalName, primaryId, 0);
+        item.activeCount = active;
+      } catch {
+        item.activeCount = null;
+      }
+
+      try {
+        const inactive = await queryFetchXmlCount(item.entitySetName, item.logicalName, primaryId, 1);
+        item.inactiveCount = inactive;
+      } catch {
+        item.inactiveCount = null;
+      }
+
+      // ── Priority 3: $count (Last Resort Fallback) ────────────
+      if (!totalFound) {
+        try {
+          const countVal = await dvFetchWithHeaders(`/${item.entitySetName}/$count`);
+          if (!isNaN(countVal)) {
+            item.totalCount = countVal;
+            item.method = '$count (Fallback)';
+            totalFound = true;
+          }
+        } catch (err) {
+          console.warn(`[RowCounter] All counting strategies failed for ${item.logicalName}:`, err);
+          item.totalCount = 'Error';
+        }
+      }
+
+      // Fallback for active/inactive if FetchXML failed
+      if (item.activeCount === null && item.totalCount !== 'Error') {
+        try {
+          const act = await dvFetchWithHeaders(`/${item.entitySetName}/$count?$filter=statecode eq 0`);
+          if (!isNaN(act)) item.activeCount = act;
+        } catch { }
+      }
+      if (item.inactiveCount === null && item.totalCount !== 'Error') {
+        try {
+          const inact = await dvFetchWithHeaders(`/${item.entitySetName}/$count?$filter=statecode eq 1`);
+          if (!isNaN(inact)) item.inactiveCount = inact;
+        } catch { }
+      }
+
+      item.loading = false;
+      renderRow(item.logicalName);
+      updateStats();
     }
 
+    // Batch Counting with bulk RetrieveTotalRecordCount optimization
     async function runBatchCount(items) {
       if (isBatching) {
-        // Toggle cancel
         cancelBatch = true;
         return;
       }
@@ -944,12 +1163,39 @@
       progressWrap.style.display = 'block';
       progressFill.style.width = '0%';
 
+      // ── Step A: Fast bulk RetrieveTotalRecordCount in chunks of 50 ──
+      notify(`Querying RetrieveTotalRecordCount snapshot for ${items.length} tables…`, 'info');
+      for (let i = 0; i < items.length; i += 50) {
+        if (cancelBatch) break;
+        const chunk = items.slice(i, i + 50);
+        try {
+          const resp = await dvFetchWithHeaders('/RetrieveTotalRecordCount', {
+            method: 'POST',
+            body: JSON.stringify({ EntityNames: chunk.map(c => c.logicalName) })
+          });
+          for (const item of chunk) {
+            const val = parseRetrieveTotalRecordCount(resp, item.logicalName);
+            if (val !== null) {
+              item.totalCount = val;
+              item.method = 'RetrieveTotalRecordCount';
+              renderRow(item.logicalName);
+            }
+          }
+        } catch (err) {
+          console.warn('[RowCounter] Bulk RetrieveTotalRecordCount chunk error:', err);
+        }
+        progressFill.style.width = `${Math.round(((i + chunk.length) / (items.length * 2)) * 100)}%`;
+      }
+
+      updateStats();
+
+      // ── Step B: FetchXML Aggregate for Active/Inactive & missing totals ──
       let completed = 0;
       for (const item of items) {
         if (cancelBatch) break;
         await countSingleEntity(item);
         completed++;
-        progressFill.style.width = `${Math.round((completed / items.length) * 100)}%`;
+        progressFill.style.width = `${50 + Math.round((completed / items.length) * 50)}%`;
       }
 
       isBatching = false;
@@ -966,9 +1212,9 @@
       const q = searchQuery.toLowerCase();
       return entities.filter(e => {
         // Scope filter
-        if (activeScope === 'custom'   && !e.isCustom) return false;
-        if (activeScope === 'standard' && e.isCustom)  return false;
-        if (activeScope === 'counted'  && e.totalCount === null) return false;
+        if (activeScope === 'custom' && !e.isCustom) return false;
+        if (activeScope === 'standard' && e.isCustom) return false;
+        if (activeScope === 'counted' && e.totalCount === null) return false;
 
         // Search text
         if (q && !e.displayName.toLowerCase().includes(q) && !e.logicalName.toLowerCase().includes(q)) {
@@ -997,7 +1243,7 @@
       tbody.innerHTML = '';
 
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">No tables found matching criteria.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-sec);">No tables found matching criteria.</td></tr>`;
         updateStats();
         return;
       }
@@ -1013,9 +1259,19 @@
       const tr = document.createElement('tr');
       tr.id = `row-${e.logicalName}`;
 
-      const totalDisplay    = e.loading ? '<span class="spin"></span>' : (e.totalCount === null ? '—' : Number(e.totalCount).toLocaleString());
-      const activeDisplay   = e.loading ? '…' : (e.activeCount === null ? '—' : Number(e.activeCount).toLocaleString());
+      const totalDisplay = e.loading ? '<span class="spin"></span>' : (e.totalCount === null ? '—' : (typeof e.totalCount === 'number' ? e.totalCount.toLocaleString() : String(e.totalCount)));
+      const activeDisplay = e.loading ? '…' : (e.activeCount === null ? '—' : Number(e.activeCount).toLocaleString());
       const inactiveDisplay = e.loading ? '…' : (e.inactiveCount === null ? '—' : Number(e.inactiveCount).toLocaleString());
+
+      // Method badge
+      let methodBadge = '<span style="color:var(--text-muted);font-size:11px;">—</span>';
+      if (e.method === 'RetrieveTotalRecordCount') {
+        methodBadge = '<span class="method-badge total-rec" title="Microsoft.Dynamics.CRM.RetrieveTotalRecordCount (Cached Snapshot)">TotalRecordCount</span>';
+      } else if (e.method === 'FetchXML Aggregate') {
+        methodBadge = '<span class="method-badge fetchxml" title="FetchXML aggregate=\'true\' (Fast Primary ID Count)">FetchXML</span>';
+      } else if (e.method) {
+        methodBadge = '<span class="method-badge count-fallback" title="OData $count endpoint (Last Resort)">$count</span>';
+      }
 
       tr.innerHTML = `
         <td><strong>${esc(e.displayName)}</strong></td>
@@ -1025,6 +1281,7 @@
         <td class="count-cell total">${totalDisplay}</td>
         <td class="count-cell active">${activeDisplay}</td>
         <td class="count-cell inactive">${inactiveDisplay}</td>
+        <td style="text-align:center;">${methodBadge}</td>
         <td style="text-align:center;">
           <button class="btn-table-action" data-logical="${esc(e.logicalName)}" ${e.loading ? 'disabled' : ''}>
             ${e.totalCount !== null ? '↻ Re-count' : '⚡ Count'}
@@ -1052,7 +1309,7 @@
     function updateStats() {
       const filtered = getFilteredEntities();
       document.getElementById('stat-total-tables').textContent = entities.length;
-      document.getElementById('btn-count-num').textContent     = filtered.length;
+      document.getElementById('btn-count-num').textContent = filtered.length;
 
       const counted = entities.filter(e => typeof e.totalCount === 'number');
       document.getElementById('stat-counted-tables').textContent = counted.length;
@@ -1069,7 +1326,7 @@
         return;
       }
 
-      const headers = ['Display Name', 'Logical Name', 'Entity Set Name', 'Is Custom', 'Total Rows', 'Active Rows', 'Inactive Rows'];
+      const headers = ['Display Name', 'Logical Name', 'Entity Set Name', 'Is Custom', 'Total Rows', 'Active Rows', 'Inactive Rows', 'Count Method'];
       const rows = counted.map(e => [
         `"${e.displayName.replace(/"/g, '""')}"`,
         e.logicalName,
@@ -1077,15 +1334,16 @@
         e.isCustom ? 'Yes' : 'No',
         e.totalCount ?? '',
         e.activeCount ?? '',
-        e.inactiveCount ?? ''
+        e.inactiveCount ?? '',
+        e.method || ''
       ]);
 
       const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url  = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `dataverse_row_counts_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute('download', `dataverse_row_counts_${new Date().toISOString().slice(0, 10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1095,7 +1353,7 @@
     }
 
     function esc(s) {
-      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     /* ─── 11. Event Listeners ───────────────────────────────── */
@@ -1173,4 +1431,5 @@
     });
   </script>
 </body>
+
 </html>
