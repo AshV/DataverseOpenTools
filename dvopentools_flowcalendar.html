@@ -1203,7 +1203,7 @@
       // Strategy 1: Attempt standard flowruns table (if enabled in modern environment)
       try {
         const runsData = await dvFetchWithHeaders(
-          `/flowruns?$filter=starttime ge ${startIso} and starttime le ${endIso}&$select=flowrunid,name,starttime,endtime,status,error&$orderby=starttime desc&$top=200`
+          `/flowruns?$filter=starttime ge ${startIso} and starttime le ${endIso}&$select=flowrunid,name,starttime,endtime,status,durationinms,errorcode,errormessage&$orderby=starttime desc&$top=200`
         );
         if (runsData?.value) {
           flowRuns = runsData.value.map(r => normalizeRunRecord(r, 'flowrun'));
@@ -1217,7 +1217,7 @@
       if (!loadedViaApi) {
         try {
           const opsData = await dvFetchWithHeaders(
-            `/asyncoperations?$filter=(operationtype eq 29 or operationtype eq 10) and startedon ge ${startIso} and startedon le ${endIso}&$select=asyncoperationid,name,startedon,completedon,statuscode,statecode,message,friendlyname,_regardingobjectid_value&$orderby=startedon desc&$top=200`
+            `/asyncoperations?$filter=(operationtype eq 29 or operationtype eq 10) and createdon ge ${startIso} and createdon le ${endIso}&$select=asyncoperationid,name,startedon,completedon,createdon,statuscode,statecode,message,_regardingobjectid_value&$orderby=createdon desc&$top=200`
           );
           if (opsData?.value && opsData.value.length > 0) {
             flowRuns = opsData.value.map(r => normalizeRunRecord(r, 'asyncoperation'));
@@ -1253,7 +1253,7 @@
           startTime: new Date(r.starttime),
           endTime: r.endtime ? new Date(r.endtime) : null,
           status,
-          error: r.error || null,
+          error: r.errormessage ? (r.errorcode ? `[${r.errorcode}] ${r.errormessage}` : r.errormessage) : null,
           raw: r
         };
       }
@@ -1269,12 +1269,12 @@
 
       // Match flow name from regarding object if available
       const flowMatch = flowsList.find(f => f.workflowid === r._regardingobjectid_value);
-      const flowName = flowMatch?.name || r.friendlyname || r.name || 'Cloud Flow';
+      const flowName = flowMatch?.name || r.name || 'Cloud Flow';
 
       return {
         id: r.asyncoperationid || uid(),
         name: flowName,
-        startTime: new Date(r.startedon),
+        startTime: new Date(r.startedon || r.createdon),
         endTime: r.completedon ? new Date(r.completedon) : null,
         status,
         error: r.message || null,

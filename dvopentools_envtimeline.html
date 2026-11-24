@@ -913,7 +913,7 @@
       const { fromIso, toIso } = getTimeWindow(activeRange);
       const events = [];
 
-      // Query all sources in parallel with graceful failure per category
+      // Query all sources in parallel with graceful failure and fallback per category
       await Promise.allSettled([
         // 1. Audits
         dvFetchWithHeaders(`/audits?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=auditid,createdon,action,operation,objecttypecode,_userid_value,_objectid_value&$orderby=createdon desc&$top=150`)
@@ -921,46 +921,70 @@
             (data.value || []).forEach(r => events.push(normalizeAuditEvent(r)));
           }).catch(e => console.warn('[EnvTimeline] Audits query:', e.message)),
 
-        // 2. Plugin Trace Logs
-        dvFetchWithHeaders(`/plugintracelogs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=plugintracelogid,createdon,typename,messagename,primaryentity,mode,operationtype,performanceexecutiondurationms,messageblock,exceptiondetails&$orderby=createdon desc&$top=150`)
+        // 2. Plugin Trace Logs (performanceexecutionduration is the official Dataverse Web API property name)
+        dvFetchWithHeaders(`/plugintracelogs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=plugintracelogid,createdon,typename,messagename,primaryentity,mode,operationtype,performanceexecutionduration,messageblock,exceptiondetails&$orderby=createdon desc&$top=150`)
           .then(data => {
             (data.value || []).forEach(r => events.push(normalizePluginEvent(r)));
           }).catch(e => console.warn('[EnvTimeline] PluginTraces query:', e.message)),
 
-        // 3. System Jobs (Async Operations)
-        dvFetchWithHeaders(`/asyncoperations?$filter=startedon ge ${fromIso} and startedon le ${toIso}&$select=asyncoperationid,name,friendlyname,operationtype,statuscode,statecode,startedon,completedon,message,_owninguser_value&$orderby=startedon desc&$top=150`)
+        // 3. System Jobs (Async Operations: createdon is universal; _ownerid_value is the lookup)
+        dvFetchWithHeaders(`/asyncoperations?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=asyncoperationid,name,operationtype,statuscode,statecode,startedon,completedon,createdon,message,_ownerid_value&$orderby=createdon desc&$top=150`)
           .then(data => {
             (data.value || []).forEach(r => events.push(normalizeJobEvent(r)));
           }).catch(e => console.warn('[EnvTimeline] AsyncOps query:', e.message)),
 
-        // 4. Cloud Flow Runs (if enabled)
-        dvFetchWithHeaders(`/flowruns?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=flowrunid,name,starttime,endtime,status,error&$orderby=starttime desc&$top=100`)
+        // 4. Cloud Flow Runs (Modern elastic table flowruns with durationinms, errorcode, errormessage)
+        dvFetchWithHeaders(`/flowruns?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=flowrunid,name,starttime,endtime,status,durationinms,errorcode,errormessage&$orderby=starttime desc&$top=100`)
           .then(data => {
             (data.value || []).forEach(r => events.push(normalizeFlowEvent(r)));
-          }).catch(() => {}),
+          }).catch(e => {
+            console.warn('[EnvTimeline] FlowRuns table query not available (elastic table), captured via asyncoperations:', e.message);
+          }),
 
-        // 5. Solution History
-        dvFetchWithHeaders(`/solutionhistorydatas?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=solutionhistorydataid,solutionname,solutionversion,operation,status,starttime,endtime,errorcode,errortext,publishername&$orderby=starttime desc&$top=80`)
+        // 5. Solution History (msdyn_solutionhistories) + Import Jobs (importjobs exists in all orgs)
+        dvFetchWithHeaders(`/msdyn_solutionhistories?$filter=msdyn_starttime ge ${fromIso} and msdyn_starttime le ${toIso}&$select=msdyn_solutionhistoryid,msdyn_name,msdyn_solutionversion,msdyn_operation,msdyn_status,msdyn_result,msdyn_starttime,msdyn_endtime,msdyn_errorcode,msdyn_exceptionmessage,msdyn_publishername&$orderby=msdyn_starttime desc&$top=80`)
           .then(data => {
-            (data.value || []).forEach(r => events.push(normalizeSolutionEvent(r)));
-          }).catch(() => {}),
+            (data.value || []).forEach(r => events.push(normalizeSolutionHistoryEvent(r)));
+          }).catch(() => {
+            // Fallback to importjobs if msdyn_solutionhistories is absent
+            return dvFetchWithHeaders(`/importjobs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=importjobid,solutionname,createdon,completedon,progress,_createdby_value&$orderby=createdon desc&$top=50`)
+              .then(data => {
+                (data.value || []).forEach(r => events.push(normalizeImportJobEvent(r)));
+              }).catch(e => console.warn('[EnvTimeline] Solution imports query:', e.message));
+          }),
 
-        // 6. Trace Logs (Mailbox Sync / SSS)
-        dvFetchWithHeaders(`/tracelogs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=tracelogid,createdon,level,text,machinename&$orderby=createdon desc&$top=80`)
+        // 6. Trace Logs (Mailbox Sync / SSS) & Sync Errors
+        dvFetchWithHeaders(`/tracelogs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=tracelogid,createdon,text,level,machinename,errordetails&$orderby=createdon desc&$top=80`)
           .then(data => {
             (data.value || []).forEach(r => events.push(normalizeSyncEvent(r)));
-          }).catch(() => {})
+          }).catch(() => {
+            // Fallback / supplement with syncerrors for dual-write / mobile offline
+            return dvFetchWithHeaders(`/syncerrors?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=syncerrorid,name,errorcode,errormessage,createdon,_regardingobjectid_value&$orderby=createdon desc&$top=50`)
+              .then(data => {
+                (data.value || []).forEach(r => events.push(normalizeSyncErrorEvent(r)));
+              }).catch(e => console.warn('[EnvTimeline] Sync logs query:', e.message));
+          })
       ]);
 
       spin.style.animation = 'none';
 
-      if (events.length === 0) {
-        notify('0 events found for the last 24h. You can click "Sample Data" to preview.', 'info', 5000);
-      } else {
-        notify(`Loaded ${events.length} environment events across Dataverse`, 'success');
+      // Deduplicate events by id
+      const seenIds = new Set();
+      const uniqueEvents = [];
+      for (const ev of events) {
+        if (!ev.id || !seenIds.has(ev.id)) {
+          if (ev.id) seenIds.add(ev.id);
+          uniqueEvents.push(ev);
+        }
       }
 
-      allEvents = events;
+      if (uniqueEvents.length === 0) {
+        notify('0 events found for the last 24h. You can click "Sample Data" to preview.', 'info', 5000);
+      } else {
+        notify(`Loaded ${uniqueEvents.length} environment events across Dataverse`, 'success');
+      }
+
+      allEvents = uniqueEvents;
       renderTimeline();
     }
 
@@ -969,6 +993,27 @@
       1: 'Create', 2: 'Update', 3: 'Delete', 4: 'Activate', 5: 'Deactivate',
       11: 'Cascade', 12: 'Merge', 13: 'Assign', 14: 'Share', 16: 'Close',
       64: 'User Access via Web', 65: 'User Access via API', 116: 'Solution Import', 117: 'Publish'
+    };
+
+    const ASYNC_OP_TYPES = {
+      1:  'System Event',
+      9:  'Bulk Delete',
+      10: 'Workflow',
+      14: 'Import',
+      25: 'Quick Campaign',
+      29: 'Cloud Flow',
+      30: 'Rollup Field',
+      41: 'AI Builder Job',
+      53: 'Index Management',
+      90: 'Async Plugin Step'
+    };
+
+    const SOLUTION_OP_MAP = {
+      0: 'Import',
+      1: 'Uninstall',
+      2: 'Export',
+      3: 'Publish',
+      4: 'PublishAll'
     };
 
     function normalizeAuditEvent(r) {
@@ -1003,7 +1048,7 @@
         title: `${r.typename || 'Plugin'} (${r.messagename || 'Message'})`,
         entity: r.primaryentity || '—',
         user: r.mode === 0 ? 'Sync' : 'Async',
-        duration: r.performanceexecutiondurationms ? `${r.performanceexecutiondurationms}ms` : '—',
+        duration: r.performanceexecutionduration !== undefined ? `${r.performanceexecutionduration}ms` : '—',
         error: r.exceptiondetails || null,
         traces: r.messageblock || null,
         raw: r
@@ -1011,25 +1056,31 @@
     }
 
     function normalizeJobEvent(r) {
-      // 30=Succeeded, 31=Failed, 32=Canceled, 20=Running
+      // 30=Succeeded, 31=Failed, 32=Canceled, 20=Running, 10=Waiting For Timer, 0=Ready
       const sc = Number(r.statuscode);
       let severity = 'success';
       let sevLabel = 'Succeeded';
       if (sc === 31) { severity = 'error'; sevLabel = 'Failed'; }
       else if (sc === 32) { severity = 'warn'; sevLabel = 'Canceled'; }
       else if (sc === 20) { severity = 'info'; sevLabel = 'Running'; }
+      else if (sc === 10 || sc === 0) { severity = 'info'; sevLabel = 'Waiting'; }
+
+      // Route Workflow (10) and Cloud Flow (29) runs to the 'flow' category tab
+      const isFlow = r.operationtype === 29 || r.operationtype === 10;
+      const catKey = isFlow ? 'flow' : 'job';
+      const catLbl = isFlow ? 'Flow' : 'System Job';
 
       return {
         id: r.asyncoperationid,
-        category: 'job',
-        categoryLabel: 'System Job',
-        time: new Date(r.startedon),
+        category: catKey,
+        categoryLabel: catLbl,
+        time: new Date(r.startedon || r.createdon),
         severity,
         severityLabel: sevLabel,
-        title: r.friendlyname || r.name || 'System Job',
-        entity: `Type ${r.operationtype || ''}`,
-        user: r._owninguser_value ? r._owninguser_value.slice(0, 8) + '…' : 'SYSTEM',
-        duration: formatTimeDiff(r.startedon, r.completedon),
+        title: r.name || (ASYNC_OP_TYPES[r.operationtype] || 'System Job'),
+        entity: ASYNC_OP_TYPES[r.operationtype] || `Type ${r.operationtype || ''}`,
+        user: r._ownerid_value ? r._ownerid_value.slice(0, 8) + '…' : 'SYSTEM',
+        duration: formatTimeDiff(r.startedon || r.createdon, r.completedon),
         error: r.message || null,
         traces: null,
         raw: r
@@ -1040,7 +1091,7 @@
       const s = (r.status || '').toLowerCase();
       let severity = 'success';
       let sevLabel = 'Succeeded';
-      if (s.includes('fail')) { severity = 'error'; sevLabel = 'Failed'; }
+      if (s.includes('fail') || r.errorcode || r.errormessage) { severity = 'error'; sevLabel = 'Failed'; }
       else if (s.includes('run')) { severity = 'info'; sevLabel = 'Running'; }
       else if (s.includes('cancel')) { severity = 'warn'; sevLabel = 'Cancelled'; }
 
@@ -1052,30 +1103,49 @@
         severity,
         severityLabel: sevLabel,
         title: r.name || 'Cloud Flow Run',
-        entity: 'workflow',
+        entity: 'flowrun',
         user: 'Automated',
-        duration: formatTimeDiff(r.starttime, r.endtime),
-        error: r.error || null,
+        duration: r.durationinms ? `${r.durationinms}ms` : formatTimeDiff(r.starttime, r.endtime),
+        error: r.errormessage ? (r.errorcode ? `[${r.errorcode}] ${r.errormessage}` : r.errormessage) : null,
         traces: null,
         raw: r
       };
     }
 
-    function normalizeSolutionEvent(r) {
-      // status: 1=Succeeded, 0=Failed
-      const ok = r.status === 1 || String(r.status).toLowerCase().includes('success');
+    function normalizeSolutionHistoryEvent(r) {
+      const ok = r.msdyn_result === true;
+      const op = SOLUTION_OP_MAP[r.msdyn_operation] || `Operation ${r.msdyn_operation}`;
       return {
-        id: r.solutionhistorydataid,
+        id: r.msdyn_solutionhistoryid,
         category: 'solution',
         categoryLabel: 'Solution',
-        time: new Date(r.starttime),
+        time: new Date(r.msdyn_starttime),
         severity: ok ? 'success' : 'error',
-        severityLabel: ok ? 'Imported' : 'Failed',
-        title: `Solution ${r.operation || 'Import'}: ${r.solutionname || 'Solution'} (v${r.solutionversion || ''})`,
+        severityLabel: ok ? 'Succeeded' : 'Failed',
+        title: `Solution ${op}: ${r.msdyn_name || 'Solution'} (v${r.msdyn_solutionversion || ''})`,
         entity: 'solution',
-        user: r.publishername || 'ALM',
-        duration: formatTimeDiff(r.starttime, r.endtime),
-        error: r.errortext ? `Code ${r.errorcode}: ${r.errortext}` : null,
+        user: r.msdyn_publishername || 'ALM',
+        duration: formatTimeDiff(r.msdyn_starttime, r.msdyn_endtime),
+        error: r.msdyn_exceptionmessage ? `Code ${r.msdyn_errorcode || ''}: ${r.msdyn_exceptionmessage}` : null,
+        traces: null,
+        raw: r
+      };
+    }
+
+    function normalizeImportJobEvent(r) {
+      const completed = (r.progress === 100) || !!r.completedon;
+      return {
+        id: r.importjobid,
+        category: 'solution',
+        categoryLabel: 'Solution',
+        time: new Date(r.createdon),
+        severity: completed ? 'success' : 'info',
+        severityLabel: completed ? 'Imported' : `${r.progress || 0}%`,
+        title: `Solution Import: ${r.solutionname || 'Solution Package'}`,
+        entity: 'solution',
+        user: r._createdby_value ? r._createdby_value.slice(0, 8) + '…' : 'SYSTEM',
+        duration: formatTimeDiff(r.createdon, r.completedon),
+        error: null,
         traces: null,
         raw: r
       };
@@ -1097,7 +1167,25 @@
         entity: 'mailbox',
         user: r.machinename || 'SSS Server',
         duration: '—',
-        error: lvl >= 2 ? r.text : null,
+        error: (lvl >= 2 || r.errordetails) ? (r.errordetails || r.text) : null,
+        traces: null,
+        raw: r
+      };
+    }
+
+    function normalizeSyncErrorEvent(r) {
+      return {
+        id: r.syncerrorid,
+        category: 'sync',
+        categoryLabel: 'Sync Log',
+        time: new Date(r.createdon),
+        severity: 'error',
+        severityLabel: 'Sync Error',
+        title: r.name || 'Dataverse Sync Error',
+        entity: 'syncerror',
+        user: 'Sync Engine',
+        duration: '—',
+        error: r.errormessage ? `Code ${r.errorcode || ''}: ${r.errormessage}` : null,
         traces: null,
         raw: r
       };
