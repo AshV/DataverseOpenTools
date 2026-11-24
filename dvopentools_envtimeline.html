@@ -818,6 +818,31 @@
           <div id="md-audit-diff-content"></div>
         </div>
 
+        <!-- Cloud Flow Run Navigation Section -->
+        <div id="md-flow-nav-sec" style="display:none;margin-top:10px;padding:12px;background:rgba(138,43,226,0.06);border:1px solid rgba(138,43,226,0.25);border-radius:6px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:700;font-size:12px;color:var(--primary);display:flex;align-items:center;gap:6px;">
+                <span>⚡</span> Cloud Flow Execution Navigation
+              </div>
+              <div style="font-size:11px;color:var(--text-sec);margin-top:2px;">
+                Direct deep-link to this specific run instance diagram in Microsoft Power Automate maker portal.
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <button class="btn" id="md-flow-copy-url" style="font-size:11px;">📋 Copy Run URL</button>
+              <a href="#" target="_blank" rel="noopener noreferrer" class="btn primary" id="md-flow-open-btn" style="text-decoration:none;font-size:11px;display:inline-flex;align-items:center;gap:4px;">
+                <span>🚀 Open Flow Run ↗</span>
+              </a>
+            </div>
+          </div>
+          <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;display:flex;gap:14px;flex-wrap:wrap;color:var(--text-sec);font-family:monospace;">
+            <div><strong>Flow ID:</strong> <span id="md-flow-id-val">—</span></div>
+            <div><strong>Run ID:</strong> <span id="md-flow-runid-val">—</span></div>
+            <div><a href="#" target="_blank" rel="noopener noreferrer" id="md-flow-history-link" style="color:var(--primary);text-decoration:underline;">View All Runs for this Flow ↗</a></div>
+          </div>
+        </div>
+
         <!-- Raw JSON -->
         <div>
           <div class="detail-label" style="margin-bottom:4px;">Raw Event Record:</div>
@@ -981,6 +1006,7 @@
         syncDatetimeInputs(activeRange);
       }
 
+      ensureEnvironmentId().catch(() => {});
       await loadEnvironmentEvents();
     }
 
@@ -1487,6 +1513,71 @@
       4: 'PublishAll'
     };
 
+    /* ─── Cloud Flow & Power Automate URL Resolver ─────────── */
+    let discoveredEnvId = null;
+
+    function getEnvironmentId() {
+      if (discoveredEnvId) return discoveredEnvId;
+      if (context?.environmentId) {
+        discoveredEnvId = context.environmentId;
+        return discoveredEnvId;
+      }
+      try {
+        if (window.parent?.Xrm?.Utility?.getGlobalContext) {
+          const bap = window.parent.Xrm.Utility.getGlobalContext()?.organizationSettings?.bapEnvironmentId;
+          if (bap) { discoveredEnvId = bap; return discoveredEnvId; }
+        }
+      } catch {}
+
+      const cached = toolStore('bapEnvironmentId');
+      if (cached) { discoveredEnvId = cached; return discoveredEnvId; }
+
+      return context?.organizationId || 'Default';
+    }
+
+    async function ensureEnvironmentId() {
+      if (discoveredEnvId && discoveredEnvId !== 'Default') return discoveredEnvId;
+      if (context?.environmentId) {
+        discoveredEnvId = context.environmentId;
+        toolStore('bapEnvironmentId', discoveredEnvId);
+        return discoveredEnvId;
+      }
+      try {
+        const orgData = await dvFetchWithHeaders(`/RetrieveCurrentOrganization(AccessType=Microsoft.Dynamics.CRM.EndpointAccessType'Default')`);
+        const envId = orgData?.Detail?.EnvironmentId;
+        if (envId) {
+          discoveredEnvId = envId;
+          toolStore('bapEnvironmentId', envId);
+          return envId;
+        }
+      } catch (e) {
+        try {
+          const org = await dvFetchWithHeaders(`/organizations?$select=organizationid,name`);
+          const orgId = org?.value?.[0]?.organizationid;
+          if (orgId) {
+            discoveredEnvId = orgId;
+            return orgId;
+          }
+        } catch {}
+      }
+      return getEnvironmentId();
+    }
+
+    function getFlowRunUrl(ev) {
+      if (!ev || ev.category !== 'flow') return null;
+      const envId = getEnvironmentId();
+      const flowId = ev.flowId || ev.raw?._regardingobjectid_value || ev.raw?.workflowid || ev.raw?._workflowid_value;
+      const runId = ev.runId || ev.raw?.name || ev.raw?.flowrunid || ev.raw?.asyncoperationid || ev.id;
+
+      if (flowId && runId) {
+        return `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows/${encodeURIComponent(flowId)}/runs/${encodeURIComponent(runId)}`;
+      }
+      if (flowId) {
+        return `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows/${encodeURIComponent(flowId)}/runs`;
+      }
+      return `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows`;
+    }
+
     function normalizeAuditEvent(r) {
       const act = AUDIT_ACTIONS[r.action] || `Audit Action ${r.action}`;
       const isSec = r.action === 13 || r.action === 14 || r.action === 64 || r.action === 65;
@@ -1557,6 +1648,8 @@
         duration: formatTimeDiff(r.startedon || r.createdon, r.completedon),
         error: r.message || null,
         traces: null,
+        flowId: isFlow ? r._regardingobjectid_value : null,
+        runId: isFlow ? (r.name || r.asyncoperationid) : null,
         raw: r
       };
     }
@@ -1582,6 +1675,8 @@
         duration: r.durationinms ? `${r.durationinms}ms` : formatTimeDiff(r.starttime, r.endtime),
         error: r.errormessage ? (r.errorcode ? `[${r.errorcode}] ${r.errormessage}` : r.errormessage) : null,
         traces: null,
+        flowId: r._workflowid_value || r.workflowid || null,
+        runId: r.name || r.flowrunid,
         raw: r
       };
     }
@@ -1686,6 +1781,8 @@
           severity: 'success', severityLabel: 'Succeeded',
           title: 'Sync Invoice to ERP Webhook',
           entity: 'cr_invoice', user: 'Automated', duration: '2.4s',
+          flowId: '7f3a9921-1234-4567-89ab-cdef01234567',
+          runId: '08584857291038475628491028374',
           error: null, traces: null,
           raw: { flow: 'Sync Invoice to ERP', durationSeconds: 2.4, trigger: 'HTTP Webhook' }
         },
@@ -1925,6 +2022,20 @@
       const timeStr = ev.time.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
       const dateStr = ev.time.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
+      let actionHtml = `
+        <button class="btn icon-only" style="padding:2px 6px;font-size:11px;" title="View event details">🔍</button>
+      `;
+
+      if (ev.category === 'flow') {
+        const flowUrl = getFlowRunUrl(ev);
+        if (flowUrl) {
+          actionHtml = `
+            <a href="${esc(flowUrl)}" target="_blank" rel="noopener noreferrer" class="btn icon-only" style="padding:2px 6px;font-size:11px;text-decoration:none;color:var(--primary);margin-right:2px;" title="Open Flow Run in Power Automate (new tab)" onclick="event.stopPropagation();">🚀↗</a>
+            <button class="btn icon-only" style="padding:2px 6px;font-size:11px;" title="View event details">🔍</button>
+          `;
+        }
+      }
+
       tr.innerHTML = `
         <td class="time-cell">${dateStr} ${timeStr}</td>
         <td><span class="badge-cat cat-${ev.category}">${esc(ev.categoryLabel)}</span></td>
@@ -1932,8 +2043,8 @@
         <td class="title-cell" title="${esc(ev.title)}">${esc(ev.title)}</td>
         <td class="entity-cell"><code>${esc(ev.entity)}</code></td>
         <td class="user-cell" title="${esc(ev.user)}">${esc(ev.user)}</td>
-        <td style="text-align:center;">
-          <button class="btn icon-only" style="padding:2px 6px;font-size:11px;" title="View event details">🔍</button>
+        <td style="text-align:center;white-space:nowrap;">
+          ${actionHtml}
         </td>
       `;
 
@@ -2008,6 +2119,49 @@
       } else {
         diffSec.style.display = 'none';
         diffContent.innerHTML = '';
+      }
+
+      // Cloud Flow Run Navigation Section
+      const flowSec = document.getElementById('md-flow-nav-sec');
+      if (ev.category === 'flow') {
+        flowSec.style.display = 'block';
+        const flowId = ev.flowId || ev.raw?._regardingobjectid_value || ev.raw?.workflowid || ev.raw?._workflowid_value;
+        const runId  = ev.runId || ev.raw?.name || ev.raw?.flowrunid || ev.raw?.asyncoperationid || ev.id;
+        const flowRunUrl = getFlowRunUrl(ev);
+
+        document.getElementById('md-flow-id-val').textContent = flowId || '—';
+        document.getElementById('md-flow-runid-val').textContent = runId || '—';
+
+        const openBtn = document.getElementById('md-flow-open-btn');
+        if (flowRunUrl) {
+          openBtn.href = flowRunUrl;
+          openBtn.style.pointerEvents = 'auto';
+          openBtn.style.opacity = '1';
+        } else {
+          openBtn.href = '#';
+          openBtn.style.pointerEvents = 'none';
+          openBtn.style.opacity = '0.5';
+        }
+
+        const histLink = document.getElementById('md-flow-history-link');
+        const envId = getEnvironmentId();
+        if (flowId) {
+          histLink.href = `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows/${encodeURIComponent(flowId)}/runs`;
+          histLink.style.display = 'inline';
+        } else {
+          histLink.style.display = 'none';
+        }
+
+        const copyBtn = document.getElementById('md-flow-copy-url');
+        copyBtn.onclick = () => {
+          if (flowRunUrl) {
+            navigator.clipboard?.writeText(flowRunUrl).then(() => {
+              notify('Copied Cloud Flow Run URL to clipboard', 'success');
+            });
+          }
+        };
+      } else {
+        flowSec.style.display = 'none';
       }
 
       document.getElementById('detail-modal').classList.add('open');

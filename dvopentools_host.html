@@ -730,15 +730,38 @@
     /* ─── Context init ───────────────────────────────────────── */
     async function buildContext() {
       const who = await dv('/WhoAmI');
-      let name = '', email = '';
+      let name = '', email = '', environmentId = '';
       try {
         const u = await dv(`/systemusers(${who.UserId})?$select=fullname,internalemailaddress`);
         name  = u.fullname || '';
         email = u.internalemailaddress || '';
       } catch {}
-      return { environmentUrl: location.origin, apiVersion: S.cfg.apiVersion,
-               userId: who.UserId, userName: name, userEmail: email,
-               hostVersion: HOST_VERSION, theme: S.cfg.theme };
+
+      // Discover BAP Environment ID for Power Automate / Power Apps navigation
+      try {
+        if (window.parent?.Xrm?.Utility?.getGlobalContext) {
+          environmentId = window.parent.Xrm.Utility.getGlobalContext()?.organizationSettings?.bapEnvironmentId || '';
+        }
+      } catch {}
+
+      if (!environmentId) {
+        try {
+          const orgData = await dv(`/RetrieveCurrentOrganization(AccessType=Microsoft.Dynamics.CRM.EndpointAccessType'Default')`);
+          environmentId = orgData?.Detail?.EnvironmentId || '';
+        } catch {}
+      }
+
+      return {
+        environmentUrl: location.origin,
+        apiVersion: S.cfg.apiVersion,
+        userId: who.UserId,
+        userName: name,
+        userEmail: email,
+        organizationId: who.OrganizationId || '',
+        environmentId: environmentId || who.OrganizationId || '',
+        hostVersion: HOST_VERSION,
+        theme: S.cfg.theme
+      };
     }
 
     /* ─── Status bar + header ────────────────────────────────── */
