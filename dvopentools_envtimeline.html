@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Environment Timeline</title>
+
+  <!-- ══ 1. MANIFEST ══════════════════════════════════════════
+       Discovered automatically by dvopentools_host.html
+  ═══════════════════════════════════════════════════════════ -->
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "env-timeline",
+    "name":           "Environment Timeline",
+    "version":        "1.0.0",
+    "description":    "Unified chronological activity and event timeline across Dataverse: Audits, Plugin Traces, Flow Runs, System Jobs, Solution Operations, and Sync Logs.",
+    "icon":           "🕒",
+    "category":       "Diagnostics",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.0"
+  }
+  </script>
+
+  <!-- ══ 2. STYLES ════════════════════════════════════════════
+       Self-contained, zero external dependencies, light/dark mode.
+  ═══════════════════════════════════════════════════════════ -->
+  <style>
+    :root {
+      --bg:             #ffffff;
+      --bg-alt:         #f8f9fa;
+      --bg-card:        #ffffff;
+      --border:         #e1dfdd;
+      --border-subtle:  #edebe9;
+      --text:           #201f1e;
+      --text-sec:       #605e5c;
+      --text-muted:     #8a8886;
+      --primary:        #0078d4;
+      --primary-hover:  #106ebe;
+      --primary-subtle: #eff6fc;
+
+      --sev-success-bg: #dff6dd;
+      --sev-success-color: #107c10;
+      --sev-error-bg:   #fde7e9;
+      --sev-error-color: #d13438;
+      --sev-warn-bg:    #fef3c7;
+      --sev-warn-color: #d97706;
+      --sev-info-bg:    #eff6fc;
+      --sev-info-color: #0078d4;
+
+      --cat-audit-bg:   rgba(0, 120, 212, 0.12);
+      --cat-audit-color: #0078d4;
+      --cat-plugin-bg:  rgba(135, 100, 184, 0.14);
+      --cat-plugin-color: #724b9f;
+      --cat-flow-bg:    rgba(16, 124, 16, 0.12);
+      --cat-flow-color: #107c10;
+      --cat-job-bg:     rgba(180, 83, 9, 0.12);
+      --cat-job-color:  #b45309;
+      --cat-solution-bg:rgba(15, 118, 110, 0.14);
+      --cat-solution-color: #0f766e;
+      --cat-sync-bg:    rgba(100, 116, 139, 0.14);
+      --cat-sync-color: #475569;
+
+      --modal-overlay:  rgba(0, 0, 0, 0.45);
+      --shadow-sm:      0 1.6px 3.6px 0 rgba(0,0,0,0.13), 0 0.3px 0.9px 0 rgba(0,0,0,0.11);
+      --shadow-md:      0 6.4px 14.4px 0 rgba(0,0,0,0.13), 0 1.2px 3.6px 0 rgba(0,0,0,0.11);
+    }
+
+    body.dark {
+      --bg:             #1e1e1e;
+      --bg-alt:         #252526;
+      --bg-card:        #2d2d2d;
+      --border:         #3e3e42;
+      --border-subtle:  #333337;
+      --text:           #d4d4d4;
+      --text-sec:       #a6a6a6;
+      --text-muted:     #767676;
+      --primary:        #2886de;
+      --primary-hover:  #4797e2;
+      --primary-subtle: #19324d;
+
+      --sev-success-bg: #1c361e;
+      --sev-success-color: #57b35e;
+      --sev-error-bg:   #431c20;
+      --sev-error-color: #f1707b;
+      --sev-warn-bg:    #422d05;
+      --sev-warn-color: #fbbf24;
+      --sev-info-bg:    #102d4d;
+      --sev-info-color: #4da3ff;
+
+      --cat-audit-bg:   rgba(40, 134, 222, 0.2);
+      --cat-audit-color: #60b4ff;
+      --cat-plugin-bg:  rgba(180, 140, 240, 0.2);
+      --cat-plugin-color: #c49eff;
+      --cat-flow-bg:    rgba(87, 179, 94, 0.2);
+      --cat-flow-color: #79d780;
+      --cat-job-bg:     rgba(251, 191, 36, 0.2);
+      --cat-job-color:  #fbbf24;
+      --cat-solution-bg:rgba(45, 212, 191, 0.2);
+      --cat-solution-color: #2dd4bf;
+      --cat-sync-bg:    rgba(148, 163, 184, 0.2);
+      --cat-sync-color: #cbd5e1;
+
+      --modal-overlay:  rgba(0, 0, 0, 0.7);
+      --shadow-sm:      0 2px 4px rgba(0,0,0,0.4);
+      --shadow-md:      0 8px 18px rgba(0,0,0,0.6);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* ─── Top Control Bar ─────────────────────────────────────────── */
+    .topbar {
+      padding: 10px 14px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .row-primary {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .tool-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      white-space: nowrap;
+    }
+
+    .spacer { flex: 1; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-card);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) {
+      background: var(--bg-alt);
+      border-color: var(--primary);
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .btn.primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+    .btn.icon-only {
+      padding: 5px 8px;
+    }
+
+    .select-range, .search-input {
+      padding: 5px 9px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 12px;
+      background: var(--bg-card);
+      color: var(--text);
+    }
+    .select-range:focus, .search-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .search-input { width: 220px; }
+
+    .badge-pill {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      background: var(--sev-success-color);
+      color: #fff;
+      margin-left: 4px;
+    }
+
+    /* ─── Second Row: Category & Severity Filters ─────────────────── */
+    .row-filters {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--bg-alt);
+      padding: 3px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      user-select: none;
+      transition: all 0.15s;
+    }
+    .filter-chip input { display: none; }
+    .filter-chip.chip-audit    { background: var(--cat-audit-bg); color: var(--cat-audit-color); }
+    .filter-chip.chip-plugin   { background: var(--cat-plugin-bg); color: var(--cat-plugin-color); }
+    .filter-chip.chip-flow     { background: var(--cat-flow-bg); color: var(--cat-flow-color); }
+    .filter-chip.chip-job      { background: var(--cat-job-bg); color: var(--cat-job-color); }
+    .filter-chip.chip-solution { background: var(--cat-solution-bg); color: var(--cat-solution-color); }
+    .filter-chip.chip-sync     { background: var(--cat-sync-bg); color: var(--cat-sync-color); }
+
+    .filter-chip.muted {
+      opacity: 0.35;
+      filter: grayscale(0.8);
+    }
+
+    .seg-group {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      background: var(--bg-alt);
+    }
+    .seg-btn {
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--text-sec);
+      cursor: pointer;
+      transition: all 0.1s;
+    }
+    .seg-btn:hover { color: var(--text); }
+    .seg-btn.active { background: var(--primary); color: #fff; }
+
+    /* ─── KPI Metrics Ribbon ──────────────────────────────────────── */
+    .kpi-ribbon {
+      padding: 8px 14px;
+      background: var(--bg-alt);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      font-size: 12px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .kpi-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .kpi-icon { font-size: 16px; opacity: 0.85; }
+    .kpi-label { color: var(--text-sec); }
+    .kpi-val { font-weight: 700; color: var(--text); }
+    .kpi-val.err { color: var(--sev-error-color); }
+
+    /* ─── Timeline Feed & Table ───────────────────────────────────── */
+    .content-area {
+      flex: 1;
+      overflow: auto;
+      background: var(--bg);
+      position: relative;
+    }
+    .content-area::-webkit-scrollbar { width: 8px; height: 8px; }
+    .content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .timeline-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      text-align: left;
+    }
+    .timeline-table th {
+      position: sticky;
+      top: 0;
+      background: var(--bg-alt);
+      border-bottom: 2px solid var(--border);
+      padding: 8px 12px;
+      font-weight: 600;
+      color: var(--text-sec);
+      white-space: nowrap;
+      z-index: 5;
+      cursor: pointer;
+    }
+    .timeline-table th:hover { color: var(--text); }
+    .timeline-table td {
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    .timeline-table tr {
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .timeline-table tr:hover td {
+      background: var(--bg-alt);
+    }
+    .timeline-table tr.has-error td {
+      background: rgba(209, 52, 56, 0.03);
+    }
+
+    .badge-cat {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-cat.cat-audit    { background: var(--cat-audit-bg); color: var(--cat-audit-color); }
+    .badge-cat.cat-plugin   { background: var(--cat-plugin-bg); color: var(--cat-plugin-color); }
+    .badge-cat.cat-flow     { background: var(--cat-flow-bg); color: var(--cat-flow-color); }
+    .badge-cat.cat-job      { background: var(--cat-job-bg); color: var(--cat-job-color); }
+    .badge-cat.cat-solution { background: var(--cat-solution-bg); color: var(--cat-solution-color); }
+    .badge-cat.cat-sync     { background: var(--cat-sync-bg); color: var(--cat-sync-color); }
+
+    .badge-sev {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .badge-sev.success { background: var(--sev-success-bg); color: var(--sev-success-color); }
+    .badge-sev.error   { background: var(--sev-error-bg); color: var(--sev-error-color); }
+    .badge-sev.warn    { background: var(--sev-warn-bg); color: var(--sev-warn-color); }
+    .badge-sev.info    { background: var(--sev-info-bg); color: var(--sev-info-color); }
+
+    .time-cell {
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-size: 11px;
+      color: var(--text-sec);
+    }
+    .title-cell {
+      font-weight: 600;
+      color: var(--text);
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .entity-cell {
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-size: 11px;
+      color: var(--primary);
+    }
+    .user-cell {
+      color: var(--text-sec);
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ─── Detail Modal ────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--modal-overlay);
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal-card {
+      background: var(--bg-card);
+      border-radius: 8px;
+      box-shadow: var(--shadow-md);
+      width: 650px;
+      max-width: 95vw;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-alt);
+    }
+    .modal-body {
+      padding: 16px 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 12px;
+    }
+    .modal-footer {
+      padding: 10px 18px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      background: var(--bg-alt);
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 6px 12px;
+      font-size: 12px;
+    }
+    .detail-label { font-weight: 600; color: var(--text-sec); }
+    .detail-val { color: var(--text); user-select: text; }
+
+    .code-block {
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-size: 11px;
+      overflow: auto;
+      white-space: pre-wrap;
+      user-select: text;
+      max-height: 180px;
+    }
+    .error-block {
+      background: var(--sev-error-bg);
+      border: 1px solid var(--border);
+      color: var(--sev-error-color);
+    }
+
+    /* ─── Bottom Telemetry Drawer ─────────────────────────────────── */
+    .inspector-panel {
+      position: fixed; left: 0; right: 0; bottom: 0; height: 280px;
+      background: var(--bg-card); border-top: 2px solid var(--primary);
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.18);
+      display: flex; flex-direction: column; z-index: 40;
+      transform: translateY(100%); transition: transform 0.22s ease;
+    }
+    .inspector-panel.open { transform: translateY(0); }
+    .inspector-header {
+      padding: 8px 14px; background: var(--bg-alt); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px; font-size: 12px;
+    }
+    .inspector-body { flex: 1; display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
+    .inspector-col { padding: 10px 14px; overflow-y: auto; border-right: 1px solid var(--border); }
+    .inspector-col:last-child { border-right: none; }
+    .headers-table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: monospace; }
+    .headers-table td { padding: 4px 6px; border-bottom: 1px solid var(--border-subtle); word-break: break-all; }
+    .headers-table td.hk { font-weight: 600; color: var(--primary); width: 42%; }
+
+    /* Spinner */
+    .spin {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid var(--border); border-top-color: var(--primary);
+      border-radius: 50%; animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════════ TOP CONTROL BAR ══════════════ -->
+  <header class="topbar">
+    <div class="row-primary">
+      <div class="tool-brand">
+        <span>🕒</span> Environment Timeline
+      </div>
+
+      <!-- Time range presets (Default: Last 24 Hours) -->
+      <select class="select-range" id="time-range-select">
+        <option value="1h">Last 1 Hour</option>
+        <option value="4h">Last 4 Hours</option>
+        <option value="24h" selected>Last 24 Hours (Default)</option>
+        <option value="3d">Last 3 Days</option>
+        <option value="7d">Last 7 Days</option>
+      </select>
+
+      <button class="btn" id="btn-refresh" title="Reload event logs from Dataverse">
+        <span id="spin-icon">↻</span> Refresh
+      </button>
+
+      <div class="spacer"></div>
+
+      <button class="btn" id="btn-export-csv" title="Export events to CSV for CAB or post-mortem">
+        📥 Export CSV
+      </button>
+
+      <button class="btn" id="btn-sample-toggle" title="Load sample logs if environment has no recent events">
+        🧪 Sample Data
+      </button>
+
+      <button class="btn" id="btn-toggle-inspector" title="View HTTP Response Headers & Telemetry">
+        🌐 HTTP Headers <span class="badge-pill" id="http-status-pill">200 OK</span>
+      </button>
+    </div>
+
+    <!-- Secondary Row: Filters -->
+    <div class="row-filters">
+      <!-- Search Input -->
+      <input type="text" class="search-input" id="search-input" placeholder="Search event, user, entity, error…">
+
+      <!-- Severity Segment -->
+      <div class="seg-group">
+        <button class="seg-btn active" data-sev="all">All Events</button>
+        <button class="seg-btn" data-sev="errors">🔴 Errors Only (<span id="count-sev-errors">0</span>)</button>
+        <button class="seg-btn" data-sev="warnings">🟡 Warnings (<span id="count-sev-warnings">0</span>)</button>
+      </div>
+
+      <div class="spacer"></div>
+
+      <!-- Category Filter Chips -->
+      <div class="filter-group">
+        <label class="filter-chip chip-audit" id="chip-audit">
+          <input type="checkbox" id="chk-audit" checked>
+          <span>🛡️ Audits</span> <strong id="cnt-audit">0</strong>
+        </label>
+        <label class="filter-chip chip-plugin" id="chip-plugin">
+          <input type="checkbox" id="chk-plugin" checked>
+          <span>🧩 Plugins</span> <strong id="cnt-plugin">0</strong>
+        </label>
+        <label class="filter-chip chip-flow" id="chip-flow">
+          <input type="checkbox" id="chk-flow" checked>
+          <span>⚡ Flows</span> <strong id="cnt-flow">0</strong>
+        </label>
+        <label class="filter-chip chip-job" id="chip-job">
+          <input type="checkbox" id="chk-job" checked>
+          <span>⚙️ Jobs</span> <strong id="cnt-job">0</strong>
+        </label>
+        <label class="filter-chip chip-solution" id="chip-solution">
+          <input type="checkbox" id="chk-solution" checked>
+          <span>📦 Solutions</span> <strong id="cnt-solution">0</strong>
+        </label>
+        <label class="filter-chip chip-sync" id="chip-sync">
+          <input type="checkbox" id="chk-sync" checked>
+          <span>📧 Sync Logs</span> <strong id="cnt-sync">0</strong>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══════════════ KPI METRICS RIBBON ══════════════ -->
+  <div class="kpi-ribbon">
+    <div class="kpi-item">
+      <span class="kpi-icon">📊</span>
+      <span class="kpi-label">Total Events:</span>
+      <span class="kpi-val" id="kpi-total">0</span>
+    </div>
+    <div class="kpi-item">
+      <span class="kpi-icon">⚠️</span>
+      <span class="kpi-label">Errors / Failures:</span>
+      <span class="kpi-val err" id="kpi-errors">0 (0%)</span>
+    </div>
+    <div class="kpi-item">
+      <span class="kpi-icon">👥</span>
+      <span class="kpi-label">Active Users:</span>
+      <span class="kpi-val" id="kpi-users">0</span>
+    </div>
+    <div class="kpi-item">
+      <span class="kpi-icon">🎯</span>
+      <span class="kpi-label">Top Target Entity:</span>
+      <span class="kpi-val" id="kpi-top-entity">—</span>
+    </div>
+  </div>
+
+  <!-- ══════════════ TIMELINE TABLE ══════════════ -->
+  <main class="content-area">
+    <table class="timeline-table">
+      <thead>
+        <tr>
+          <th data-sort="time" style="width:140px;">Timestamp ▾</th>
+          <th data-sort="category" style="width:130px;">Source / Category</th>
+          <th data-sort="severity" style="width:90px;">Status</th>
+          <th data-sort="title">Event Description</th>
+          <th data-sort="entity" style="width:150px;">Target Entity</th>
+          <th data-sort="user" style="width:150px;">Initiated By</th>
+          <th style="width:70px;text-align:center;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="timeline-tbody">
+        <tr>
+          <td colspan="7" style="text-align:center;padding:35px;color:var(--text-sec);">
+            Connecting to Dataverse and querying environment event logs…
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </main>
+
+  <!-- ══════════════ EVENT DETAIL MODAL ══════════════ -->
+  <div class="modal-overlay" id="detail-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span id="md-cat-badge" class="badge-cat cat-plugin">Plugin</span>
+          <span id="md-sev-badge" class="badge-sev error">Error</span>
+          <strong id="md-title" style="font-size:14px;color:var(--text);">Event Title</strong>
+        </div>
+        <button class="btn icon-only" id="md-close-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-grid">
+          <div class="detail-label">Timestamp:</div>
+          <div class="detail-val" id="md-time">—</div>
+
+          <div class="detail-label">Entity / Scope:</div>
+          <div class="detail-val" id="md-entity">—</div>
+
+          <div class="detail-label">Initiated By:</div>
+          <div class="detail-val" id="md-user">—</div>
+
+          <div class="detail-label">Event ID:</div>
+          <div class="detail-val" id="md-id" style="font-family:monospace;font-size:11px;">—</div>
+
+          <div class="detail-label">Duration:</div>
+          <div class="detail-val" id="md-duration">—</div>
+        </div>
+
+        <!-- Error Section -->
+        <div id="md-error-sec" style="display:none;">
+          <div class="detail-label" style="color:var(--sev-error-color);margin-bottom:4px;">Error Details &amp; Stack Trace:</div>
+          <pre class="code-block error-block" id="md-error-text"></pre>
+        </div>
+
+        <!-- Traces or Custom Message Section -->
+        <div id="md-trace-sec" style="display:none;">
+          <div class="detail-label" style="margin-bottom:4px;">Execution Traces / Message Block:</div>
+          <pre class="code-block" id="md-trace-text"></pre>
+        </div>
+
+        <!-- Raw JSON -->
+        <div>
+          <div class="detail-label" style="margin-bottom:4px;">Raw Event Record:</div>
+          <pre class="code-block" id="md-raw-json"></pre>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="md-copy-id">📋 Copy ID</button>
+        <button class="btn primary" id="md-ok-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ HTTP HEADERS & TELEMETRY DRAWER ══════════════ -->
+  <aside class="inspector-panel" id="inspector-panel">
+    <div class="inspector-header">
+      <strong>🌐 Dataverse HTTP Telemetry &amp; Response Headers</strong>
+      <div class="spacer"></div>
+      <span id="tel-summary" style="font-family:monospace;font-size:11px;color:var(--text-sec);">200 OK</span>
+      <button class="btn icon-only" id="inspector-close-btn">✕</button>
+    </div>
+    <div class="inspector-body">
+      <div class="inspector-col">
+        <div style="font-weight:700;font-size:11px;color:var(--text-muted);margin-bottom:6px;display:flex;justify-content:space-between;">
+          <span>HTTP Response Headers</span>
+          <button class="btn icon-only" id="btn-copy-headers" title="Copy headers">📋</button>
+        </div>
+        <table class="headers-table">
+          <tbody id="headers-tbody"></tbody>
+        </table>
+      </div>
+      <div class="inspector-col">
+        <div style="font-weight:700;font-size:11px;color:var(--text-muted);margin-bottom:6px;">Performance &amp; Throttling</div>
+        <div class="detail-grid">
+          <div class="detail-label">Status:</div><div class="detail-val" id="tel-status">200 OK</div>
+          <div class="detail-label">Latency:</div><div class="detail-val" id="tel-latency">110 ms</div>
+          <div class="detail-label">Rate Limit:</div><div class="detail-val" id="tel-rate">—</div>
+          <div class="detail-label">Endpoint:</div><div class="detail-val" id="tel-endpoint">/audits</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ════════════════════════════════════════════════════════════
+       TOOL SCRIPT
+  ════════════════════════════════════════════════════════════ -->
+  <script>
+    'use strict';
+
+    /* ─── 1. Constants & State ──────────────────────────────── */
+    const MANIFEST_ID = 'env-timeline';
+    const HOST_ORIGIN = window.location.origin;
+    const TOOL_STORE  = `dvopentools::tool::${MANIFEST_ID}::`;
+
+    let context = null;
+    let allEvents = [];
+    let isSample = false;
+
+    // Filter states
+    let activeRange = '24h';
+    let activeSev   = 'all'; // 'all' | 'errors' | 'warnings'
+    let searchQuery = '';
+    let sortColumn  = 'time';
+    let sortAsc     = false; // newest first by default
+
+    const catFilters = {
+      audit:    true,
+      plugin:   true,
+      flow:     true,
+      job:      true,
+      solution: true,
+      sync:     true,
+    };
+
+    let lastTelemetry = { url: '', status: 200, statusText: 'OK', latency: 0, headers: {} };
+
+    /* ─── 2. Host Communication ─────────────────────────────── */
+    function toHost(type, payload = {}) {
+      window.parent.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
+    }
+    function notify(message, level = 'info', duration = 3500) {
+      toHost('NOTIFY', { message, level, duration });
+    }
+    function setTitle(title) {
+      toHost('SET_TITLE', { title });
+    }
+
+    // Step A: Signal readiness immediately
+    toHost('TOOL_READY');
+
+    // Step B: Listen for host messages
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN) return;
+      if (e.data?.source !== 'dvopentools-host') return;
+
+      const { type, payload } = e.data;
+      if (type === 'CONTEXT_INIT') {
+        context = payload;
+        onContextReady();
+      }
+      if (type === 'THEME_CHANGE') {
+        applyTheme(payload.theme);
+      }
+    });
+
+    function applyTheme(theme) {
+      document.body.classList.toggle('dark', theme === 'dark');
+    }
+
+    /* ─── 3. Tiered Storage Helper ──────────────────────────── */
+    const _store = (() => {
+      function canUse(s) {
+        try { const k = '__dvot__'; s.setItem(k, '1'); s.removeItem(k); return true; } catch { return false; }
+      }
+      const _ls  = typeof localStorage  !== 'undefined' && canUse(localStorage)  ? localStorage  : null;
+      const _ss  = typeof sessionStorage !== 'undefined' && canUse(sessionStorage) ? sessionStorage : null;
+      const _mem = Object.create(null);
+      const _b   = _ls || _ss;
+      return {
+        type: _ls ? 'localStorage' : _ss ? 'sessionStorage' : 'memory',
+        get(k)   { if (_b) try { return JSON.parse(_b.getItem(k)); } catch {} return _mem[k] ?? null; },
+        set(k,v) { if (_b) try { _b.setItem(k, JSON.stringify(v)); return; } catch {} _mem[k] = v; },
+        del(k)   { if (_b) try { _b.removeItem(k); } catch {} delete _mem[k]; }
+      };
+    })();
+
+    function toolStore(key, value) {
+      const k = TOOL_STORE + key;
+      if (value === undefined) return _store.get(k);
+      _store.set(k, value);
+    }
+
+    /* ─── 4. Context Ready ──────────────────────────────────── */
+    async function onContextReady() {
+      applyTheme(context.theme);
+
+      // Restore saved filters
+      const savedRange = toolStore('range');
+      if (savedRange) {
+        activeRange = savedRange;
+        document.getElementById('time-range-select').value = savedRange;
+      }
+
+      await loadEnvironmentEvents();
+    }
+
+    /* ─── 5. Dataverse Fetch with HTTP Headers Capture ──────── */
+    async function dvFetchWithHeaders(path, opts = {}) {
+      const url = `${context.environmentUrl}/api/data/v${context.apiVersion}${path}`;
+      const t0  = performance.now();
+
+      const defaultHeaders = {
+        'OData-MaxVersion': '4.0',
+        'OData-Version':    '4.0',
+        'Accept':           'application/json',
+        'Content-Type':     'application/json',
+        'Prefer':           'odata.include-annotations="*"',
+      };
+
+      const res = await fetch(url, {
+        ...opts,
+        headers: { ...defaultHeaders, ...opts.headers }
+      });
+
+      const latency = Math.round(performance.now() - t0);
+      const capturedHeaders = {};
+      res.headers.forEach((val, key) => { capturedHeaders[key.toLowerCase()] = val; });
+
+      let data = {};
+      try { data = await res.json(); } catch { data = {}; }
+
+      lastTelemetry = {
+        url,
+        status: res.status,
+        statusText: res.statusText || 'OK',
+        latency,
+        headers: capturedHeaders
+      };
+      updateTelemetryUI();
+
+      // Log to host Central Network Console & Security Gateway
+      toHost('API_LOG', {
+        method: opts.method || 'GET',
+        path,
+        url,
+        status: res.status,
+        statusText: res.statusText || 'OK',
+        latency,
+        headers: capturedHeaders,
+        body: opts.body || null
+      });
+
+      if (!res.ok) {
+        throw new Error(data?.error?.message || `${res.status} ${res.statusText}`);
+      }
+      return data;
+    }
+
+    function updateTelemetryUI() {
+      const pill = document.getElementById('http-status-pill');
+      pill.textContent = `${lastTelemetry.status} ${lastTelemetry.statusText} (${lastTelemetry.latency}ms)`;
+      pill.style.background = lastTelemetry.status >= 200 && lastTelemetry.status < 300
+        ? 'var(--sev-success-color)' : 'var(--sev-error-color)';
+
+      document.getElementById('tel-status').textContent = `${lastTelemetry.status} ${lastTelemetry.statusText}`;
+      document.getElementById('tel-latency').textContent = `${lastTelemetry.latency} ms`;
+      document.getElementById('tel-endpoint').textContent = lastTelemetry.url.replace(context?.environmentUrl || '', '');
+
+      const rateLimit = lastTelemetry.headers['x-ms-ratelimit-time-remaining-xrm-requests'];
+      document.getElementById('tel-rate').textContent = rateLimit || '—';
+
+      const tbody = document.getElementById('headers-tbody');
+      tbody.innerHTML = '';
+      for (const [k, v] of Object.entries(lastTelemetry.headers)) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="hk">${esc(k)}</td><td>${esc(v)}</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+
+    /* ─── 6. Multi-Source Log Gathering Engine ──────────────── */
+    function getTimeWindow(rangeKey) {
+      const now = new Date();
+      let from = new Date(now);
+
+      switch (rangeKey) {
+        case '1h':  from.setHours(from.getHours() - 1); break;
+        case '4h':  from.setHours(from.getHours() - 4); break;
+        case '24h': from.setHours(from.getHours() - 24); break;
+        case '3d':  from.setDate(from.getDate() - 3); break;
+        case '7d':  from.setDate(from.getDate() - 7); break;
+        default:    from.setHours(from.getHours() - 24); break;
+      }
+      return { fromIso: from.toISOString(), toIso: now.toISOString() };
+    }
+
+    async function loadEnvironmentEvents() {
+      const spin = document.getElementById('spin-icon');
+      spin.style.animation = 'spin .7s linear infinite';
+      isSample = false;
+
+      const { fromIso, toIso } = getTimeWindow(activeRange);
+      const events = [];
+
+      // Query all sources in parallel with graceful failure per category
+      await Promise.allSettled([
+        // 1. Audits
+        dvFetchWithHeaders(`/audits?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=auditid,createdon,action,operation,objecttypecode,_userid_value,_objectid_value&$orderby=createdon desc&$top=150`)
+          .then(data => {
+            (data.value || []).forEach(r => events.push(normalizeAuditEvent(r)));
+          }).catch(e => console.warn('[EnvTimeline] Audits query:', e.message)),
+
+        // 2. Plugin Trace Logs
+        dvFetchWithHeaders(`/plugintracelogs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=plugintracelogid,createdon,typename,messagename,primaryentity,mode,operationtype,performanceexecutiondurationms,messageblock,exceptiondetails&$orderby=createdon desc&$top=150`)
+          .then(data => {
+            (data.value || []).forEach(r => events.push(normalizePluginEvent(r)));
+          }).catch(e => console.warn('[EnvTimeline] PluginTraces query:', e.message)),
+
+        // 3. System Jobs (Async Operations)
+        dvFetchWithHeaders(`/asyncoperations?$filter=startedon ge ${fromIso} and startedon le ${toIso}&$select=asyncoperationid,name,friendlyname,operationtype,statuscode,statecode,startedon,completedon,message,_owninguser_value&$orderby=startedon desc&$top=150`)
+          .then(data => {
+            (data.value || []).forEach(r => events.push(normalizeJobEvent(r)));
+          }).catch(e => console.warn('[EnvTimeline] AsyncOps query:', e.message)),
+
+        // 4. Cloud Flow Runs (if enabled)
+        dvFetchWithHeaders(`/flowruns?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=flowrunid,name,starttime,endtime,status,error&$orderby=starttime desc&$top=100`)
+          .then(data => {
+            (data.value || []).forEach(r => events.push(normalizeFlowEvent(r)));
+          }).catch(() => {}),
+
+        // 5. Solution History
+        dvFetchWithHeaders(`/solutionhistorydatas?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=solutionhistorydataid,solutionname,solutionversion,operation,status,starttime,endtime,errorcode,errortext,publishername&$orderby=starttime desc&$top=80`)
+          .then(data => {
+            (data.value || []).forEach(r => events.push(normalizeSolutionEvent(r)));
+          }).catch(() => {}),
+
+        // 6. Trace Logs (Mailbox Sync / SSS)
+        dvFetchWithHeaders(`/tracelogs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=tracelogid,createdon,level,text,machinename&$orderby=createdon desc&$top=80`)
+          .then(data => {
+            (data.value || []).forEach(r => events.push(normalizeSyncEvent(r)));
+          }).catch(() => {})
+      ]);
+
+      spin.style.animation = 'none';
+
+      if (events.length === 0) {
+        notify('0 events found for the last 24h. You can click "Sample Data" to preview.', 'info', 5000);
+      } else {
+        notify(`Loaded ${events.length} environment events across Dataverse`, 'success');
+      }
+
+      allEvents = events;
+      renderTimeline();
+    }
+
+    /* ─── 7. Event Normalization Helpers ────────────────────── */
+    const AUDIT_ACTIONS = {
+      1: 'Create', 2: 'Update', 3: 'Delete', 4: 'Activate', 5: 'Deactivate',
+      11: 'Cascade', 12: 'Merge', 13: 'Assign', 14: 'Share', 16: 'Close',
+      64: 'User Access via Web', 65: 'User Access via API', 116: 'Solution Import', 117: 'Publish'
+    };
+
+    function normalizeAuditEvent(r) {
+      const act = AUDIT_ACTIONS[r.action] || `Audit Action ${r.action}`;
+      const isSec = r.action === 13 || r.action === 14 || r.action === 64 || r.action === 65;
+      return {
+        id: r.auditid,
+        category: 'audit',
+        categoryLabel: 'Audit',
+        time: new Date(r.createdon),
+        severity: isSec ? 'warn' : 'info',
+        severityLabel: isSec ? 'Security' : 'Audit',
+        title: `${act} on ${r.objecttypecode || 'Record'}`,
+        entity: r.objecttypecode || '—',
+        user: r._userid_value ? r._userid_value.slice(0, 8) + '…' : 'SYSTEM',
+        duration: '—',
+        error: null,
+        traces: null,
+        raw: r
+      };
+    }
+
+    function normalizePluginEvent(r) {
+      const hasErr = !!r.exceptiondetails;
+      return {
+        id: r.plugintracelogid,
+        category: 'plugin',
+        categoryLabel: 'Plugin',
+        time: new Date(r.createdon),
+        severity: hasErr ? 'error' : 'success',
+        severityLabel: hasErr ? 'Error' : 'Success',
+        title: `${r.typename || 'Plugin'} (${r.messagename || 'Message'})`,
+        entity: r.primaryentity || '—',
+        user: r.mode === 0 ? 'Sync' : 'Async',
+        duration: r.performanceexecutiondurationms ? `${r.performanceexecutiondurationms}ms` : '—',
+        error: r.exceptiondetails || null,
+        traces: r.messageblock || null,
+        raw: r
+      };
+    }
+
+    function normalizeJobEvent(r) {
+      // 30=Succeeded, 31=Failed, 32=Canceled, 20=Running
+      const sc = Number(r.statuscode);
+      let severity = 'success';
+      let sevLabel = 'Succeeded';
+      if (sc === 31) { severity = 'error'; sevLabel = 'Failed'; }
+      else if (sc === 32) { severity = 'warn'; sevLabel = 'Canceled'; }
+      else if (sc === 20) { severity = 'info'; sevLabel = 'Running'; }
+
+      return {
+        id: r.asyncoperationid,
+        category: 'job',
+        categoryLabel: 'System Job',
+        time: new Date(r.startedon),
+        severity,
+        severityLabel: sevLabel,
+        title: r.friendlyname || r.name || 'System Job',
+        entity: `Type ${r.operationtype || ''}`,
+        user: r._owninguser_value ? r._owninguser_value.slice(0, 8) + '…' : 'SYSTEM',
+        duration: formatTimeDiff(r.startedon, r.completedon),
+        error: r.message || null,
+        traces: null,
+        raw: r
+      };
+    }
+
+    function normalizeFlowEvent(r) {
+      const s = (r.status || '').toLowerCase();
+      let severity = 'success';
+      let sevLabel = 'Succeeded';
+      if (s.includes('fail')) { severity = 'error'; sevLabel = 'Failed'; }
+      else if (s.includes('run')) { severity = 'info'; sevLabel = 'Running'; }
+      else if (s.includes('cancel')) { severity = 'warn'; sevLabel = 'Cancelled'; }
+
+      return {
+        id: r.flowrunid,
+        category: 'flow',
+        categoryLabel: 'Flow',
+        time: new Date(r.starttime),
+        severity,
+        severityLabel: sevLabel,
+        title: r.name || 'Cloud Flow Run',
+        entity: 'workflow',
+        user: 'Automated',
+        duration: formatTimeDiff(r.starttime, r.endtime),
+        error: r.error || null,
+        traces: null,
+        raw: r
+      };
+    }
+
+    function normalizeSolutionEvent(r) {
+      // status: 1=Succeeded, 0=Failed
+      const ok = r.status === 1 || String(r.status).toLowerCase().includes('success');
+      return {
+        id: r.solutionhistorydataid,
+        category: 'solution',
+        categoryLabel: 'Solution',
+        time: new Date(r.starttime),
+        severity: ok ? 'success' : 'error',
+        severityLabel: ok ? 'Imported' : 'Failed',
+        title: `Solution ${r.operation || 'Import'}: ${r.solutionname || 'Solution'} (v${r.solutionversion || ''})`,
+        entity: 'solution',
+        user: r.publishername || 'ALM',
+        duration: formatTimeDiff(r.starttime, r.endtime),
+        error: r.errortext ? `Code ${r.errorcode}: ${r.errortext}` : null,
+        traces: null,
+        raw: r
+      };
+    }
+
+    function normalizeSyncEvent(r) {
+      // level: 1=Info, 2=Warning, 3=Error
+      const lvl = Number(r.level);
+      const sev = lvl === 3 ? 'error' : lvl === 2 ? 'warn' : 'info';
+      const sevLabel = lvl === 3 ? 'Error' : lvl === 2 ? 'Warning' : 'Info';
+      return {
+        id: r.tracelogid,
+        category: 'sync',
+        categoryLabel: 'Sync Log',
+        time: new Date(r.createdon),
+        severity: sev,
+        severityLabel: sevLabel,
+        title: (r.text || 'Mailbox Synchronization Event').slice(0, 100),
+        entity: 'mailbox',
+        user: r.machinename || 'SSS Server',
+        duration: '—',
+        error: lvl >= 2 ? r.text : null,
+        traces: null,
+        raw: r
+      };
+    }
+
+    /* ─── 8. Sample Data Generator ──────────────────────────── */
+    function useSampleData() {
+      isSample = true;
+      const now = new Date();
+      const minsAgo = m => new Date(now.getTime() - m * 60000);
+
+      allEvents = [
+        {
+          id: 's1', category: 'plugin', categoryLabel: 'Plugin', time: minsAgo(12),
+          severity: 'error', severityLabel: 'Error',
+          title: 'PostAccountUpdate: NullReferenceException',
+          entity: 'account', user: 'Ashish V.', duration: '142ms',
+          error: 'System.NullReferenceException: Object reference not set to an instance of an object.\n   at Contoso.Plugins.AccountHandler.Execute(IServiceProvider provider) in C:\\repos\\Contoso.Plugins\\AccountHandler.cs:line 48\n   at Microsoft.Crm.Sandbox.SandboxWorker.ExecutePlugin()',
+          traces: '[Contoso.Plugins.AccountHandler: Pre-validation OK]\n[Tracing account ID: 4a2b1c8e-32fa...]\n[Error: Expected primary contact ID was null]',
+          raw: { plugin: 'AccountHandler', stage: 40, durationMs: 142 }
+        },
+        {
+          id: 's2', category: 'flow', categoryLabel: 'Flow', time: minsAgo(24),
+          severity: 'success', severityLabel: 'Succeeded',
+          title: 'Sync Invoice to ERP Webhook',
+          entity: 'cr_invoice', user: 'Automated', duration: '2.4s',
+          error: null, traces: null,
+          raw: { flow: 'Sync Invoice to ERP', durationSeconds: 2.4, trigger: 'HTTP Webhook' }
+        },
+        {
+          id: 's3', category: 'audit', categoryLabel: 'Audit', time: minsAgo(45),
+          severity: 'info', severityLabel: 'Update',
+          title: 'Update on contact (emailaddress1 changed)',
+          entity: 'contact', user: 'Ashish V.', duration: '—',
+          error: null, traces: null,
+          raw: { action: 2, entity: 'contact', changedField: 'emailaddress1', old: 'john@old.com', new: 'john@new.com' }
+        },
+        {
+          id: 's4', category: 'solution', categoryLabel: 'Solution', time: minsAgo(70),
+          severity: 'success', severityLabel: 'Imported',
+          title: 'Solution Import: ContosoSalesCore (v2.4.1.0)',
+          entity: 'solution', user: 'ALM Pipeline', duration: '48s',
+          error: null, traces: null,
+          raw: { solution: 'ContosoSalesCore', version: '2.4.1.0', componentsImported: 42 }
+        },
+        {
+          id: 's5', category: 'audit', categoryLabel: 'Audit', time: minsAgo(110),
+          severity: 'warn', severityLabel: 'Security',
+          title: 'Security Role "System Administrator" Assigned',
+          entity: 'systemuser', user: 'Global Admin', duration: '—',
+          error: null, traces: null,
+          raw: { action: 14, role: 'System Administrator', targetUser: 'service_dev_agent' }
+        },
+        {
+          id: 's6', category: 'job', categoryLabel: 'System Job', time: minsAgo(150),
+          severity: 'error', severityLabel: 'Failed',
+          title: 'Bulk Delete Job "Purge Audit Logs older than 90d"',
+          entity: 'Type 22', user: 'SYSTEM', duration: '12m 4s',
+          error: 'SqlException: Execution Timeout Expired. The timeout period elapsed prior to completion of the operation or the server is not responding.',
+          traces: null,
+          raw: { operationType: 22, recordsProcessed: 48200, error: 'SQL Timeout' }
+        },
+        {
+          id: 's7', category: 'sync', categoryLabel: 'Sync Log', time: minsAgo(210),
+          severity: 'warn', severityLabel: 'Warning',
+          title: 'Mailbox Exchange Autodiscover Retry',
+          entity: 'mailbox', user: 'SSS Server', duration: '—',
+          error: 'Warning: Exchange server returned HTTP 429 Too Many Requests. Retrying in 120 seconds.',
+          traces: null,
+          raw: { mailbox: 'support@contoso.com', retryCount: 2 }
+        },
+        {
+          id: 's8', category: 'plugin', categoryLabel: 'Plugin', time: minsAgo(280),
+          severity: 'success', severityLabel: 'Success',
+          title: 'PreValidateContactCreate (Sync)',
+          entity: 'contact', user: 'Sync', duration: '18ms',
+          error: null, traces: '[PreValidateContact: Duplicate email check passed]',
+          raw: { plugin: 'ContactValidator', durationMs: 18 }
+        }
+      ];
+
+      notify('Loaded 8 realistic sample events across all Dataverse log categories.', 'info');
+      renderTimeline();
+    }
+
+    /* ─── 9. Filtering, KPI & Timeline Rendering ────────────── */
+    function getFilteredEvents() {
+      const q = searchQuery.toLowerCase();
+      return allEvents.filter(ev => {
+        // Category filter
+        if (!catFilters[ev.category]) return false;
+
+        // Severity segment filter
+        if (activeSev === 'errors' && ev.severity !== 'error') return false;
+        if (activeSev === 'warnings' && ev.severity !== 'warn') return false;
+
+        // Search text
+        if (q) {
+          const match = ev.title.toLowerCase().includes(q) ||
+                        ev.entity.toLowerCase().includes(q) ||
+                        ev.user.toLowerCase().includes(q) ||
+                        (ev.error && ev.error.toLowerCase().includes(q));
+          if (!match) return false;
+        }
+        return true;
+      });
+    }
+
+    function renderTimeline() {
+      const filtered = getFilteredEvents();
+
+      // Sort
+      filtered.sort((a, b) => {
+        let va = a[sortColumn];
+        let vb = b[sortColumn];
+        if (sortColumn === 'time') {
+          return sortAsc ? a.time - b.time : b.time - a.time;
+        }
+        if (typeof va === 'string') {
+          return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+        }
+        return 0;
+      });
+
+      // Update Category Chip Counts
+      const catCounts = { audit: 0, plugin: 0, flow: 0, job: 0, solution: 0, sync: 0 };
+      let errCount = 0;
+      let warnCount = 0;
+      const usersSet = new Set();
+      const entityCounts = {};
+
+      allEvents.forEach(ev => {
+        if (catCounts[ev.category] !== undefined) catCounts[ev.category]++;
+        if (ev.severity === 'error') errCount++;
+        if (ev.severity === 'warn')  warnCount++;
+        if (ev.user && ev.user !== 'SYSTEM' && ev.user !== 'Automated' && ev.user !== 'Sync') {
+          usersSet.add(ev.user);
+        }
+        if (ev.entity && ev.entity !== '—') {
+          entityCounts[ev.entity] = (entityCounts[ev.entity] || 0) + 1;
+        }
+      });
+
+      document.getElementById('cnt-audit').textContent    = catCounts.audit;
+      document.getElementById('cnt-plugin').textContent   = catCounts.plugin;
+      document.getElementById('cnt-flow').textContent     = catCounts.flow;
+      document.getElementById('cnt-job').textContent      = catCounts.job;
+      document.getElementById('cnt-solution').textContent = catCounts.solution;
+      document.getElementById('cnt-sync').textContent     = catCounts.sync;
+
+      document.getElementById('count-sev-errors').textContent   = errCount;
+      document.getElementById('count-sev-warnings').textContent = warnCount;
+
+      // Update KPI Ribbon
+      document.getElementById('kpi-total').textContent = allEvents.length;
+      const errPct = allEvents.length ? ((errCount / allEvents.length) * 100).toFixed(1) : 0;
+      document.getElementById('kpi-errors').textContent = `${errCount} (${errPct}%)`;
+      document.getElementById('kpi-users').textContent  = usersSet.size || '—';
+
+      // Top entity
+      let topEnt = '—';
+      let maxCnt = 0;
+      for (const [ent, cnt] of Object.entries(entityCounts)) {
+        if (cnt > maxCnt) { maxCnt = cnt; topEnt = `${ent} (${cnt})`; }
+      }
+      document.getElementById('kpi-top-entity').textContent = topEnt;
+
+      // Update Host Tab Title
+      setTitle(`Environment Timeline (${filtered.length} events)`);
+
+      // Render Table Rows
+      const tbody = document.getElementById('timeline-tbody');
+      tbody.innerHTML = '';
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:35px;color:var(--text-sec);">No events found matching the criteria in this time window.</td></tr>`;
+        return;
+      }
+
+      for (const ev of filtered) {
+        tbody.appendChild(createEventRow(ev));
+      }
+    }
+
+    function createEventRow(ev) {
+      const tr = document.createElement('tr');
+      if (ev.severity === 'error') tr.className = 'has-error';
+
+      const timeStr = ev.time.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      const dateStr = ev.time.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+      tr.innerHTML = `
+        <td class="time-cell">${dateStr} ${timeStr}</td>
+        <td><span class="badge-cat cat-${ev.category}">${esc(ev.categoryLabel)}</span></td>
+        <td><span class="badge-sev ${ev.severity}">${esc(ev.severityLabel)}</span></td>
+        <td class="title-cell" title="${esc(ev.title)}">${esc(ev.title)}</td>
+        <td class="entity-cell"><code>${esc(ev.entity)}</code></td>
+        <td class="user-cell" title="${esc(ev.user)}">${esc(ev.user)}</td>
+        <td style="text-align:center;">
+          <button class="btn icon-only" style="padding:2px 6px;font-size:11px;" title="View event details">🔍</button>
+        </td>
+      `;
+
+      tr.addEventListener('click', () => openDetailModal(ev));
+      return tr;
+    }
+
+    /* ─── 10. Detail Modal ──────────────────────────────────── */
+    function openDetailModal(ev) {
+      document.getElementById('md-title').textContent = ev.title;
+
+      const catBadge = document.getElementById('md-cat-badge');
+      catBadge.className = `badge-cat cat-${ev.category}`;
+      catBadge.textContent = ev.categoryLabel;
+
+      const sevBadge = document.getElementById('md-sev-badge');
+      sevBadge.className = `badge-sev ${ev.severity}`;
+      sevBadge.textContent = ev.severityLabel;
+
+      document.getElementById('md-time').textContent = ev.time.toLocaleString();
+      document.getElementById('md-entity').textContent = ev.entity;
+      document.getElementById('md-user').textContent = ev.user;
+      document.getElementById('md-id').textContent = ev.id;
+      document.getElementById('md-duration').textContent = ev.duration;
+
+      // Error section
+      const errSec = document.getElementById('md-error-sec');
+      if (ev.error) {
+        errSec.style.display = 'block';
+        document.getElementById('md-error-text').textContent = typeof ev.error === 'object' ? JSON.stringify(ev.error, null, 2) : String(ev.error);
+      } else {
+        errSec.style.display = 'none';
+      }
+
+      // Trace section
+      const traceSec = document.getElementById('md-trace-sec');
+      if (ev.traces) {
+        traceSec.style.display = 'block';
+        document.getElementById('md-trace-text').textContent = ev.traces;
+      } else {
+        traceSec.style.display = 'none';
+      }
+
+      // Raw json
+      document.getElementById('md-raw-json').textContent = JSON.stringify(ev.raw, null, 2);
+
+      document.getElementById('detail-modal').classList.add('open');
+    }
+
+    function closeDetailModal() {
+      document.getElementById('detail-modal').classList.remove('open');
+    }
+
+    /* ─── 11. CSV Export ────────────────────────────────────── */
+    function exportTimelineCsv() {
+      const filtered = getFilteredEvents();
+      if (!filtered.length) {
+        notify('No events to export in the current view.', 'warning');
+        return;
+      }
+
+      const headers = ['Timestamp', 'Category', 'Severity', 'Title', 'Target Entity', 'User', 'Duration', 'Error'];
+      const rows = filtered.map(ev => [
+        `"${ev.time.toISOString()}"`,
+        ev.categoryLabel,
+        ev.severityLabel,
+        `"${ev.title.replace(/"/g, '""')}"`,
+        ev.entity,
+        `"${ev.user.replace(/"/g, '""')}"`,
+        ev.duration,
+        `"${(ev.error || '').replace(/"/g, '""')}"`
+      ]);
+
+      const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `dataverse_event_timeline_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      notify(`Exported ${filtered.length} timeline events to CSV.`, 'success');
+    }
+
+    function formatTimeDiff(start, end) {
+      if (!start || !end) return '—';
+      const sec = Math.round((new Date(end) - new Date(start)) / 1000);
+      if (sec < 60) return `${sec}s`;
+      const min = Math.floor(sec / 60);
+      const remSec = sec % 60;
+      return `${min}m ${remSec}s`;
+    }
+
+    function esc(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    /* ─── 12. UI Event Bindings ─────────────────────────────── */
+    // Time Range selector
+    document.getElementById('time-range-select').addEventListener('change', e => {
+      activeRange = e.target.value;
+      toolStore('range', activeRange);
+      if (context) loadEnvironmentEvents();
+    });
+
+    document.getElementById('btn-refresh').addEventListener('click', () => {
+      if (context) loadEnvironmentEvents();
+      else notify('Waiting for Dataverse context…', 'warning');
+    });
+
+    document.getElementById('btn-sample-toggle').addEventListener('click', () => {
+      if (!isSample) useSampleData();
+      else if (context) loadEnvironmentEvents();
+    });
+
+    document.getElementById('btn-export-csv').addEventListener('click', exportTimelineCsv);
+
+    // Search input
+    document.getElementById('search-input').addEventListener('input', e => {
+      searchQuery = e.target.value.trim();
+      renderTimeline();
+    });
+
+    // Severity segment
+    document.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeSev = btn.dataset.sev;
+        renderTimeline();
+      });
+    });
+
+    // Category chips
+    ['audit', 'plugin', 'flow', 'job', 'solution', 'sync'].forEach(cat => {
+      const chk = document.getElementById(`chk-${cat}`);
+      const chip = document.getElementById(`chip-${cat}`);
+      chk.addEventListener('change', () => {
+        catFilters[cat] = chk.checked;
+        chip.classList.toggle('muted', !chk.checked);
+        renderTimeline();
+      });
+    });
+
+    // Modal
+    document.getElementById('md-close-btn').addEventListener('click', closeDetailModal);
+    document.getElementById('md-ok-btn').addEventListener('click', closeDetailModal);
+    document.getElementById('detail-modal').addEventListener('click', e => {
+      if (e.target === document.getElementById('detail-modal')) closeDetailModal();
+    });
+    document.getElementById('md-copy-id').addEventListener('click', () => {
+      const id = document.getElementById('md-id').textContent;
+      navigator.clipboard?.writeText(id).then(() => notify('Copied Event ID to clipboard', 'success'));
+    });
+
+    // Sorting
+    document.querySelectorAll('.timeline-table th[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.sort;
+        if (sortColumn === col) {
+          sortAsc = !sortAsc;
+        } else {
+          sortColumn = col;
+          sortAsc = col === 'time' ? false : true; // default time to desc
+        }
+        document.querySelectorAll('.timeline-table th').forEach(h => {
+          h.textContent = h.textContent.replace(/[▾▴]/g, '').trim();
+        });
+        th.textContent = `${th.textContent} ${sortAsc ? '▴' : '▾'}`;
+        renderTimeline();
+      });
+    });
+
+    // Telemetry Inspector
+    const inspector = document.getElementById('inspector-panel');
+    document.getElementById('btn-toggle-inspector').addEventListener('click', () => {
+      inspector.classList.toggle('open');
+    });
+    document.getElementById('inspector-close-btn').addEventListener('click', () => {
+      inspector.classList.remove('open');
+    });
+    document.getElementById('btn-copy-headers').addEventListener('click', () => {
+      const text = Object.entries(lastTelemetry.headers).map(([k, v]) => `${k}: ${v}`).join('\n');
+      navigator.clipboard?.writeText(text).then(() => notify('Copied headers to clipboard', 'success'));
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        closeDetailModal();
+        inspector.classList.remove('open');
+      }
+    });
+
+    // Initial render before context arrives
+    renderTimeline();
+  </script>
+</body>
+</html>
