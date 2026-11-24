@@ -198,20 +198,41 @@
       }
     });
 
-    /* ─── Per-tool localStorage ───────────────────────────────── */
-    //  Use this prefix to avoid collisions with the host.
-    //  Replace 'my-tool' with your manifest id.
+    /* ─── Per-tool tiered storage ─────────────────────────────────
+       Falls back automatically: localStorage → sessionStorage → memory.
+       Your tool code uses toolStore() regardless of which is active.
+       Replace 'my-tool' with your manifest id.
+    ──────────────────────────────────────────────────────────── */
     const TOOL_STORE = 'dvopentools::tool::my-tool::';
 
-    function toolStore(key, value) {
-      if (value === undefined) {
-        try { return JSON.parse(localStorage.getItem(TOOL_STORE + key)); } catch { return null; }
+    const _store = (() => {
+      function canUse(s) {
+        try { const k = '__dvot__'; s.setItem(k,'1'); s.removeItem(k); return true; } catch { return false; }
       }
-      try { localStorage.setItem(TOOL_STORE + key, JSON.stringify(value)); } catch {}
+      const _ls  = typeof localStorage  !== 'undefined' && canUse(localStorage)  ? localStorage  : null;
+      const _ss  = typeof sessionStorage !== 'undefined' && canUse(sessionStorage) ? sessionStorage : null;
+      const _mem = Object.create(null);
+      const _b   = _ls || _ss;
+      return {
+        /** 'localStorage' | 'sessionStorage' | 'memory' */
+        type: _ls ? 'localStorage' : _ss ? 'sessionStorage' : 'memory',
+        get(k)   { if (_b) try { return JSON.parse(_b.getItem(k)); } catch {} return _mem[k] ?? null; },
+        set(k,v) { if (_b) try { _b.setItem(k, JSON.stringify(v)); return; } catch {} _mem[k] = v; },
+        del(k)   { if (_b) try { _b.removeItem(k); } catch {} delete _mem[k]; },
+      };
+    })();
+
+    function toolStore(key, value) {
+      const k = TOOL_STORE + key;
+      if (value === undefined) return _store.get(k);
+      _store.set(k, value);
     }
+    function toolStoreDel(key) { _store.del(TOOL_STORE + key); }
+
     // Usage:
-    //   toolStore('lastQuery', 'select * from account');     // write
-    //   const q = toolStore('lastQuery');                    // read
+    //   toolStore('lastQuery', 'select * from account');   // write
+    //   const q = toolStore('lastQuery');                  // read  (null if not found)
+    //   toolStoreDel('lastQuery');                         // delete
   </script>
 </body>
 </html>

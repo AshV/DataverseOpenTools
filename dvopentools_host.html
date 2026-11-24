@@ -387,6 +387,8 @@
     <span id="st-env">—</span>
     <span class="s-sep">│</span>
     <span id="st-conn">🟡 Connecting</span>
+    <span class="s-sep">│</span>
+    <span id="st-store" title="Storage backend">💾 —</span>
   </footer>
 
   <!-- ══════════════ TOAST ══════════════ -->
@@ -472,11 +474,46 @@
       sidebarOpen: true,
     };
 
-    /* ─── LocalStorage helpers ───────────────────────────────── */
-    const ls = {
-      get: (k, d = null) => { try { return JSON.parse(localStorage.getItem(STORAGE_NS + k)) ?? d; } catch { return d; } },
-      set: (k, v)        => { try { localStorage.setItem(STORAGE_NS + k, JSON.stringify(v)); } catch {} },
-    };
+    /* ─── Tiered storage ─────────────────────────────────────────
+       Priority: localStorage → sessionStorage → in-memory
+       All three expose the same .get/.set/.del API so the rest
+       of the code is unaware of which backend is active.
+    ─────────────────────────────────────────────────────────── */
+    const ls = (() => {
+      function canUse(s) {
+        try { const k = '__dvot_test__'; s.setItem(k, '1'); s.removeItem(k); return true; }
+        catch { return false; }
+      }
+      const _local   = typeof localStorage  !== 'undefined' && canUse(localStorage)  ? localStorage  : null;
+      const _session = typeof sessionStorage !== 'undefined' && canUse(sessionStorage) ? sessionStorage : null;
+      const _mem     = Object.create(null);
+      const _backend = _local || _session; // null means memory-only
+
+      return {
+        /** true only when data survives a full page reload */
+        persistent: !!_local,
+        /** 'localStorage' | 'sessionStorage' | 'memory' */
+        type: _local ? 'localStorage' : _session ? 'sessionStorage' : 'memory',
+
+        get(k, d = null) {
+          if (_backend) {
+            try { return JSON.parse(_backend.getItem(STORAGE_NS + k)) ?? d; } catch {}
+          }
+          const v = _mem[STORAGE_NS + k];
+          return v !== undefined ? v : d;
+        },
+        set(k, v) {
+          if (_backend) {
+            try { _backend.setItem(STORAGE_NS + k, JSON.stringify(v)); return; } catch {}
+          }
+          _mem[STORAGE_NS + k] = v;
+        },
+        del(k) {
+          if (_backend) { try { _backend.removeItem(STORAGE_NS + k); } catch {} }
+          delete _mem[STORAGE_NS + k];
+        },
+      };
+    })();
 
     /* ─── Toast ──────────────────────────────────────────────── */
     function toast(msg, level = 'info', ms = 3500) {
@@ -521,6 +558,10 @@
       document.getElementById('st-api').textContent    = `API v${S.cfg.apiVersion}`;
       document.getElementById('st-env').textContent    = host;
       document.getElementById('st-conn').textContent   = ok ? '🟢 Connected' : '🔴 Error';
+      // Show storage backend in status bar
+      const storeLabels = { localStorage: '💾 Persistent', sessionStorage: '💾 Session', memory: '⚠️ No Storage' };
+      document.getElementById('st-store').textContent = storeLabels[ls.type] || '—';
+      document.getElementById('st-store').title       = `Storage: ${ls.type}`;
     }
 
     /* ─── Tool discovery ─────────────────────────────────────── */
@@ -868,6 +909,13 @@
       const saved = ls.get('cfg', {});
       Object.assign(S.cfg, saved);
       applyTheme(S.cfg.theme);
+
+      // Warn if localStorage is unavailable — settings won't persist
+      if (ls.type === 'sessionStorage') {
+        toast('localStorage is blocked — settings will be lost when you close this tab.', 'warning', 8000);
+      } else if (ls.type === 'memory') {
+        toast('Storage is unavailable — settings and open tabs cannot be saved this session.', 'warning', 8000);
+      }
 
       // Build Dataverse context
       try {

@@ -428,28 +428,81 @@ const me = await dvFetch('/WhoAmI');
 
 ## 9. LocalStorage Contract
 
-Tools share `localStorage` with the host (same origin). To avoid collisions, **always prefix your keys** with:
+> [!IMPORTANT]
+> `localStorage` can be **blocked** in secure Power Platform environments, InPrivate/incognito browsing, or under strict enterprise browser policies. **Never call `localStorage` directly.** Always use the tiered `toolStore` / `_store` helper from the template, which falls back automatically.
 
-```
-dvopentools::tool::{your-manifest-id}::
-```
+### Why localStorage can be unavailable
 
-**Example for a tool with `id: "fetchxml-tester"`:**
+| Scenario | Behaviour |
+|---|---|
+| InPrivate / Incognito browsing | `localStorage.setItem` throws `SecurityError` |
+| Power Platform iframe with strict CSP | `localStorage` access throws or is silently ignored |
+| Enterprise browser policy (e.g. `DefaultCookiesSetting`) | `localStorage` and `sessionStorage` both blocked |
+| Normal browser session | `localStorage` works as expected |
+
+### Tiered Storage — Use This in Every Tool
+
+Copy this block into your tool. It auto-detects the best available backend.
+
 ```javascript
-const STORE = 'dvopentools::tool::fetchxml-tester::';
+const TOOL_STORE = 'dvopentools::tool::{your-id}::';   // ← set to your manifest id
 
-// Write
-localStorage.setItem(STORE + 'lastQuery', JSON.stringify(myQuery));
+const _store = (() => {
+  function canUse(s) {
+    try { const k = '__dvot__'; s.setItem(k,'1'); s.removeItem(k); return true; }
+    catch { return false; }
+  }
+  const _ls  = typeof localStorage  !== 'undefined' && canUse(localStorage)  ? localStorage  : null;
+  const _ss  = typeof sessionStorage !== 'undefined' && canUse(sessionStorage) ? sessionStorage : null;
+  const _mem = Object.create(null);
+  const _b   = _ls || _ss;
+  return {
+    /** 'localStorage' | 'sessionStorage' | 'memory' */
+    type: _ls ? 'localStorage' : _ss ? 'sessionStorage' : 'memory',
+    get(k)   { if (_b) try { return JSON.parse(_b.getItem(k)); } catch {} return _mem[k] ?? null; },
+    set(k,v) { if (_b) try { _b.setItem(k, JSON.stringify(v)); return; } catch {} _mem[k] = v; },
+    del(k)   { if (_b) try { _b.removeItem(k); } catch {} delete _mem[k]; },
+  };
+})();
 
-// Read
-const q = JSON.parse(localStorage.getItem(STORE + 'lastQuery') ?? 'null');
-
-// Delete
-localStorage.removeItem(STORE + 'lastQuery');
+function toolStore(key, value) {
+  const k = TOOL_STORE + key;
+  if (value === undefined) return _store.get(k);
+  _store.set(k, value);
+}
+function toolStoreDel(key) { _store.del(TOOL_STORE + key); }
 ```
 
-> [!WARNING]
-> Never read or write keys that start with `dvopentools::settings`, `dvopentools::tabs`, `dvopentools::activeTab`, or `dvopentools::cache::`. Those are owned by the host.
+### Fallback behaviour by tier
+
+| Tier | Data survives tab refresh? | Data survives browser close? | Available when? |
+|---|---|---|---|
+| `localStorage` ✅ preferred | Yes | Yes | Normal sessions |
+| `sessionStorage` ⚠️ fallback | Yes | No | InPrivate / some policies |
+| `memory` 🔴 last resort | No | No | All other cases |
+
+### Key namespacing rules
+
+Always prefix your keys. Never access host-owned keys.
+
+```
+dvopentools::tool::{your-id}::         ← your prefix (OK to read/write)
+dvopentools::settings                  ← host-owned (never touch)
+dvopentools::tabs                      ← host-owned (never touch)
+dvopentools::activeTab                 ← host-owned (never touch)
+dvopentools::cache::*                  ← host-owned (never touch)
+```
+
+### Usage examples
+
+```javascript
+toolStore('lastQuery', '<fetch>…</fetch>');   // write any JSON-serialisable value
+const q = toolStore('lastQuery');              // read  (returns null if not found)
+toolStoreDel('lastQuery');                     // delete
+```
+
+> [!NOTE]
+> The host exposes `ls.type` in the status bar (`💾 Persistent`, `💾 Session`, `⚠️ No Storage`). If you see **No Storage**, the tool will work but nothing will be remembered between page loads.
 
 ---
 
@@ -846,7 +899,7 @@ A **single self-contained `.html` file** named `dvopentools_{id}.html`.
 4. All interactive elements (`<button>`, `<input>`, `<select>`) must start **`disabled`** and be enabled inside `onContextReady()`.
 5. Every `dvFetch` call must be wrapped in `try/catch`. The catch block must call `notify(err.message, 'error')`.
 6. The `dvFetch` helper must construct URLs as `${context.environmentUrl}/api/data/v${context.apiVersion}${path}`.
-7. `localStorage` keys must use `const TOOL_STORE = \`dvopentools::tool::${MANIFEST_ID}::\`` as a prefix.
+7. **Never call `localStorage` directly.** Use the tiered `_store` / `toolStore` helper from the template. It falls back through `sessionStorage` → in-memory so the tool works even when `localStorage` is blocked by browser security policy.
 8. No external `<script src>` or `<link rel="stylesheet">` tags.
 9. No `alert()`, `confirm()`, `prompt()`.
 10. No hardcoded environment URLs or API versions.
