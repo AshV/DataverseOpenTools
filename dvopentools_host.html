@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DV Open Tools</title>
+  <style>
+    /* ═══════════════════════════════════════════
+       DESIGN TOKENS
+    ═══════════════════════════════════════════ */
+    :root {
+      --accent:         #0078d4;
+      --accent-hover:   #106ebe;
+      --header-bg:      #1a1a2e;
+      --sidebar-bg:     #16213e;
+      --sidebar-text:   #c8cdd8;
+      --sidebar-hover:  rgba(255,255,255,0.08);
+      --sidebar-active: rgba(0,120,212,0.18);
+      --sidebar-width:  220px;
+      --main-bg:        #f4f4f4;
+      --tab-bar-bg:     #e4e4e4;
+      --tab-active-bg:  #ffffff;
+      --tab-hover-bg:   #f0f0f0;
+      --border:         #d0d0d0;
+      --status-bg:      #0078d4;
+      --text-primary:   #1a1a1a;
+      --text-secondary: #666666;
+      --input-bg:       #ffffff;
+      --input-border:   #c8c8c8;
+      --modal-bg:       #ffffff;
+      --overlay:        rgba(0,0,0,0.45);
+    }
+
+    [data-theme="dark"] {
+      --main-bg:        #1e1e1e;
+      --tab-bar-bg:     #2d2d2d;
+      --tab-active-bg:  #1e1e1e;
+      --tab-hover-bg:   #2a2a2a;
+      --border:         #3c3c3c;
+      --text-primary:   #d4d4d4;
+      --text-secondary: #9d9d9d;
+      --input-bg:       #3c3c3c;
+      --input-border:   #555555;
+      --modal-bg:       #252526;
+      --overlay:        rgba(0,0,0,0.65);
+    }
+
+    /* ═══════════════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      background: var(--main-bg);
+      color: var(--text-primary);
+    }
+
+    /* ═══════════════════════════════════════════
+       HEADER
+    ═══════════════════════════════════════════ */
+    .header {
+      background: var(--header-bg);
+      color: #fff;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 10px;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    .hdr-btn {
+      background: none; border: none; color: rgba(255,255,255,0.65);
+      cursor: pointer; padding: 5px 7px; border-radius: 4px;
+      font-size: 15px; line-height: 1; transition: background .15s, color .15s;
+    }
+    .hdr-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    .header-logo { font-weight: 700; font-size: 14px; letter-spacing: .3px; white-space: nowrap; }
+    .header-logo em { color: #60b4ff; font-style: normal; }
+    .hdr-sep { flex: 1; }
+    .header-meta {
+      font-size: 11px; color: rgba(255,255,255,0.55);
+      display: flex; align-items: center; gap: 14px;
+    }
+    .header-meta .env { color: rgba(255,255,255,0.8); max-width: 260px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .header-meta .user { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ═══════════════════════════════════════════
+       APP LAYOUT
+    ═══════════════════════════════════════════ */
+    .app { display: flex; flex: 1; overflow: hidden; }
+
+    /* ═══════════════════════════════════════════
+       SIDEBAR
+    ═══════════════════════════════════════════ */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--sidebar-bg);
+      display: flex; flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+      transition: width .22s ease;
+    }
+    .sidebar.collapsed { width: 0; }
+
+    .sidebar-hdr {
+      padding: 10px 12px 6px;
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1px;
+      color: rgba(255,255,255,0.35);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .sb-refresh {
+      background: none; border: none; cursor: pointer;
+      color: rgba(255,255,255,0.35); font-size: 14px;
+      padding: 2px 5px; border-radius: 3px; line-height: 1;
+    }
+    .sb-refresh:hover { color: #fff; background: rgba(255,255,255,0.1); }
+
+    .sidebar-list {
+      flex: 1; overflow-y: auto; padding: 4px 0;
+    }
+    .sidebar-list::-webkit-scrollbar { width: 3px; }
+    .sidebar-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 2px; }
+
+    .cat-label {
+      padding: 10px 12px 3px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .8px; color: rgba(255,255,255,0.28);
+    }
+    .tool-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 7px 14px 7px 12px;
+      cursor: pointer; color: var(--sidebar-text);
+      border-left: 2px solid transparent;
+      transition: background .1s, color .1s;
+      white-space: nowrap; overflow: hidden;
+    }
+    .tool-item:hover { background: var(--sidebar-hover); color: #fff; }
+    .tool-item.open { color: rgba(255,255,255,0.9); }
+    .tool-item.active { background: var(--sidebar-active); color: #fff; border-left-color: var(--accent); }
+    .tool-icon { font-size: 14px; flex-shrink: 0; }
+    .tool-name { overflow: hidden; text-overflow: ellipsis; }
+    .tool-warn { margin-left: auto; font-size: 11px; color: #ffa500; flex-shrink: 0; }
+
+    .sb-actions {
+      border-top: 1px solid rgba(255,255,255,0.07);
+      padding: 8px 6px; display: flex; flex-direction: column; gap: 2px; flex-shrink: 0;
+    }
+    .sb-action {
+      display: flex; align-items: center; gap: 9px;
+      padding: 7px 10px; background: none; border: none;
+      color: var(--sidebar-text); cursor: pointer;
+      border-radius: 4px; font-size: 13px; text-align: left;
+      transition: background .1s; width: 100%; font-family: inherit;
+    }
+    .sb-action:hover { background: var(--sidebar-hover); color: #fff; }
+
+    /* ═══════════════════════════════════════════
+       MAIN AREA
+    ═══════════════════════════════════════════ */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+    /* Tab Bar */
+    .tab-bar {
+      background: var(--tab-bar-bg);
+      display: flex; align-items: stretch;
+      height: 34px; flex-shrink: 0;
+      overflow-x: auto; overflow-y: hidden;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-bar::-webkit-scrollbar { height: 3px; }
+    .tab-bar::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 2px; }
+
+    .tab {
+      display: flex; align-items: center; gap: 6px;
+      padding: 0 10px 0 12px;
+      min-width: 110px; max-width: 190px;
+      cursor: pointer;
+      border-right: 1px solid var(--border);
+      background: var(--tab-bar-bg);
+      color: var(--text-secondary);
+      font-size: 12px; white-space: nowrap; overflow: hidden;
+      flex-shrink: 0; position: relative;
+      transition: background .1s, color .1s;
+    }
+    .tab:hover { background: var(--tab-hover-bg); color: var(--text-primary); }
+    .tab.active { background: var(--tab-active-bg); color: var(--text-primary); border-top: 2px solid var(--accent); }
+    .tab-icon { font-size: 13px; flex-shrink: 0; }
+    .tab-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+    .tab-close {
+      flex-shrink: 0; width: 18px; height: 18px;
+      border-radius: 3px; border: none; background: none;
+      cursor: pointer; color: var(--text-secondary);
+      font-size: 14px; display: flex; align-items: center; justify-content: center;
+      line-height: 1; padding: 0;
+    }
+    .tab-close:hover { background: rgba(0,0,0,0.12); color: var(--text-primary); }
+
+    .tab-add {
+      display: flex; align-items: center; justify-content: center;
+      width: 36px; border: none; background: none;
+      cursor: pointer; color: var(--text-secondary); font-size: 20px;
+      flex-shrink: 0; transition: color .1s;
+    }
+    .tab-add:hover { color: var(--accent); }
+
+    /* Iframe container */
+    .frames {
+      flex: 1; position: relative; overflow: hidden; background: #fff;
+    }
+    .tool-frame {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      border: none; display: none;
+    }
+    .tool-frame.active { display: block; }
+
+    /* Empty state */
+    .empty {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px; color: var(--text-secondary);
+      pointer-events: none;
+    }
+    .empty .e-icon { font-size: 52px; opacity: .7; }
+    .empty h2 { font-size: 20px; font-weight: 600; color: var(--text-primary); }
+    .empty p { font-size: 13px; max-width: 300px; text-align: center; line-height: 1.65; }
+    .empty .e-btn { pointer-events: auto; }
+
+    /* ═══════════════════════════════════════════
+       STATUS BAR
+    ═══════════════════════════════════════════ */
+    .status-bar {
+      background: var(--status-bg); color: #fff;
+      height: 22px; display: flex; align-items: center;
+      padding: 0 12px; gap: 14px; font-size: 11px;
+      flex-shrink: 0; user-select: none;
+    }
+    .status-bar span { opacity: .82; }
+    .s-sep { opacity: .3 !important; }
+
+    /* ═══════════════════════════════════════════
+       MODALS
+    ═══════════════════════════════════════════ */
+    .overlay {
+      display: none; position: fixed; inset: 0;
+      background: var(--overlay); z-index: 500;
+      align-items: center; justify-content: center;
+    }
+    .overlay.open { display: flex; }
+    .modal {
+      background: var(--modal-bg); border-radius: 8px;
+      padding: 24px; width: 420px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.28);
+      color: var(--text-primary);
+    }
+    .modal h2 { font-size: 16px; margin-bottom: 18px; }
+
+    .form-row { margin-bottom: 14px; }
+    .form-row label { display: block; font-size: 11px; font-weight: 700;
+      margin-bottom: 5px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; }
+    .form-row input, .form-row select {
+      width: 100%; padding: 7px 10px;
+      border: 1px solid var(--input-border); border-radius: 4px;
+      font-size: 13px; font-family: inherit;
+      background: var(--input-bg); color: var(--text-primary);
+    }
+    .form-row input:focus, .form-row select:focus {
+      outline: none; border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(0,120,212,.18);
+    }
+    .form-hint { font-size: 11px; color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
+
+    .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+    .btn { padding: 7px 18px; border-radius: 4px; border: 1px solid transparent;
+      cursor: pointer; font-size: 13px; font-family: inherit; transition: background .15s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary { background: transparent; border-color: var(--border); color: var(--text-primary); }
+    .btn-secondary:hover { background: rgba(0,0,0,0.05); }
+
+    .warn-box {
+      background: #fff4ce; border: 1px solid #c8a600;
+      border-radius: 4px; padding: 10px 12px;
+      font-size: 12px; color: #6a4700;
+      margin-bottom: 14px; line-height: 1.55;
+    }
+    [data-theme="dark"] .warn-box { background: #3a2e00; border-color: #856200; color: #ffd966; }
+
+    /* ═══════════════════════════════════════════
+       TOAST
+    ═══════════════════════════════════════════ */
+    .toast-wrap {
+      position: fixed; bottom: 28px; right: 16px;
+      z-index: 999; display: flex; flex-direction: column; gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      padding: 10px 16px; border-radius: 6px; color: #fff;
+      font-size: 13px; box-shadow: 0 4px 18px rgba(0,0,0,0.22);
+      animation: toastIn .2s ease; max-width: 320px;
+      pointer-events: auto; line-height: 1.4;
+    }
+    .toast.success { background: #107c10; }
+    .toast.error   { background: #c50f1f; }
+    .toast.warning { background: #ca5010; }
+    .toast.info    { background: #0078d4; }
+    @keyframes toastIn { from { transform: translateX(110%); opacity: 0; } to { transform: none; opacity: 1; } }
+
+    /* Spinner */
+    .spin {
+      display: inline-block; width: 13px; height: 13px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: rgba(255,255,255,0.7);
+      border-radius: 50%; animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .sb-loading { display: flex; align-items: center; gap: 9px;
+      padding: 14px 12px; color: rgba(255,255,255,0.4); font-size: 12px; }
+    .sb-empty { padding: 12px; color: rgba(255,255,255,0.35); font-size: 12px; line-height: 1.6; }
+    .sb-empty code { font-size: 11px; opacity: .8; }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════════ HEADER ══════════════ -->
+  <header class="header">
+    <button class="hdr-btn" id="sidebar-toggle" title="Toggle Sidebar  Ctrl+B">☰</button>
+    <div class="header-logo">⚡ DV <em>Open</em> Tools</div>
+    <div class="hdr-sep"></div>
+    <div class="header-meta">
+      <span class="env" id="hdr-env">Connecting…</span>
+      <span class="user" id="hdr-user">—</span>
+    </div>
+    <button class="hdr-btn" id="theme-btn" title="Toggle Theme">🌙</button>
+  </header>
+
+  <!-- ══════════════ APP ══════════════ -->
+  <div class="app">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-hdr">
+        Tools
+        <button class="sb-refresh" id="refresh-btn" title="Refresh tool list">↻</button>
+      </div>
+      <div class="sidebar-list" id="sidebar-list">
+        <div class="sb-loading"><span class="spin"></span> Discovering tools…</div>
+      </div>
+      <div class="sb-actions">
+        <button class="sb-action" id="load-file-btn">📂 Load from File</button>
+        <button class="sb-action" id="settings-btn">⚙️ Settings</button>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main">
+      <div class="tab-bar" id="tab-bar">
+        <button class="tab-add" id="tab-add" title="Load tool from file  Ctrl+O">+</button>
+      </div>
+      <div class="frames" id="frames">
+        <div class="empty" id="empty-state">
+          <div class="e-icon">⚡</div>
+          <h2>DV Open Tools</h2>
+          <p>Select a tool from the sidebar, or load a local <strong>.html</strong> tool file.</p>
+          <button class="btn btn-secondary e-btn" id="empty-load-btn">📂 Load from File</button>
+        </div>
+      </div>
+    </main>
+
+  </div><!-- /.app -->
+
+  <!-- ══════════════ STATUS BAR ══════════════ -->
+  <footer class="status-bar">
+    <span>⚡ DV Open Tools v2025.11.0</span>
+    <span class="s-sep">│</span>
+    <span id="st-api">API v9.2</span>
+    <span class="s-sep">│</span>
+    <span id="st-env">—</span>
+    <span class="s-sep">│</span>
+    <span id="st-conn">🟡 Connecting</span>
+  </footer>
+
+  <!-- ══════════════ TOAST ══════════════ -->
+  <div class="toast-wrap" id="toasts"></div>
+
+  <!-- Hidden file input -->
+  <input type="file" id="file-input" accept=".html" style="display:none">
+
+  <!-- ══════════════ SETTINGS MODAL ══════════════ -->
+  <div class="overlay" id="settings-modal">
+    <div class="modal">
+      <h2>⚙️ Settings</h2>
+      <div class="form-row">
+        <label>Tool Web Resource Prefix</label>
+        <input type="text" id="cfg-prefix" placeholder="dvopentools_">
+        <div class="form-hint">Web resources matching this prefix (HTML type) appear in the sidebar. The host itself is excluded automatically.</div>
+      </div>
+      <div class="form-row">
+        <label>Dataverse API Version</label>
+        <select id="cfg-api">
+          <option value="9.2">9.2 (recommended)</option>
+          <option value="9.1">9.1</option>
+          <option value="9.0">9.0</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Max Open Tabs</label>
+        <input type="number" id="cfg-tabs" min="1" max="10">
+        <div class="form-hint">Maximum simultaneously open tools (1–10). Default: 5.</div>
+      </div>
+      <div class="form-row">
+        <label>Theme</label>
+        <select id="cfg-theme">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="settings-cancel">Cancel</button>
+        <button class="btn btn-primary" id="settings-save">Save &amp; Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ FILE WARNING MODAL ══════════════ -->
+  <div class="overlay" id="file-modal">
+    <div class="modal">
+      <h2>📂 Load Tool from File</h2>
+      <div class="warn-box">
+        ⚠️ <strong>Only load tools from trusted sources.</strong>
+        Loading an HTML file executes its JavaScript inside this page.
+      </div>
+      <p style="font-size:13px;color:var(--text-secondary);line-height:1.65">
+        Select a self-contained <code>.html</code> tool file. This is useful for testing
+        a tool locally before uploading it as a web resource.
+      </p>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="file-cancel">Cancel</button>
+        <button class="btn btn-primary" id="file-proceed">I understand — Choose File</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SCRIPT
+  ══════════════════════════════════════════════════════════ -->
+  <script>
+    'use strict';
+
+    /* ─── Constants ─────────────────────────────────────────── */
+    const HOST_VERSION      = '2025.11.0';
+    const STORAGE_NS        = 'dvopentools::';
+    const TOOL_READY_MS     = 2000;        // fallback if tool never sends TOOL_READY
+    const CACHE_TTL         = 5 * 60000;  // discovery cache: 5 minutes
+
+    /* ─── State ──────────────────────────────────────────────── */
+    const S = {
+      cfg: { prefix: 'dvopentools_', apiVersion: '9.2', tabLimit: 5, theme: 'light' },
+      tabs: [],         // [{tabId, toolId, name, icon, type:'wr'|'file', wrName?}]
+      activeTabId: null,
+      tools: [],        // discovered [{id, name, icon, category, description, version, wrName}]
+      ctx: null,        // context broadcast to tools
+      sidebarOpen: true,
+    };
+
+    /* ─── LocalStorage helpers ───────────────────────────────── */
+    const ls = {
+      get: (k, d = null) => { try { return JSON.parse(localStorage.getItem(STORAGE_NS + k)) ?? d; } catch { return d; } },
+      set: (k, v)        => { try { localStorage.setItem(STORAGE_NS + k, JSON.stringify(v)); } catch {} },
+    };
+
+    /* ─── Toast ──────────────────────────────────────────────── */
+    function toast(msg, level = 'info', ms = 3500) {
+      const el = document.createElement('div');
+      el.className = `toast ${level}`;
+      el.textContent = msg;
+      document.getElementById('toasts').appendChild(el);
+      setTimeout(() => { el.style.cssText = 'opacity:0;transition:opacity .3s'; setTimeout(() => el.remove(), 300); }, ms);
+    }
+
+    /* ─── Dataverse API fetch ────────────────────────────────── */
+    function dvUrl(path) { return `${location.origin}/api/data/v${S.cfg.apiVersion}${path}`; }
+    async function dv(path, opts = {}) {
+      const r = await fetch(dvUrl(path), {
+        ...opts,
+        headers: { 'OData-MaxVersion': '4.0', 'OData-Version': '4.0',
+                   'Accept': 'application/json', 'Content-Type': 'application/json', ...opts.headers }
+      });
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json();
+    }
+
+    /* ─── Context init ───────────────────────────────────────── */
+    async function buildContext() {
+      const who = await dv('/WhoAmI');
+      let name = '', email = '';
+      try {
+        const u = await dv(`/systemusers(${who.UserId})?$select=fullname,internalemailaddress`);
+        name  = u.fullname || '';
+        email = u.internalemailaddress || '';
+      } catch {}
+      return { environmentUrl: location.origin, apiVersion: S.cfg.apiVersion,
+               userId: who.UserId, userName: name, userEmail: email,
+               hostVersion: HOST_VERSION, theme: S.cfg.theme };
+    }
+
+    /* ─── Status bar + header ────────────────────────────────── */
+    function setStatus(ok) {
+      const host = ok ? new URL(S.ctx.environmentUrl).hostname : '—';
+      document.getElementById('hdr-env').textContent   = ok ? host : 'Connection failed';
+      document.getElementById('hdr-user').textContent  = S.ctx?.userName || '—';
+      document.getElementById('st-api').textContent    = `API v${S.cfg.apiVersion}`;
+      document.getElementById('st-env').textContent    = host;
+      document.getElementById('st-conn').textContent   = ok ? '🟢 Connected' : '🔴 Error';
+    }
+
+    /* ─── Tool discovery ─────────────────────────────────────── */
+    async function discoverTools(force = false) {
+      setSidebarLoading();
+      const cacheKey = `cache::${S.cfg.prefix}`;
+      const hit = ls.get(cacheKey);
+      if (!force && hit && Date.now() - hit.ts < CACHE_TTL) { S.tools = hit.tools; renderSidebar(); return; }
+
+      try {
+        const p = S.cfg.prefix;
+        // Exclude host file itself
+        const filter = `startswith(name,'${p}') and webresourcetype eq 1 and name ne '${p}host.html'`;
+        const data   = await dv(`/webresourceset?$select=name,displayname&$filter=${encodeURIComponent(filter)}&$orderby=name asc`);
+        const list   = data.value || [];
+        const tools  = [];
+
+        await Promise.allSettled(list.map(wr =>
+          fetchManifest(wr.name).then(m => tools.push({
+            wrName:      wr.name,
+            id:          m?.id          || wrToId(wr.name),
+            name:        m?.name        || wr.displayname || wr.name,
+            icon:        m?.icon        || '🔧',
+            category:    m?.category    || 'General',
+            description: m?.description || '',
+            version:     m?.version     || '—',
+            minHostVer:  m?.minHostVersion || null,
+          })).catch(() => tools.push({
+            wrName: wr.name, id: wrToId(wr.name),
+            name: wr.displayname || wr.name, icon: '🔧',
+            category: 'General', description: '', version: '—',
+          }))
+        ));
+
+        tools.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+        S.tools = tools;
+        ls.set(cacheKey, { ts: Date.now(), tools });
+      } catch (e) {
+        console.error('[dvopentools] Discovery failed:', e);
+        toast('Failed to discover tools — check console.', 'error');
+        S.tools = [];
+      }
+      renderSidebar();
+    }
+
+    async function fetchManifest(wrName) {
+      const r = await fetch(`/WebResources/${wrName}`, { credentials: 'same-origin' });
+      if (!r.ok) return null;
+      const html = await r.text();
+      const doc  = new DOMParser().parseFromString(html, 'text/html');
+      const el   = doc.getElementById('dvopentools-manifest');
+      return el ? JSON.parse(el.textContent.trim()) : null;
+    }
+
+    function wrToId(name) { return name.replace(S.cfg.prefix, '').replace('.html', '').toLowerCase(); }
+
+    function semverGt(a, b) {
+      const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
+      for (let i = 0; i < 3; i++) { if ((pa[i]||0) > (pb[i]||0)) return true; if ((pa[i]||0) < (pb[i]||0)) return false; }
+      return false;
+    }
+
+    /* ─── Sidebar rendering ──────────────────────────────────── */
+    function setSidebarLoading() {
+      document.getElementById('sidebar-list').innerHTML =
+        '<div class="sb-loading"><span class="spin"></span> Discovering tools…</div>';
+    }
+
+    function renderSidebar() {
+      const el = document.getElementById('sidebar-list');
+      if (!S.tools.length) {
+        el.innerHTML = `<div class="sb-empty">No tools found.<br>Upload web resources named<br><code>${esc(S.cfg.prefix)}*.html</code></div>`;
+        return;
+      }
+      const groups = {};
+      for (const t of S.tools) (groups[t.category] ??= []).push(t);
+
+      let h = '';
+      for (const [cat, list] of Object.entries(groups)) {
+        h += `<div class="cat-label">${esc(cat)}</div>`;
+        for (const t of list) {
+          const isActive = S.activeTabId && S.tabs.find(x => x.toolId === t.id && x.tabId === S.activeTabId);
+          const isOpen   = S.tabs.some(x => x.toolId === t.id);
+          const warn     = t.minHostVer && semverGt(t.minHostVer, HOST_VERSION)
+            ? `<span class="tool-warn" title="Requires host v${esc(t.minHostVer)}">⚠</span>` : '';
+          h += `<div class="tool-item${isActive ? ' active' : isOpen ? ' open' : ''}"
+            data-id="${esc(t.id)}" role="button" tabindex="0"
+            title="${esc(t.description || t.name)}">
+            <span class="tool-icon">${t.icon}</span>
+            <span class="tool-name">${esc(t.name)}</span>${warn}
+          </div>`;
+        }
+      }
+      el.innerHTML = h;
+      el.querySelectorAll('.tool-item').forEach(node => {
+        node.addEventListener('click',   () => openTool(node.dataset.id));
+        node.addEventListener('keydown', e => { if (e.key === 'Enter') openTool(node.dataset.id); });
+      });
+    }
+
+    /* ─── Tab management ─────────────────────────────────────── */
+    function openTool(toolId) {
+      const existing = S.tabs.find(t => t.toolId === toolId);
+      if (existing) { activate(existing.tabId); return; }
+      if (S.tabs.length >= S.cfg.tabLimit) { toast(`Max ${S.cfg.tabLimit} tabs open — close one first.`, 'warning'); return; }
+      const tool  = S.tools.find(t => t.id === toolId);
+      if (!tool) return;
+      const tabId = uid();
+      S.tabs.push({ tabId, toolId, name: tool.name, icon: tool.icon, type: 'wr', wrName: tool.wrName });
+      createFrame(tabId, { type: 'wr', src: `/WebResources/${tool.wrName}` });
+      renderTabs(); activate(tabId); persistTabs();
+    }
+
+    function openFileTool(html, meta) {
+      if (S.tabs.length >= S.cfg.tabLimit) { toast(`Max ${S.cfg.tabLimit} tabs open — close one first.`, 'warning'); return; }
+      const tabId  = uid();
+      const toolId = meta?.id || `file_${tabId}`;
+      S.tabs.push({ tabId, toolId, name: meta?.name || 'Local File', icon: meta?.icon || '📂', type: 'file' });
+      createFrame(tabId, { type: 'file', html });
+      renderTabs(); activate(tabId);
+    }
+
+    function activate(tabId) {
+      S.activeTabId = tabId;
+      document.querySelectorAll('.tool-frame').forEach(f => f.classList.toggle('active', f.dataset.tabId === tabId));
+      const frame = document.querySelector(`.tool-frame[data-tab-id="${tabId}"]`);
+      if (frame) postToTool(frame, 'TOOL_FOCUS', {});
+      document.getElementById('empty-state').style.display = S.tabs.length ? 'none' : 'flex';
+      renderTabs(); renderSidebar();
+      ls.set('activeTab', tabId);
+    }
+
+    function closeTab(tabId) {
+      const idx = S.tabs.findIndex(t => t.tabId === tabId);
+      if (idx === -1) return;
+      const frame = document.querySelector(`.tool-frame[data-tab-id="${tabId}"]`);
+      if (frame?.dataset.blob) URL.revokeObjectURL(frame.dataset.blob);
+      frame?.remove();
+      S.tabs.splice(idx, 1);
+      if (S.activeTabId === tabId) {
+        const next = S.tabs[Math.min(idx, S.tabs.length - 1)];
+        if (next) activate(next.tabId);
+        else { S.activeTabId = null; document.getElementById('empty-state').style.display = 'flex'; }
+      }
+      renderTabs(); renderSidebar(); persistTabs();
+    }
+
+    function renderTabs() {
+      const bar  = document.getElementById('tab-bar');
+      const addBtn = document.getElementById('tab-add');
+      bar.querySelectorAll('.tab').forEach(t => t.remove());
+      for (const tab of S.tabs) {
+        const el = document.createElement('div');
+        el.className = `tab${tab.tabId === S.activeTabId ? ' active' : ''}`;
+        el.dataset.tabId = tab.tabId;
+        el.innerHTML = `<span class="tab-icon">${tab.icon}</span>
+          <span class="tab-name" title="${esc(tab.name)}">${esc(tab.name)}</span>
+          <button class="tab-close" data-tid="${tab.tabId}" title="Close  Ctrl+W">×</button>`;
+        el.addEventListener('click', e => { if (!e.target.classList.contains('tab-close')) activate(tab.tabId); });
+        bar.insertBefore(el, addBtn);
+      }
+      bar.querySelectorAll('.tab-close').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); closeTab(b.dataset.tid); }));
+    }
+
+    function persistTabs() {
+      ls.set('tabs', S.tabs.filter(t => t.type === 'wr').map(({ tabId, toolId, name, icon, type, wrName }) => ({ tabId, toolId, name, icon, type, wrName })));
+    }
+
+    /* ─── Frame management ───────────────────────────────────── */
+    function createFrame(tabId, opts) {
+      const frame = document.createElement('iframe');
+      frame.className     = 'tool-frame';
+      frame.dataset.tabId = tabId;
+      frame.dataset.ready = '0';
+
+      if (opts.type === 'wr') {
+        frame.src = opts.src;
+      } else {
+        // Blob URL keeps same-origin so postMessage works identically to WR frames
+        const blob = new Blob([opts.html], { type: 'text/html' });
+        const url  = URL.createObjectURL(blob);
+        frame.src  = url;
+        frame.dataset.blob = url;
+      }
+
+      // Fallback: send CONTEXT_INIT after timeout even if TOOL_READY never fires
+      const tid = setTimeout(() => { if (frame.dataset.ready === '0') sendContext(frame); }, TOOL_READY_MS);
+      frame.dataset.timeout = tid;
+
+      document.getElementById('frames').appendChild(frame);
+    }
+
+    function sendContext(frame) {
+      if (!S.ctx) return;
+      frame.dataset.ready = '1';
+      clearTimeout(Number(frame.dataset.timeout));
+      postToTool(frame, 'CONTEXT_INIT', S.ctx);
+    }
+
+    function postToTool(frame, type, payload) {
+      frame.contentWindow?.postMessage(
+        { source: 'dvopentools-host', type, payload },
+        location.origin
+      );
+    }
+
+    /* ─── postMessage — receive from tools ───────────────────── */
+    window.addEventListener('message', e => {
+      if (e.origin !== location.origin) return;
+      const { source, type, payload } = e.data || {};
+      if (source !== 'dvopentools-tool') return;
+
+      const frame = [...document.querySelectorAll('.tool-frame')].find(f => f.contentWindow === e.source);
+      const tabId = frame?.dataset.tabId;
+
+      switch (type) {
+        case 'TOOL_READY':
+          if (frame) sendContext(frame);
+          break;
+        case 'TOOL_METADATA':
+          if (tabId && payload) updateTabMeta(tabId, payload);
+          break;
+        case 'NOTIFY':
+          toast(payload?.message || '', payload?.level || 'info', payload?.duration || 3500);
+          break;
+        case 'SET_TITLE':
+          if (tabId && payload?.title) updateTabTitle(tabId, payload.title);
+          break;
+        case 'OPEN_TOOL':
+          if (payload?.toolId) openTool(payload.toolId);
+          break;
+      }
+    });
+
+    function updateTabTitle(tabId, title) {
+      const tab = S.tabs.find(t => t.tabId === tabId);
+      if (tab) tab.name = title;
+      const el = document.querySelector(`.tab[data-tab-id="${tabId}"] .tab-name`);
+      if (el) { el.textContent = title; el.title = title; }
+    }
+
+    function updateTabMeta(tabId, m) {
+      if (m.name) updateTabTitle(tabId, m.name);
+      if (m.icon) {
+        const tab = S.tabs.find(t => t.tabId === tabId);
+        if (tab) tab.icon = m.icon;
+        const el = document.querySelector(`.tab[data-tab-id="${tabId}"] .tab-icon`);
+        if (el) el.textContent = m.icon;
+      }
+    }
+
+    /* ─── Theme ──────────────────────────────────────────────── */
+    function applyTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      document.getElementById('theme-btn').textContent = theme === 'dark' ? '☀️' : '🌙';
+      S.cfg.theme = theme;
+      if (S.ctx) S.ctx.theme = theme;
+      document.querySelectorAll('.tool-frame').forEach(f => postToTool(f, 'THEME_CHANGE', { theme }));
+    }
+
+    /* ─── File loading ───────────────────────────────────────── */
+    function triggerFilePicker() { document.getElementById('file-modal').classList.add('open'); }
+
+    document.getElementById('file-input').addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const html = await file.text();
+      const meta = parseManifest(html);
+      openFileTool(html, meta);
+      e.target.value = '';
+    });
+
+    function parseManifest(html) {
+      try {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const el  = doc.getElementById('dvopentools-manifest');
+        return el ? JSON.parse(el.textContent.trim()) : null;
+      } catch { return null; }
+    }
+
+    /* ─── Settings ───────────────────────────────────────────── */
+    function openSettings() {
+      document.getElementById('cfg-prefix').value = S.cfg.prefix;
+      document.getElementById('cfg-api').value    = S.cfg.apiVersion;
+      document.getElementById('cfg-tabs').value   = S.cfg.tabLimit;
+      document.getElementById('cfg-theme').value  = S.cfg.theme;
+      document.getElementById('settings-modal').classList.add('open');
+    }
+
+    function saveSettings() {
+      const prefix = document.getElementById('cfg-prefix').value.trim() || 'dvopentools_';
+      const api    = document.getElementById('cfg-api').value;
+      const tabs   = Math.min(10, Math.max(1, parseInt(document.getElementById('cfg-tabs').value) || 5));
+      const theme  = document.getElementById('cfg-theme').value;
+
+      const changed = prefix !== S.cfg.prefix || api !== S.cfg.apiVersion;
+      S.cfg.prefix = prefix; S.cfg.apiVersion = api; S.cfg.tabLimit = tabs; S.cfg.theme = theme;
+      ls.set('cfg', S.cfg);
+      applyTheme(theme);
+      document.getElementById('settings-modal').classList.remove('open');
+      toast('Settings saved.', 'success');
+      if (changed) { ls.set(`cache::${prefix}`, null); discoverTools(true); }
+    }
+
+    /* ─── UI event bindings ──────────────────────────────────── */
+    document.getElementById('sidebar-toggle').addEventListener('click', () => {
+      S.sidebarOpen = !S.sidebarOpen;
+      document.getElementById('sidebar').classList.toggle('collapsed', !S.sidebarOpen);
+    });
+    document.getElementById('theme-btn').addEventListener('click', () => { applyTheme(S.cfg.theme === 'dark' ? 'light' : 'dark'); ls.set('cfg', S.cfg); });
+    document.getElementById('refresh-btn').addEventListener('click', () => discoverTools(true));
+
+    document.getElementById('load-file-btn').addEventListener('click', triggerFilePicker);
+    document.getElementById('tab-add').addEventListener('click', triggerFilePicker);
+    document.getElementById('empty-load-btn').addEventListener('click', triggerFilePicker);
+
+    document.getElementById('settings-btn').addEventListener('click', openSettings);
+    document.getElementById('settings-cancel').addEventListener('click', () => document.getElementById('settings-modal').classList.remove('open'));
+    document.getElementById('settings-save').addEventListener('click', saveSettings);
+
+    document.getElementById('file-cancel').addEventListener('click', () => document.getElementById('file-modal').classList.remove('open'));
+    document.getElementById('file-proceed').addEventListener('click', () => {
+      document.getElementById('file-modal').classList.remove('open');
+      document.getElementById('file-input').click();
+    });
+
+    // Close overlay on backdrop click
+    document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); }));
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); document.getElementById('sidebar-toggle').click(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'w') { e.preventDefault(); if (S.activeTabId) closeTab(S.activeTabId); }
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); openSettings(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); triggerFilePicker(); }
+    });
+
+    /* ─── Utilities ──────────────────────────────────────────── */
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function uid()  { return 'T' + Math.random().toString(36).slice(2, 10); }
+
+    /* ─── Init ───────────────────────────────────────────────── */
+    async function init() {
+      // Load saved config
+      const saved = ls.get('cfg', {});
+      Object.assign(S.cfg, saved);
+      applyTheme(S.cfg.theme);
+
+      // Build Dataverse context
+      try {
+        S.ctx = await buildContext();
+        setStatus(true);
+      } catch (err) {
+        console.error('[dvopentools] Context failed:', err);
+        S.ctx = { environmentUrl: location.origin, apiVersion: S.cfg.apiVersion,
+                  userId: '', userName: '', userEmail: '', hostVersion: HOST_VERSION, theme: S.cfg.theme };
+        setStatus(false);
+        toast('Could not connect to Dataverse API. Running in limited mode.', 'error', 7000);
+      }
+
+      // Discover tools
+      await discoverTools();
+
+      // Restore persisted WR tabs
+      const saved_tabs    = ls.get('tabs', []);
+      const saved_active  = ls.get('activeTab');
+      for (const t of saved_tabs) {
+        const tool = S.tools.find(x => x.id === t.toolId);
+        if (!tool) continue;
+        S.tabs.push({ ...t });
+        createFrame(t.tabId, { type: 'wr', src: `/WebResources/${tool.wrName}` });
+      }
+      if (S.tabs.length) {
+        const toActivate = S.tabs.find(t => t.tabId === saved_active) || S.tabs[0];
+        activate(toActivate.tabId);
+      } else {
+        renderTabs();
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
