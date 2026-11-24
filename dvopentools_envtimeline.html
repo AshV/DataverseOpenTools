@@ -239,10 +239,183 @@
       line-height: 1.2;
     }
 
+    /* ─── Multi-Select Filter Controls ─────────────────────────────── */
     .audit-filter-controls {
       display: inline-flex;
       align-items: center;
       gap: 6px;
+    }
+
+    .multi-select {
+      position: relative;
+      display: inline-block;
+    }
+
+    .multi-select-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text);
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      height: 26px;
+      box-sizing: border-box;
+    }
+    .multi-select-trigger:hover {
+      border-color: var(--primary);
+      background: var(--bg);
+    }
+    .multi-select.open .multi-select-trigger {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.18);
+      background: var(--bg);
+    }
+    .multi-select-trigger.is-filtered {
+      border-color: var(--primary);
+      background: var(--primary-subtle);
+      color: var(--primary);
+      font-weight: 600;
+    }
+    .multi-select-trigger .ms-arrow {
+      font-size: 9px;
+      color: var(--text-sec);
+      transition: transform 0.15s ease;
+    }
+    .multi-select.open .multi-select-trigger .ms-arrow {
+      transform: rotate(180deg);
+    }
+
+    .multi-select-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      min-width: 220px;
+      max-width: 290px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: var(--shadow-md);
+      z-index: 1000;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 11px;
+    }
+    .multi-select.open .multi-select-menu {
+      display: flex;
+    }
+
+    .ms-header {
+      padding: 6px 10px;
+      background: var(--bg-alt);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .ms-header-title {
+      font-weight: 600;
+      color: var(--text-sec);
+    }
+    .ms-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .ms-link-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--primary);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .ms-link-btn:hover {
+      text-decoration: underline;
+    }
+    .ms-divider {
+      color: var(--text-muted);
+    }
+
+    .ms-search-wrap {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg);
+    }
+    .ms-search-input {
+      width: 100%;
+      padding: 3px 6px;
+      font-size: 11px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--bg-alt);
+      color: var(--text);
+      box-sizing: border-box;
+      outline: none;
+    }
+    .ms-search-input:focus {
+      border-color: var(--primary);
+      background: var(--bg);
+    }
+
+    .ms-options-list {
+      max-height: 220px;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+    .ms-options-list::-webkit-scrollbar {
+      width: 6px;
+    }
+    .ms-options-list::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .ms-option {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 10px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.1s;
+      color: var(--text);
+    }
+    .ms-option:hover {
+      background: var(--bg-alt);
+    }
+    .ms-option input[type="checkbox"] {
+      margin: 0;
+      cursor: pointer;
+      accent-color: var(--primary);
+    }
+    .ms-option-label {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ms-option-count {
+      color: var(--text-muted);
+      font-size: 10px;
+      margin-left: auto;
+      padding-left: 6px;
+    }
+    .ms-empty-hint {
+      padding: 10px;
+      color: var(--text-muted);
+      text-align: center;
+      font-style: italic;
     }
 
     /* ─── Audit Pre/Post Diff Styling ─── */
@@ -663,22 +836,52 @@
         <button class="seg-btn" data-sev="warnings">🟡 Warnings (<span id="count-sev-warnings">0</span>)</button>
       </div>
 
-      <!-- Audit-Specific Operation & Table Filters -->
+      <!-- Audit-Specific Operation & Table Filters (Multi-Select) -->
       <div class="audit-filter-controls">
-        <select class="select-range" id="filter-audit-op" title="Filter audits by operation / action">
-          <option value="ALL">All Audit Actions</option>
-          <option value="1">Create</option>
-          <option value="2">Update</option>
-          <option value="3">Delete</option>
-          <option value="activate">Activate / Deactivate</option>
-          <option value="security">Security &amp; Permissions</option>
-          <option value="access">User Login / Access</option>
-          <option value="publish">Publish &amp; Solutions</option>
-        </select>
+        <!-- Actions Multi-Select -->
+        <div class="multi-select" id="ms-audit-op">
+          <button type="button" class="multi-select-trigger" id="ms-audit-op-trigger" title="Filter audits by actions / operations">
+            <span id="ms-audit-op-label">Actions: All</span>
+            <span class="ms-arrow">▾</span>
+          </button>
+          <div class="multi-select-menu" id="ms-audit-op-menu">
+            <div class="ms-header">
+              <span class="ms-header-title">Audit Actions</span>
+              <div class="ms-header-actions">
+                <button type="button" class="ms-link-btn" id="ms-audit-op-all-btn">All</button>
+                <span class="ms-divider">·</span>
+                <button type="button" class="ms-link-btn" id="ms-audit-op-clear-btn">Clear</button>
+              </div>
+            </div>
+            <div class="ms-options-list" id="ms-audit-op-list">
+              <!-- Dynamically populated with live audit counts -->
+            </div>
+          </div>
+        </div>
 
-        <select class="select-range" id="filter-audit-table" title="Filter audits by target table / entity">
-          <option value="ALL">All Audit Tables</option>
-        </select>
+        <!-- Tables Multi-Select -->
+        <div class="multi-select" id="ms-audit-table">
+          <button type="button" class="multi-select-trigger" id="ms-audit-table-trigger" title="Filter audits by target table / entity">
+            <span id="ms-audit-table-label">Tables: All</span>
+            <span class="ms-arrow">▾</span>
+          </button>
+          <div class="multi-select-menu" id="ms-audit-table-menu">
+            <div class="ms-header">
+              <span class="ms-header-title">Audit Tables</span>
+              <div class="ms-header-actions">
+                <button type="button" class="ms-link-btn" id="ms-audit-table-all-btn">All</button>
+                <span class="ms-divider">·</span>
+                <button type="button" class="ms-link-btn" id="ms-audit-table-clear-btn">Clear</button>
+              </div>
+            </div>
+            <div class="ms-search-wrap">
+              <input type="text" class="ms-search-input" id="ms-audit-table-search" placeholder="Search tables…">
+            </div>
+            <div class="ms-options-list" id="ms-audit-table-list">
+              <!-- Dynamically populated with tables present in current dataset -->
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="spacer"></div>
@@ -908,9 +1111,9 @@
     let sortColumn  = 'time';
     let sortAsc     = false; // newest first by default
 
-    // Audit-specific filters
-    let selectedAuditOp    = 'ALL';
-    let selectedAuditTable = 'ALL';
+    // Audit-specific multi-select filters
+    let selectedAuditOps    = new Set(['ALL']);
+    let selectedAuditTables = new Set(['ALL']);
 
     // In-memory window cache for zero-roundtrip sub-range zoom-ins
     let cachedServerWindow = null;
@@ -1004,6 +1207,16 @@
 
       if (activeRange !== 'custom' || !savedFrom || !savedTo) {
         syncDatetimeInputs(activeRange);
+      }
+
+      // Restore audit multi-select preferences if saved
+      const savedOps = toolStore('auditOps');
+      if (savedOps && Array.isArray(savedOps) && savedOps.length > 0) {
+        selectedAuditOps = new Set(savedOps);
+      }
+      const savedTables = toolStore('auditTables');
+      if (savedTables && Array.isArray(savedTables) && savedTables.length > 0) {
+        selectedAuditTables = new Set(savedTables);
       }
 
       ensureEnvironmentId().catch(() => {});
@@ -1308,35 +1521,109 @@
       }
 
       allEvents = uniqueEvents;
+      updateAuditOpOptions();
       updateAuditTableOptions();
       renderTimeline();
     }
 
-    /* ─── 7. Event Normalization Helpers ────────────────────── */
+    /* ─── 7. Event Normalization & Multi-Select Filter Helpers ──────── */
     const AUDIT_ACTIONS = {
       1: 'Create', 2: 'Update', 3: 'Delete', 4: 'Activate', 5: 'Deactivate',
       11: 'Cascade', 12: 'Merge', 13: 'Assign', 14: 'Share', 16: 'Close',
       64: 'User Access via Web', 65: 'User Access via API', 116: 'Solution Import', 117: 'Publish'
     };
 
-    function matchesAuditOpFilter(ev, opFilter) {
-      if (!opFilter || opFilter === 'ALL') return true;
+    const AUDIT_ACTION_GROUPS = [
+      { id: '1', label: 'Create', match: act => act === 1 },
+      { id: '2', label: 'Update', match: act => act === 2 },
+      { id: '3', label: 'Delete', match: act => act === 3 },
+      { id: 'activate', label: 'Activate / Deactivate', match: act => act === 4 || act === 5 },
+      { id: 'security', label: 'Security & Permissions', match: act => act === 13 || act === 14 || act === 107 || act === 108 },
+      { id: 'access', label: 'User Login / Access', match: act => act === 64 || act === 65 },
+      { id: 'publish', label: 'Publish & Solutions', match: act => act === 116 || act === 117 || act === 118 },
+      { id: 'cascade', label: 'Cascade Operations', match: act => act === 11 || act === 12 || act === 16 }
+    ];
+
+    function matchesAuditOpFilter(ev, selectedOps) {
+      if (!selectedOps || selectedOps.size === 0 || selectedOps.has('ALL')) return true;
       const act = Number(ev.rawAction);
-      if (opFilter === '1') return act === 1; // Create
-      if (opFilter === '2') return act === 2; // Update
-      if (opFilter === '3') return act === 3; // Delete
-      if (opFilter === 'activate') return act === 4 || act === 5; // Activate / Deactivate
-      if (opFilter === 'security') return act === 13 || act === 14 || act === 107 || act === 108; // Assign / Share
-      if (opFilter === 'access') return act === 64 || act === 65; // User Access (Web / API)
-      if (opFilter === 'publish') return act === 116 || act === 117 || act === 118; // Publish / Import
-      return String(act) === String(opFilter);
+      for (const group of AUDIT_ACTION_GROUPS) {
+        if (selectedOps.has(group.id) && group.match(act)) return true;
+      }
+      return selectedOps.has(String(act));
+    }
+
+    function matchesAuditTableFilter(ev, selectedTables) {
+      if (!selectedTables || selectedTables.size === 0 || selectedTables.has('ALL')) return true;
+      if (!ev.entity || ev.entity === '—') return false;
+      return selectedTables.has(ev.entity);
+    }
+
+    function updateAuditOpOptions() {
+      const container = document.getElementById('ms-audit-op-list');
+      if (!container) return;
+
+      const counts = {};
+      let totalAudits = 0;
+      allEvents.forEach(ev => {
+        if (ev.category === 'audit') {
+          totalAudits++;
+          const act = Number(ev.rawAction);
+          AUDIT_ACTION_GROUPS.forEach(g => {
+            if (g.match(act)) counts[g.id] = (counts[g.id] || 0) + 1;
+          });
+        }
+      });
+
+      const isAll = selectedAuditOps.has('ALL');
+
+      container.innerHTML = AUDIT_ACTION_GROUPS.map(g => {
+        const checked = isAll || selectedAuditOps.has(g.id);
+        const cnt = counts[g.id] || 0;
+        return `
+          <label class="ms-option">
+            <input type="checkbox" data-op="${esc(g.id)}" ${checked ? 'checked' : ''}>
+            <span class="ms-option-label">${esc(g.label)}</span>
+            <span class="ms-option-count">(${cnt})</span>
+          </label>
+        `;
+      }).join('');
+
+      updateAuditOpTriggerLabel(totalAudits);
+    }
+
+    function updateAuditOpTriggerLabel(totalAudits) {
+      const labelEl = document.getElementById('ms-audit-op-label');
+      const trigger = document.getElementById('ms-audit-op-trigger');
+      if (!labelEl || !trigger) return;
+
+      const isAll = selectedAuditOps.has('ALL') || selectedAuditOps.size === AUDIT_ACTION_GROUPS.length;
+      if (isAll) {
+        labelEl.textContent = 'Actions: All';
+        trigger.classList.remove('is-filtered');
+        trigger.title = 'Filter audits by actions / operations (Showing all actions)';
+      } else if (selectedAuditOps.size === 0) {
+        labelEl.textContent = 'Actions: None (0)';
+        trigger.classList.add('is-filtered');
+        trigger.title = 'No actions selected';
+      } else if (selectedAuditOps.size === 1) {
+        const id = Array.from(selectedAuditOps)[0];
+        const group = AUDIT_ACTION_GROUPS.find(g => g.id === id);
+        labelEl.textContent = `Action: ${group ? group.label : id}`;
+        trigger.classList.add('is-filtered');
+        trigger.title = `Filter: ${group ? group.label : id}`;
+      } else {
+        labelEl.textContent = `Actions (${selectedAuditOps.size})`;
+        trigger.classList.add('is-filtered');
+        const names = Array.from(selectedAuditOps).map(id => AUDIT_ACTION_GROUPS.find(g => g.id === id)?.label || id).join(', ');
+        trigger.title = `Actions: ${names}`;
+      }
     }
 
     function updateAuditTableOptions() {
-      const select = document.getElementById('filter-audit-table');
-      if (!select) return;
+      const container = document.getElementById('ms-audit-table-list');
+      if (!container) return;
 
-      const previousSelection = selectedAuditTable;
       const tableCounts = {};
       let totalAudits = 0;
 
@@ -1347,21 +1634,61 @@
         }
       });
 
-      select.innerHTML = `<option value="ALL">All Audit Tables (${totalAudits})</option>`;
       const sortedTables = Object.keys(tableCounts).sort();
-      sortedTables.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t;
-        opt.textContent = `${t} (${tableCounts[t]})`;
-        select.appendChild(opt);
-      });
+      if (sortedTables.length === 0) {
+        container.innerHTML = `<div class="ms-empty-hint">No audit tables found</div>`;
+        updateAuditTableTriggerLabel(totalAudits, 0);
+        return;
+      }
 
-      if (sortedTables.includes(previousSelection)) {
-        select.value = previousSelection;
-        selectedAuditTable = previousSelection;
+      // If specific tables were selected, retain only those that still exist
+      if (!selectedAuditTables.has('ALL') && selectedAuditTables.size > 0) {
+        const pruned = new Set();
+        selectedAuditTables.forEach(t => { if (tableCounts[t] !== undefined) pruned.add(t); });
+        if (pruned.size > 0) selectedAuditTables = pruned;
+        else selectedAuditTables = new Set(['ALL']);
+      }
+
+      const isAll = selectedAuditTables.has('ALL');
+
+      container.innerHTML = sortedTables.map(t => {
+        const checked = isAll || selectedAuditTables.has(t);
+        const cnt = tableCounts[t];
+        return `
+          <label class="ms-option" data-table-name="${esc(t.toLowerCase())}">
+            <input type="checkbox" data-table="${esc(t)}" ${checked ? 'checked' : ''}>
+            <span class="ms-option-label"><code>${esc(t)}</code></span>
+            <span class="ms-option-count">(${cnt})</span>
+          </label>
+        `;
+      }).join('');
+
+      updateAuditTableTriggerLabel(totalAudits, sortedTables.length);
+    }
+
+    function updateAuditTableTriggerLabel(totalAudits, totalDistinctTables) {
+      const labelEl = document.getElementById('ms-audit-table-label');
+      const trigger = document.getElementById('ms-audit-table-trigger');
+      if (!labelEl || !trigger) return;
+
+      const isAll = selectedAuditTables.has('ALL') || (totalDistinctTables > 0 && selectedAuditTables.size === totalDistinctTables);
+      if (isAll) {
+        labelEl.textContent = 'Tables: All';
+        trigger.classList.remove('is-filtered');
+        trigger.title = 'Filter audits by target table (Showing all tables)';
+      } else if (selectedAuditTables.size === 0) {
+        labelEl.textContent = 'Tables: None (0)';
+        trigger.classList.add('is-filtered');
+        trigger.title = 'No tables selected';
+      } else if (selectedAuditTables.size === 1) {
+        const tbl = Array.from(selectedAuditTables)[0];
+        labelEl.textContent = `Table: ${tbl}`;
+        trigger.classList.add('is-filtered');
+        trigger.title = `Table: ${tbl}`;
       } else {
-        select.value = 'ALL';
-        selectedAuditTable = 'ALL';
+        labelEl.textContent = `Tables (${selectedAuditTables.size})`;
+        trigger.classList.add('is-filtered');
+        trigger.title = `Tables: ${Array.from(selectedAuditTables).join(', ')}`;
       }
     }
 
@@ -1945,6 +2272,7 @@
         }
       ];
 
+      updateAuditOpOptions();
       updateAuditTableOptions();
       notify('Loaded 10 realistic sample events across all Dataverse log categories.', 'info');
       renderTimeline();
@@ -1966,10 +2294,10 @@
         if (activeSev === 'errors' && ev.severity !== 'error') return false;
         if (activeSev === 'warnings' && ev.severity !== 'warn') return false;
 
-        // Audit-specific operation & table filters
+        // Audit-specific operation & table filters (multi-select)
         if (ev.category === 'audit') {
-          if (!matchesAuditOpFilter(ev, selectedAuditOp)) return false;
-          if (selectedAuditTable !== 'ALL' && ev.entity !== selectedAuditTable) return false;
+          if (!matchesAuditOpFilter(ev, selectedAuditOps)) return false;
+          if (!matchesAuditTableFilter(ev, selectedAuditTables)) return false;
         }
 
         // Search text
@@ -2334,16 +2662,147 @@
 
     document.getElementById('btn-export-csv').addEventListener('click', exportTimelineCsv);
 
-    // Audit-specific filters
-    document.getElementById('filter-audit-op').addEventListener('change', e => {
-      selectedAuditOp = e.target.value;
-      renderTimeline();
-    });
+    // Audit-specific Multi-Select Filters
+    setupMultiSelects();
+    updateAuditOpOptions();
+    updateAuditTableOptions();
 
-    document.getElementById('filter-audit-table').addEventListener('change', e => {
-      selectedAuditTable = e.target.value;
-      renderTimeline();
-    });
+    function setupMultiSelects() {
+      // Toggle dropdown open
+      document.querySelectorAll('.multi-select-trigger').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const ms = btn.closest('.multi-select');
+          const wasOpen = ms.classList.contains('open');
+          document.querySelectorAll('.multi-select.open').forEach(el => el.classList.remove('open'));
+          if (!wasOpen) {
+            ms.classList.add('open');
+            const search = ms.querySelector('.ms-search-input');
+            if (search) {
+              search.value = '';
+              filterTableOptionsList('');
+              setTimeout(() => search.focus(), 50);
+            }
+          }
+        });
+      });
+
+      // Close when clicking outside or pressing Escape
+      document.addEventListener('click', e => {
+        if (!e.target.closest('.multi-select')) {
+          document.querySelectorAll('.multi-select.open').forEach(el => el.classList.remove('open'));
+        }
+      });
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+          document.querySelectorAll('.multi-select.open').forEach(el => el.classList.remove('open'));
+        }
+      });
+
+      // Actions Multi-Select Handlers
+      const opList = document.getElementById('ms-audit-op-list');
+      if (opList) {
+        opList.addEventListener('change', e => {
+          if (e.target.type !== 'checkbox') return;
+          const allBoxes = opList.querySelectorAll('input[type="checkbox"]');
+          const checkedBoxes = Array.from(allBoxes).filter(cb => cb.checked);
+
+          if (checkedBoxes.length === allBoxes.length) {
+            selectedAuditOps = new Set(['ALL']);
+          } else if (checkedBoxes.length === 0) {
+            selectedAuditOps = new Set();
+          } else {
+            selectedAuditOps = new Set(checkedBoxes.map(cb => cb.dataset.op));
+          }
+          toolStore('auditOps', Array.from(selectedAuditOps));
+          updateAuditOpTriggerLabel();
+          renderTimeline();
+        });
+      }
+
+      const opAllBtn = document.getElementById('ms-audit-op-all-btn');
+      if (opAllBtn) {
+        opAllBtn.addEventListener('click', () => {
+          selectedAuditOps = new Set(['ALL']);
+          opList.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = true; });
+          toolStore('auditOps', Array.from(selectedAuditOps));
+          updateAuditOpTriggerLabel();
+          renderTimeline();
+        });
+      }
+
+      const opClearBtn = document.getElementById('ms-audit-op-clear-btn');
+      if (opClearBtn) {
+        opClearBtn.addEventListener('click', () => {
+          selectedAuditOps = new Set();
+          opList.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+          toolStore('auditOps', Array.from(selectedAuditOps));
+          updateAuditOpTriggerLabel();
+          renderTimeline();
+        });
+      }
+
+      // Tables Multi-Select Handlers
+      const tableList = document.getElementById('ms-audit-table-list');
+      if (tableList) {
+        tableList.addEventListener('change', e => {
+          if (e.target.type !== 'checkbox') return;
+          const allBoxes = tableList.querySelectorAll('input[type="checkbox"]');
+          const checkedBoxes = Array.from(allBoxes).filter(cb => cb.checked);
+
+          if (checkedBoxes.length === allBoxes.length) {
+            selectedAuditTables = new Set(['ALL']);
+          } else if (checkedBoxes.length === 0) {
+            selectedAuditTables = new Set();
+          } else {
+            selectedAuditTables = new Set(checkedBoxes.map(cb => cb.dataset.table));
+          }
+          toolStore('auditTables', Array.from(selectedAuditTables));
+          updateAuditTableTriggerLabel(0, allBoxes.length);
+          renderTimeline();
+        });
+      }
+
+      const tableAllBtn = document.getElementById('ms-audit-table-all-btn');
+      if (tableAllBtn) {
+        tableAllBtn.addEventListener('click', () => {
+          selectedAuditTables = new Set(['ALL']);
+          const allBoxes = tableList.querySelectorAll('input[type="checkbox"]');
+          allBoxes.forEach(cb => { cb.checked = true; });
+          toolStore('auditTables', Array.from(selectedAuditTables));
+          updateAuditTableTriggerLabel(0, allBoxes.length);
+          renderTimeline();
+        });
+      }
+
+      const tableClearBtn = document.getElementById('ms-audit-table-clear-btn');
+      if (tableClearBtn) {
+        tableClearBtn.addEventListener('click', () => {
+          selectedAuditTables = new Set();
+          const allBoxes = tableList.querySelectorAll('input[type="checkbox"]');
+          allBoxes.forEach(cb => { cb.checked = false; });
+          toolStore('auditTables', Array.from(selectedAuditTables));
+          updateAuditTableTriggerLabel(0, allBoxes.length);
+          renderTimeline();
+        });
+      }
+
+      // Table search input
+      const tableSearch = document.getElementById('ms-audit-table-search');
+      if (tableSearch) {
+        tableSearch.addEventListener('input', e => {
+          filterTableOptionsList(e.target.value.trim().toLowerCase());
+        });
+      }
+    }
+
+    function filterTableOptionsList(query) {
+      const options = document.querySelectorAll('#ms-audit-table-list .ms-option');
+      options.forEach(opt => {
+        const name = opt.dataset.tableName || '';
+        opt.style.display = (!query || name.includes(query)) ? 'flex' : 'none';
+      });
+    }
 
     // Search input
     document.getElementById('search-input').addEventListener('input', e => {
