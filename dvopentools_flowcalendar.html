@@ -1304,7 +1304,7 @@
       // Strategy 1: Attempt standard flowruns table (if enabled in modern environment)
       try {
         const runsData = await dvFetchWithHeaders(
-          `/flowruns?$filter=starttime ge ${startIso} and starttime le ${endIso}&$select=flowrunid,name,starttime,endtime,status,durationinms,errorcode,errormessage&$orderby=starttime desc&$top=200`
+          `/flowruns?$filter=starttime ge ${startIso} and starttime le ${endIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage&$orderby=starttime desc&$top=200`
         );
         if (runsData?.value) {
           flowRuns = runsData.value.map(r => normalizeRunRecord(r, 'flowrun'));

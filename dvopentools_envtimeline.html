@@ -1223,8 +1223,8 @@
             (data.value || []).forEach(r => events.push(normalizeJobEvent(r)));
           }).catch(e => console.warn('[EnvTimeline] AsyncOps query:', e.message)),
 
-        // 4. Cloud Flow Runs (Modern elastic table flowruns with durationinms, errorcode, errormessage)
-        dvFetchWithHeaders(`/flowruns?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=flowrunid,name,starttime,endtime,status,durationinms,errorcode,errormessage&$orderby=starttime desc&$top=100`)
+        // 4. Cloud Flow Runs (Modern elastic table flowruns)
+        dvFetchWithHeaders(`/flowruns?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage&$orderby=starttime desc&$top=100`)
           .then(data => {
             (data.value || []).forEach(r => events.push(normalizeFlowEvent(r)));
           }).catch(e => {
@@ -1672,7 +1672,7 @@
         title: r.name || 'Cloud Flow Run',
         entity: 'flowrun',
         user: 'Automated',
-        duration: r.durationinms ? `${r.durationinms}ms` : formatTimeDiff(r.starttime, r.endtime),
+        duration: formatTimeDiff(r.starttime, r.endtime),
         error: r.errormessage ? (r.errorcode ? `[${r.errorcode}] ${r.errormessage}` : r.errormessage) : null,
         traces: null,
         flowId: r._workflowid_value || r.workflowid || null,
