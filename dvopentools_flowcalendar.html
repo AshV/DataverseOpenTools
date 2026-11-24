@@ -1,0 +1,1690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Calendar</title>
+
+  <!-- ══ 1. MANIFEST ══════════════════════════════════════════
+       Discovered automatically by dvopentools_host.html
+  ═══════════════════════════════════════════════════════════ -->
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "flow-calendar",
+    "name":           "Flow Calendar",
+    "version":        "1.0.0",
+    "description":    "Visualise Power Automate cloud flow run history across a 7-day hourly timeline with response headers inspection.",
+    "icon":           "📅",
+    "category":       "Flow",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.0"
+  }
+  </script>
+
+  <!-- ══ 2. STYLES ════════════════════════════════════════════
+       Self-contained, zero external dependencies, light/dark mode.
+  ═══════════════════════════════════════════════════════════ -->
+  <style>
+    :root {
+      --bg:             #ffffff;
+      --bg-alt:         #f8f9fa;
+      --bg-card:        #ffffff;
+      --border:         #e1dfdd;
+      --border-subtle:  #edebe9;
+      --text:           #201f1e;
+      --text-sec:       #605e5c;
+      --text-muted:     #8a8886;
+      --primary:        #0078d4;
+      --primary-hover:  #106ebe;
+      --primary-subtle: #eff6fc;
+
+      --status-succeeded: #107c10;
+      --status-succeeded-bg: #dff6dd;
+      --status-succeeded-border: #a1e29c;
+
+      --status-failed:    #d13438;
+      --status-failed-bg: #fde7e9;
+      --status-failed-border: #f69fa4;
+
+      --status-running:   #0078d4;
+      --status-running-bg: #eff6fc;
+      --status-running-border: #99c7f1;
+
+      --status-cancelled: #797775;
+      --status-cancelled-bg: #f3f2f1;
+      --status-cancelled-border: #c8c6c4;
+
+      --status-timedout:  #d97706;
+      --status-timedout-bg: #fef3c7;
+      --status-timedout-border: #fcd34d;
+
+      --grid-line:      #edebe9;
+      --hour-label:     #8a8886;
+      --today-bg:       rgba(0, 120, 212, 0.04);
+      --today-highlight: #0078d4;
+      --modal-overlay:  rgba(0, 0, 0, 0.45);
+      --shadow-sm:      0 1.6px 3.6px 0 rgba(0,0,0,0.13), 0 0.3px 0.9px 0 rgba(0,0,0,0.11);
+      --shadow-md:      0 6.4px 14.4px 0 rgba(0,0,0,0.13), 0 1.2px 3.6px 0 rgba(0,0,0,0.11);
+    }
+
+    body.dark {
+      --bg:             #1e1e1e;
+      --bg-alt:         #252526;
+      --bg-card:        #2d2d2d;
+      --border:         #3e3e42;
+      --border-subtle:  #333337;
+      --text:           #d4d4d4;
+      --text-sec:       #a6a6a6;
+      --text-muted:     #767676;
+      --primary:        #2886de;
+      --primary-hover:  #4797e2;
+      --primary-subtle: #19324d;
+
+      --status-succeeded: #57b35e;
+      --status-succeeded-bg: #1c361e;
+      --status-succeeded-border: #28542c;
+
+      --status-failed:    #f1707b;
+      --status-failed-bg: #431c20;
+      --status-failed-border: #6d2830;
+
+      --status-running:   #4da3ff;
+      --status-running-bg: #102d4d;
+      --status-running-border: #1b497a;
+
+      --status-cancelled: #9e9d9b;
+      --status-cancelled-bg: #303030;
+      --status-cancelled-border: #4d4d4d;
+
+      --status-timedout:  #fbbf24;
+      --status-timedout-bg: #422d05;
+      --status-timedout-border: #714f09;
+
+      --grid-line:      #2d2d30;
+      --hour-label:     #767676;
+      --today-bg:       rgba(40, 134, 222, 0.08);
+      --today-highlight: #4da3ff;
+      --modal-overlay:  rgba(0, 0, 0, 0.7);
+      --shadow-sm:      0 2px 4px rgba(0,0,0,0.4);
+      --shadow-md:      0 8px 18px rgba(0,0,0,0.6);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* ─── Top Control Bar ─────────────────────────────────────────── */
+    .topbar {
+      padding: 10px 14px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .row-primary {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .tool-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .nav-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 11px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-card);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) {
+      background: var(--bg-alt);
+      border-color: var(--primary);
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .btn.primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+    .btn.icon-only {
+      padding: 5px 8px;
+    }
+    .btn.active {
+      background: var(--primary-subtle);
+      border-color: var(--primary);
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .date-label {
+      font-weight: 600;
+      font-size: 13px;
+      min-width: 175px;
+      text-align: center;
+    }
+
+    .spacer { flex: 1; }
+
+    .header-inspector-btn {
+      position: relative;
+    }
+    .badge-pill {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      background: var(--status-succeeded);
+      color: #fff;
+      margin-left: 4px;
+    }
+
+    /* ─── Second Row: Filter & Scope ──────────────────────────────── */
+    .row-filters {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--bg-alt);
+      padding: 3px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      user-select: none;
+      transition: all 0.15s;
+    }
+    .filter-chip input { display: none; }
+    .filter-chip.chip-succeeded { background: var(--status-succeeded-bg); color: var(--status-succeeded); border-color: var(--status-succeeded-border); }
+    .filter-chip.chip-failed    { background: var(--status-failed-bg); color: var(--status-failed); border-color: var(--status-failed-border); }
+    .filter-chip.chip-running   { background: var(--status-running-bg); color: var(--status-running); border-color: var(--status-running-border); }
+    .filter-chip.chip-cancelled { background: var(--status-cancelled-bg); color: var(--status-cancelled); border-color: var(--status-cancelled-border); }
+    .filter-chip.chip-timedout  { background: var(--status-timedout-bg); color: var(--status-timedout); border-color: var(--status-timedout-border); }
+
+    .filter-chip.muted {
+      opacity: 0.35;
+      filter: grayscale(0.8);
+    }
+
+    .search-input, .select-flow {
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 12px;
+      background: var(--bg-card);
+      color: var(--text);
+    }
+    .search-input:focus, .select-flow:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .search-input { width: 170px; }
+    .select-flow  { max-width: 220px; text-overflow: ellipsis; }
+
+    /* ─── Calendar Timeline Layout ────────────────────────────────── */
+    .calendar-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+      position: relative;
+    }
+
+    /* Day headers bar */
+    .days-header-row {
+      display: grid;
+      grid-template-columns: 55px repeat(7, 1fr);
+      background: var(--bg-card);
+      border-bottom: 2px solid var(--border);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .time-col-header {
+      padding: 10px 4px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-right: 1px solid var(--border);
+      background: var(--bg-alt);
+    }
+
+    .day-header-cell {
+      padding: 8px 10px;
+      text-align: center;
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .day-header-cell.is-today {
+      background: var(--today-bg);
+      border-top: 3px solid var(--today-highlight);
+      padding-top: 5px;
+    }
+    .day-name {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-sec);
+    }
+    .day-header-cell.is-today .day-name {
+      color: var(--today-highlight);
+    }
+    .day-date {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .day-count {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* Scrollable Hourly Grid */
+    .grid-scroll-area {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      position: relative;
+    }
+    .grid-scroll-area::-webkit-scrollbar { width: 8px; }
+    .grid-scroll-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .hourly-grid {
+      display: grid;
+      grid-template-columns: 55px repeat(7, 1fr);
+      position: relative;
+      min-height: 1440px; /* 24 hours * 60px */
+    }
+
+    .time-slot-label {
+      height: 60px;
+      border-bottom: 1px solid var(--grid-line);
+      border-right: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--hour-label);
+      text-align: right;
+      padding-right: 6px;
+      transform: translateY(-8px);
+      background: var(--bg-alt);
+    }
+
+    .day-column {
+      position: relative;
+      border-right: 1px solid var(--grid-line);
+      height: 100%;
+    }
+    .day-column.is-today {
+      background: var(--today-bg);
+    }
+
+    .hour-cell {
+      height: 60px;
+      border-bottom: 1px solid var(--grid-line);
+      box-sizing: border-box;
+      position: relative;
+    }
+    .hour-cell:hover {
+      background: rgba(0, 120, 212, 0.02);
+    }
+
+    /* Current Time Indicator Line */
+    .current-time-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: #e81123;
+      z-index: 5;
+      pointer-events: none;
+    }
+    .current-time-line::before {
+      content: '';
+      position: absolute;
+      left: -4px;
+      top: -3px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #e81123;
+    }
+
+    /* Flow Run Card (Event Pill) */
+    .run-pill {
+      position: absolute;
+      left: 3px;
+      right: 3px;
+      border-radius: 4px;
+      padding: 3px 6px;
+      font-size: 11px;
+      line-height: 1.25;
+      cursor: pointer;
+      z-index: 2;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.1s ease, box-shadow 0.1s ease, z-index 0.1s ease;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      border: 1px solid transparent;
+    }
+    .run-pill:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
+      z-index: 8;
+    }
+
+    .run-pill.status-succeeded {
+      background: var(--status-succeeded-bg);
+      color: var(--status-succeeded);
+      border-color: var(--status-succeeded-border);
+    }
+    .run-pill.status-failed {
+      background: var(--status-failed-bg);
+      color: var(--status-failed);
+      border-color: var(--status-failed-border);
+    }
+    .run-pill.status-running {
+      background: var(--status-running-bg);
+      color: var(--status-running);
+      border-color: var(--status-running-border);
+    }
+    .run-pill.status-cancelled {
+      background: var(--status-cancelled-bg);
+      color: var(--status-cancelled);
+      border-color: var(--status-cancelled-border);
+    }
+    .run-pill.status-timedout {
+      background: var(--status-timedout-bg);
+      color: var(--status-timedout);
+      border-color: var(--status-timedout-border);
+    }
+
+    .run-pill-title {
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .run-pill-time {
+      font-size: 10px;
+      opacity: 0.85;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Pulsing running animation */
+    @keyframes pulse-running {
+      0% { opacity: 0.7; }
+      50% { opacity: 1; }
+      100% { opacity: 0.7; }
+    }
+    .run-pill.status-running {
+      animation: pulse-running 1.8s infinite;
+    }
+
+    /* Empty state overlay */
+    .empty-state {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(2px);
+      z-index: 9;
+      pointer-events: none;
+    }
+    body.dark .empty-state {
+      background: rgba(30, 30, 30, 0.75);
+    }
+    .empty-state .empty-icon { font-size: 40px; opacity: 0.8; }
+    .empty-state h3 { font-size: 16px; color: var(--text); }
+    .empty-state p { font-size: 13px; color: var(--text-sec); max-width: 320px; text-align: center; }
+    .empty-state .btn-load-sample { pointer-events: auto; }
+
+    /* ─── Bottom/Drawer: HTTP Telemetry & Headers Inspector ───────── */
+    .inspector-panel {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 290px;
+      background: var(--bg-card);
+      border-top: 2px solid var(--primary);
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.18);
+      display: flex;
+      flex-direction: column;
+      z-index: 40;
+      transform: translateY(100%);
+      transition: transform 0.25s cubic-bezier(0.1, 0.9, 0.2, 1);
+    }
+    .inspector-panel.open {
+      transform: translateY(0);
+    }
+
+    .inspector-header {
+      padding: 8px 14px;
+      background: var(--bg-alt);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+    }
+    .inspector-title {
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .inspector-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      overflow: hidden;
+    }
+    .inspector-col {
+      padding: 10px 14px;
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .inspector-col:last-child { border-right: none; }
+    .inspector-col-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .headers-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+    }
+    .headers-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--border-subtle);
+      word-break: break-all;
+    }
+    .headers-table td.header-key {
+      font-weight: 600;
+      color: var(--primary);
+      width: 42%;
+      user-select: text;
+    }
+    .headers-table td.header-val {
+      color: var(--text);
+      user-select: text;
+    }
+    .headers-table tr.highlight-header td {
+      background: rgba(0, 120, 212, 0.08);
+      font-weight: 700;
+    }
+
+    .meta-code {
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-size: 11px;
+      overflow: auto;
+      white-space: pre-wrap;
+      user-select: text;
+      max-height: 180px;
+    }
+
+    /* ─── Modal: Run Details Card ─────────────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--modal-overlay);
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal-card {
+      background: var(--bg-card);
+      border-radius: 8px;
+      box-shadow: var(--shadow-md);
+      width: 580px;
+      max-width: 95vw;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .modal-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-alt);
+    }
+    .modal-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .modal-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .modal-body {
+      padding: 16px 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 12px;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 6px 12px;
+      font-size: 12px;
+    }
+    .detail-label {
+      font-weight: 600;
+      color: var(--text-sec);
+    }
+    .detail-val {
+      color: var(--text);
+      user-select: text;
+    }
+
+    .error-box {
+      background: var(--status-failed-bg);
+      border: 1px solid var(--status-failed-border);
+      border-radius: 4px;
+      padding: 10px;
+      color: var(--status-failed);
+      font-size: 11px;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      white-space: pre-wrap;
+      user-select: text;
+    }
+
+    .modal-footer {
+      padding: 10px 18px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      background: var(--bg-alt);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .status-badge.status-succeeded { background: var(--status-succeeded-bg); color: var(--status-succeeded); }
+    .status-badge.status-failed    { background: var(--status-failed-bg); color: var(--status-failed); }
+    .status-badge.status-running   { background: var(--status-running-bg); color: var(--status-running); }
+    .status-badge.status-cancelled { background: var(--status-cancelled-bg); color: var(--status-cancelled); }
+    .status-badge.status-timedout  { background: var(--status-timedout-bg); color: var(--status-timedout); }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════════ TOP CONTROL BAR ══════════════ -->
+  <header class="topbar">
+    <div class="row-primary">
+      <div class="tool-brand">
+        <span>📅</span> Flow Calendar
+      </div>
+
+      <!-- Navigation -->
+      <div class="nav-group">
+        <button class="btn icon-only" id="btn-prev-week" title="Previous Week">◀</button>
+        <button class="btn" id="btn-today">Today</button>
+        <button class="btn icon-only" id="btn-next-week" title="Next Week">▶</button>
+      </div>
+
+      <div class="date-label" id="date-range-display">Loading dates…</div>
+
+      <div class="spacer"></div>
+
+      <!-- Actions -->
+      <button class="btn" id="btn-refresh" title="Refresh run history from Dataverse">
+        <span id="spin-icon">↻</span> Refresh
+      </button>
+
+      <button class="btn" id="btn-sample-toggle" title="Toggle sample runs if environment has none">
+        🧪 Sample Data
+      </button>
+
+      <button class="btn header-inspector-btn" id="btn-toggle-inspector" title="View Dataverse HTTP Response Headers & Telemetry">
+        🌐 HTTP Headers <span class="badge-pill" id="http-status-pill">200 OK</span>
+      </button>
+    </div>
+
+    <!-- Second Row: Filters & Flow Selection -->
+    <div class="row-filters">
+      <!-- Flow selector -->
+      <select class="select-flow" id="flow-filter-select">
+        <option value="ALL">All Flows (Loading…)</option>
+      </select>
+
+      <input type="text" class="search-input" id="search-flow-input" placeholder="Filter by flow name…">
+
+      <div class="spacer"></div>
+
+      <!-- Status Checkbox Chips -->
+      <div class="filter-group">
+        <label class="filter-chip chip-succeeded" id="chip-succeeded">
+          <input type="checkbox" id="chk-succeeded" checked>
+          <span>✔ Succeeded</span>
+          <strong id="count-succeeded">0</strong>
+        </label>
+        <label class="filter-chip chip-failed" id="chip-failed">
+          <input type="checkbox" id="chk-failed" checked>
+          <span>✖ Failed</span>
+          <strong id="count-failed">0</strong>
+        </label>
+        <label class="filter-chip chip-running" id="chip-running">
+          <input type="checkbox" id="chk-running" checked>
+          <span>⚡ Running</span>
+          <strong id="count-running">0</strong>
+        </label>
+        <label class="filter-chip chip-cancelled" id="chip-cancelled">
+          <input type="checkbox" id="chk-cancelled" checked>
+          <span>⊘ Cancelled</span>
+          <strong id="count-cancelled">0</strong>
+        </label>
+        <label class="filter-chip chip-timedout" id="chip-timedout">
+          <input type="checkbox" id="chk-timedout" checked>
+          <span>⏳ TimedOut</span>
+          <strong id="count-timedout">0</strong>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══════════════ CALENDAR TIMELINE ══════════════ -->
+  <main class="calendar-container">
+    <!-- Day Headers Row -->
+    <div class="days-header-row" id="days-header-row">
+      <div class="time-col-header">Time</div>
+      <!-- 7 columns injected by JS -->
+    </div>
+
+    <!-- Scrollable 24-Hour Grid Area -->
+    <div class="grid-scroll-area" id="grid-scroll-area">
+      <div class="hourly-grid" id="hourly-grid">
+        <!-- Column 0: Time Labels -->
+        <div class="time-labels-col" id="time-labels-col">
+          <!-- 24 hourly labels injected by JS -->
+        </div>
+        <!-- Columns 1-7: Day columns with runs -->
+      </div>
+    </div>
+
+    <!-- Empty state overlay if no runs in week -->
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">📅</div>
+      <h3>No Flow Runs Found</h3>
+      <p>There are no flow runs matching the filters for this 7-day period.</p>
+      <button class="btn primary btn-load-sample" id="btn-load-sample-empty">Load Sample Flow Runs</button>
+    </div>
+  </main>
+
+  <!-- ══════════════ RUN DETAILS MODAL ══════════════ -->
+  <div class="modal-overlay" id="detail-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span id="modal-status-badge" class="status-badge status-succeeded">Succeeded</span>
+          <span class="modal-title" id="modal-flow-name">Flow Name</span>
+        </div>
+        <button class="btn icon-only" id="modal-close-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-grid">
+          <div class="detail-label">Run ID:</div>
+          <div class="detail-val" id="modal-run-id">—</div>
+
+          <div class="detail-label">Started:</div>
+          <div class="detail-val" id="modal-start-time">—</div>
+
+          <div class="detail-label">Completed:</div>
+          <div class="detail-val" id="modal-end-time">—</div>
+
+          <div class="detail-label">Duration:</div>
+          <div class="detail-val" id="modal-duration">—</div>
+
+          <div class="detail-label">Trigger:</div>
+          <div class="detail-val" id="modal-trigger">—</div>
+        </div>
+
+        <div id="modal-error-section" style="display:none;">
+          <div class="detail-label" style="margin-bottom:4px;color:var(--status-failed);">Error Message:</div>
+          <div class="error-box" id="modal-error-text"></div>
+        </div>
+
+        <div>
+          <div class="detail-label" style="margin-bottom:4px;">OData Annotations &amp; Raw Record:</div>
+          <pre class="meta-code" id="modal-raw-json"></pre>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="modal-copy-id">📋 Copy Run ID</button>
+        <button class="btn primary" id="modal-ok-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ HTTP HEADERS & TELEMETRY DRAWER ══════════════ -->
+  <aside class="inspector-panel" id="inspector-panel">
+    <div class="inspector-header">
+      <div class="inspector-title">
+        <span>🌐</span> Dataverse HTTP Telemetry &amp; Response Headers
+      </div>
+      <div class="spacer"></div>
+      <span id="inspector-summary" style="color:var(--text-sec);font-family:monospace;font-size:11px;">
+        GET /api/data/v9.2/workflows
+      </span>
+      <button class="btn icon-only" id="inspector-close-btn" title="Close drawer">✕</button>
+    </div>
+    <div class="inspector-body">
+      <!-- Col 1: HTTP Response Headers -->
+      <div class="inspector-col">
+        <div class="inspector-col-title">
+          <span>HTTP Response Headers</span>
+          <button class="btn icon-only" id="btn-copy-headers" title="Copy all headers">📋</button>
+        </div>
+        <table class="headers-table">
+          <tbody id="headers-table-body">
+            <!-- Headers injected here -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Col 2: Request Telemetry & Annotations -->
+      <div class="inspector-col">
+        <div class="inspector-col-title">
+          <span>OData Annotations &amp; Performance</span>
+        </div>
+        <div class="detail-grid" style="margin-bottom:6px;">
+          <div class="detail-label">Status:</div>
+          <div class="detail-val" id="tel-status">200 OK</div>
+
+          <div class="detail-label">Latency:</div>
+          <div class="detail-val" id="tel-latency">120 ms</div>
+
+          <div class="detail-label">Endpoint:</div>
+          <div class="detail-val" id="tel-endpoint">/workflows</div>
+
+          <div class="detail-label">Prefer:</div>
+          <div class="detail-val" id="tel-prefer">odata.include-annotations="*"</div>
+        </div>
+        <div class="inspector-col-title" style="margin-top:4px;">
+          <span>Formatted Annotations Sample</span>
+        </div>
+        <pre class="meta-code" id="annotations-sample">Annotations will appear here after API request...</pre>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ════════════════════════════════════════════════════════════
+       TOOL SCRIPT
+  ════════════════════════════════════════════════════════════ -->
+  <script>
+    'use strict';
+
+    /* ─── 1. Constants & State ──────────────────────────────── */
+    const MANIFEST_ID = 'flow-calendar';
+    const HOST_ORIGIN = window.location.origin;
+    const TOOL_STORE  = `dvopentools::tool::${MANIFEST_ID}::`;
+
+    let context = null;
+    let flowsList = [];
+    let flowRuns = [];
+    let isSampleData = false;
+
+    // Calendar view state: Monday of currently selected week
+    let currentWeekStart = getMonday(new Date());
+
+    // Status filter state
+    const statusFilters = {
+      Succeeded: true,
+      Failed:    true,
+      Running:   true,
+      Cancelled: true,
+      TimedOut:  true
+    };
+
+    // Last telemetry record
+    let lastTelemetry = {
+      url: '',
+      status: 200,
+      statusText: 'OK',
+      latency: 0,
+      headers: {},
+      annotations: {}
+    };
+
+    /* ─── 2. Host Communication ─────────────────────────────── */
+    function toHost(type, payload = {}) {
+      window.parent.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
+    }
+    function notify(message, level = 'info', duration = 3500) {
+      toHost('NOTIFY', { message, level, duration });
+    }
+    function setTitle(title) {
+      toHost('SET_TITLE', { title });
+    }
+
+    // Step A: Signal readiness immediately
+    toHost('TOOL_READY');
+
+    // Step B: Listen for messages from host
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN) return;
+      if (e.data?.source !== 'dvopentools-host') return;
+
+      const { type, payload } = e.data;
+      if (type === 'CONTEXT_INIT') {
+        context = payload;
+        onContextReady();
+      }
+      if (type === 'THEME_CHANGE') {
+        applyTheme(payload.theme);
+      }
+      if (type === 'TOOL_FOCUS') {
+        renderCurrentTimeIndicator();
+      }
+    });
+
+    function applyTheme(theme) {
+      document.body.classList.toggle('dark', theme === 'dark');
+    }
+
+    /* ─── 3. Tiered Storage Helper ──────────────────────────── */
+    const _store = (() => {
+      function canUse(s) {
+        try { const k = '__dvot__'; s.setItem(k, '1'); s.removeItem(k); return true; } catch { return false; }
+      }
+      const _ls  = typeof localStorage  !== 'undefined' && canUse(localStorage)  ? localStorage  : null;
+      const _ss  = typeof sessionStorage !== 'undefined' && canUse(sessionStorage) ? sessionStorage : null;
+      const _mem = Object.create(null);
+      const _b   = _ls || _ss;
+      return {
+        type: _ls ? 'localStorage' : _ss ? 'sessionStorage' : 'memory',
+        get(k)   { if (_b) try { return JSON.parse(_b.getItem(k)); } catch {} return _mem[k] ?? null; },
+        set(k,v) { if (_b) try { _b.setItem(k, JSON.stringify(v)); return; } catch {} _mem[k] = v; },
+        del(k)   { if (_b) try { _b.removeItem(k); } catch {} delete _mem[k]; }
+      };
+    })();
+
+    function toolStore(key, value) {
+      const k = TOOL_STORE + key;
+      if (value === undefined) return _store.get(k);
+      _store.set(k, value);
+    }
+
+    /* ─── 4. Context Ready ──────────────────────────────────── */
+    async function onContextReady() {
+      applyTheme(context.theme);
+
+      // Restore saved filters
+      const savedFilters = toolStore('statusFilters');
+      if (savedFilters) {
+        Object.assign(statusFilters, savedFilters);
+        ['succeeded','failed','running','cancelled','timedout'].forEach(s => {
+          const cap = s.charAt(0).toUpperCase() + s.slice(1);
+          const chk = document.getElementById(`chk-${s}`);
+          if (chk) {
+            chk.checked = !!statusFilters[cap];
+            document.getElementById(`chip-${s}`).classList.toggle('muted', !chk.checked);
+          }
+        });
+      }
+
+      await loadFlowsAndRuns();
+    }
+
+    /* ─── 5. Dataverse Fetch with HTTP Headers Capture ──────── */
+    async function dvFetchWithHeaders(path, opts = {}) {
+      const url = `${context.environmentUrl}/api/data/v${context.apiVersion}${path}`;
+      const t0  = performance.now();
+
+      const defaultHeaders = {
+        'OData-MaxVersion': '4.0',
+        'OData-Version':    '4.0',
+        'Accept':           'application/json',
+        'Content-Type':     'application/json',
+        'Prefer':           'odata.include-annotations="*"',
+      };
+
+      const res = await fetch(url, {
+        ...opts,
+        headers: { ...defaultHeaders, ...opts.headers }
+      });
+
+      const t1 = performance.now();
+      const latency = Math.round(t1 - t0);
+
+      // Extract all HTTP Response Headers
+      const capturedHeaders = {};
+      res.headers.forEach((val, key) => {
+        capturedHeaders[key.toLowerCase()] = val;
+      });
+
+      let json = null;
+      try {
+        json = await res.json();
+      } catch (err) {
+        json = {};
+      }
+
+      // Collect annotations from first item if present
+      const annotations = {};
+      const sampleItem = json.value?.[0] || json;
+      if (sampleItem && typeof sampleItem === 'object') {
+        for (const [k, v] of Object.entries(sampleItem)) {
+          if (k.includes('@OData.') || k.includes('@Microsoft.')) {
+            annotations[k] = v;
+          }
+        }
+      }
+
+      // Update telemetry state
+      lastTelemetry = {
+        url,
+        status: res.status,
+        statusText: res.statusText || 'OK',
+        latency,
+        headers: capturedHeaders,
+        annotations
+      };
+      updateTelemetryUI();
+
+      if (!res.ok) {
+        const msg = json?.error?.message || `${res.status} ${res.statusText}`;
+        throw new Error(msg);
+      }
+
+      return json;
+    }
+
+    function updateTelemetryUI() {
+      const pill = document.getElementById('http-status-pill');
+      pill.textContent = `${lastTelemetry.status} ${lastTelemetry.statusText} (${lastTelemetry.latency}ms)`;
+      pill.style.background = lastTelemetry.status >= 200 && lastTelemetry.status < 300
+        ? 'var(--status-succeeded)' : 'var(--status-failed)';
+
+      document.getElementById('tel-status').textContent = `${lastTelemetry.status} ${lastTelemetry.statusText}`;
+      document.getElementById('tel-latency').textContent = `${lastTelemetry.latency} ms`;
+      document.getElementById('tel-endpoint').textContent = lastTelemetry.url.replace(context?.environmentUrl || '', '');
+
+      document.getElementById('inspector-summary').textContent =
+        `Status ${lastTelemetry.status} | Latency: ${lastTelemetry.latency}ms | Headers: ${Object.keys(lastTelemetry.headers).length}`;
+
+      // Populate headers table
+      const tbody = document.getElementById('headers-table-body');
+      tbody.innerHTML = '';
+
+      const priorityHeaders = [
+        'preference-applied', 'odata-version', 'etag', 'x-ms-request-id',
+        'x-ms-ratelimit-time-remaining-xrm-requests', 'retry-after', 'content-type', 'date'
+      ];
+
+      // Sort priority first, then alphabetical
+      const sortedKeys = Object.keys(lastTelemetry.headers).sort((a, b) => {
+        const ia = priorityHeaders.indexOf(a);
+        const ib = priorityHeaders.indexOf(b);
+        if (ia !== -1 && ib !== -1) return ia - ib;
+        if (ia !== -1) return -1;
+        if (ib !== -1) return 1;
+        return a.localeCompare(b);
+      });
+
+      for (const k of sortedKeys) {
+        const tr = document.createElement('tr');
+        if (priorityHeaders.includes(k)) tr.className = 'highlight-header';
+        tr.innerHTML = `<td class="header-key">${esc(k)}</td><td class="header-val">${esc(lastTelemetry.headers[k])}</td>`;
+        tbody.appendChild(tr);
+      }
+
+      // Annotations sample
+      const annCode = document.getElementById('annotations-sample');
+      if (Object.keys(lastTelemetry.annotations).length) {
+        annCode.textContent = JSON.stringify(lastTelemetry.annotations, null, 2);
+      } else {
+        annCode.textContent = 'No OData annotations returned on this endpoint.';
+      }
+    }
+
+    /* ─── 6. Data Loading Logic ─────────────────────────────── */
+    async function loadFlowsAndRuns() {
+      const spin = document.getElementById('spin-icon');
+      spin.style.animation = 'spin .7s linear infinite';
+
+      try {
+        // Query workflows (Cloud Flows: category eq 5 and type eq 1)
+        const wfData = await dvFetchWithHeaders(
+          `/workflows?$filter=category eq 5 and type eq 1&$select=workflowid,name,statecode,statuscode,modifiedon&$orderby=name asc&$top=150`
+        );
+        flowsList = wfData.value || [];
+        populateFlowSelect();
+
+        // Query flow run history
+        await queryDataverseFlowRuns();
+      } catch (err) {
+        console.warn('[FlowCalendar] API fetch error, falling back or offering sample data:', err);
+        notify(`Flows query: ${err.message}`, 'warning');
+        if (!flowRuns.length) {
+          useSampleData();
+        }
+      } finally {
+        spin.style.animation = 'none';
+        renderCalendar();
+      }
+    }
+
+    async function queryDataverseFlowRuns() {
+      flowRuns = [];
+      const { start, end } = getWeekBounds(currentWeekStart);
+      const startIso = start.toISOString();
+      const endIso   = end.toISOString();
+
+      let loadedViaApi = false;
+
+      // Strategy 1: Attempt standard flowruns table (if enabled in modern environment)
+      try {
+        const runsData = await dvFetchWithHeaders(
+          `/flowruns?$filter=starttime ge ${startIso} and starttime le ${endIso}&$select=flowrunid,name,starttime,endtime,status,error&$orderby=starttime desc&$top=200`
+        );
+        if (runsData?.value) {
+          flowRuns = runsData.value.map(r => normalizeRunRecord(r, 'flowrun'));
+          loadedViaApi = true;
+        }
+      } catch (e1) {
+        // flowruns not found / not enabled, try Strategy 2
+      }
+
+      // Strategy 2: Query asyncoperations (Workflow & Modern flow executions: operationtype eq 29 or 10)
+      if (!loadedViaApi) {
+        try {
+          const opsData = await dvFetchWithHeaders(
+            `/asyncoperations?$filter=(operationtype eq 29 or operationtype eq 10) and startedon ge ${startIso} and startedon le ${endIso}&$select=asyncoperationid,name,startedon,completedon,statuscode,statecode,message,friendlyname,_regardingobjectid_value&$orderby=startedon desc&$top=200`
+          );
+          if (opsData?.value && opsData.value.length > 0) {
+            flowRuns = opsData.value.map(r => normalizeRunRecord(r, 'asyncoperation'));
+            loadedViaApi = true;
+          }
+        } catch (e2) {
+          console.warn('[FlowCalendar] asyncoperations query failed:', e2);
+        }
+      }
+
+      if (flowRuns.length === 0) {
+        // If 0 runs found, don't crash — allow user to click sample data or show empty state
+        isSampleData = false;
+        notify('0 flow runs found for this week in Dataverse. You can click "Sample Data" to explore.', 'info', 5000);
+      } else {
+        isSampleData = false;
+        notify(`Loaded ${flowRuns.length} flow runs from Dataverse`, 'success');
+      }
+    }
+
+    function normalizeRunRecord(r, source) {
+      if (source === 'flowrun') {
+        const s = (r.status || '').toLowerCase();
+        let status = 'Succeeded';
+        if (s.includes('fail')) status = 'Failed';
+        else if (s.includes('run')) status = 'Running';
+        else if (s.includes('cancel')) status = 'Cancelled';
+        else if (s.includes('time')) status = 'TimedOut';
+
+        return {
+          id: r.flowrunid || uid(),
+          name: r.name || 'Automated Cloud Flow',
+          startTime: new Date(r.starttime),
+          endTime: r.endtime ? new Date(r.endtime) : null,
+          status,
+          error: r.error || null,
+          raw: r
+        };
+      }
+
+      // asyncoperation normalization
+      // statuscode: 30 = Succeeded, 31 = Failed, 32 = Canceled, 20 = In Progress, 21 = Pausing
+      let status = 'Succeeded';
+      const sc = Number(r.statuscode);
+      if (sc === 31) status = 'Failed';
+      else if (sc === 32) status = 'Cancelled';
+      else if (sc === 20 || sc === 21) status = 'Running';
+      else if (sc === 30) status = 'Succeeded';
+
+      // Match flow name from regarding object if available
+      const flowMatch = flowsList.find(f => f.workflowid === r._regardingobjectid_value);
+      const flowName = flowMatch?.name || r.friendlyname || r.name || 'Cloud Flow';
+
+      return {
+        id: r.asyncoperationid || uid(),
+        name: flowName,
+        startTime: new Date(r.startedon),
+        endTime: r.completedon ? new Date(r.completedon) : null,
+        status,
+        error: r.message || null,
+        raw: r
+      };
+    }
+
+    /* ─── 7. Sample Data Generator ──────────────────────────── */
+    function useSampleData() {
+      isSampleData = true;
+      const { start } = getWeekBounds(currentWeekStart);
+
+      const sampleFlows = [
+        'Send Daily Digest Email',
+        'Sync Dataverse Accounts with SAP',
+        'Invoice Approval Flow',
+        'Customer Onboarding Trigger',
+        'SharePoint File Migration Flow',
+        'Lead Qualification Webhook'
+      ];
+
+      const statuses = ['Succeeded', 'Succeeded', 'Succeeded', 'Failed', 'Running', 'Cancelled', 'TimedOut'];
+      const generated = [];
+
+      // Generate 25 realistic sample runs across the 7 days
+      for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+        const dayDate = new Date(start);
+        dayDate.setDate(dayDate.getDate() + dayOffset);
+
+        // 3 to 6 runs per day
+        const runCount = (dayOffset % 3 === 0) ? 5 : 3;
+        for (let i = 0; i < runCount; i++) {
+          const runDate = new Date(dayDate);
+          const hour = 8 + (i * 3) + (dayOffset % 2);
+          const min  = (i * 17) % 60;
+          runDate.setHours(Math.min(hour, 22), min, 0, 0);
+
+          const status = statuses[(dayOffset * 3 + i) % statuses.length];
+          const durationSec = status === 'Failed' ? 12 : status === 'TimedOut' ? 7200 : (i + 1) * 35;
+          const endDate = status === 'Running' ? null : new Date(runDate.getTime() + durationSec * 1000);
+
+          const flowName = sampleFlows[(dayOffset + i) % sampleFlows.length];
+
+          generated.push({
+            id: 'sample_' + uid(),
+            name: flowName,
+            startTime: runDate,
+            endTime: endDate,
+            status,
+            error: status === 'Failed' ? 'Action "HTTP_PostToBilling" failed with status code 500: Internal Server Error' : null,
+            raw: {
+              flowName,
+              sample: true,
+              generatedAt: new Date().toISOString(),
+              durationSeconds: durationSec,
+              trigger: 'When an item is created or modified'
+            }
+          });
+        }
+      }
+
+      flowRuns = generated;
+      notify('Loaded 25 sample flow runs for this week.', 'info');
+      renderCalendar();
+    }
+
+    /* ─── 8. Flow Dropdown Population ───────────────────────── */
+    function populateFlowSelect() {
+      const select = document.getElementById('flow-filter-select');
+      select.innerHTML = '<option value="ALL">All Flows (' + flowsList.length + ')</option>';
+      for (const f of flowsList) {
+        const opt = document.createElement('option');
+        opt.value = f.workflowid;
+        opt.textContent = f.name;
+        select.appendChild(opt);
+      }
+    }
+
+    /* ─── 9. Calendar Rendering Engine ──────────────────────── */
+    function renderCalendar() {
+      const { start } = getWeekBounds(currentWeekStart);
+
+      // Update Date Range Display
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      const fmt = d => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      document.getElementById('date-range-display').textContent = `${fmt(start)} – ${fmt(end)}`;
+
+      // Filter runs based on: Status checkboxes + Flow select + Search query
+      const selectedFlow = document.getElementById('flow-filter-select').value;
+      const searchTxt    = document.getElementById('search-flow-input').value.trim().toLowerCase();
+
+      const counts = { Succeeded: 0, Failed: 0, Running: 0, Cancelled: 0, TimedOut: 0 };
+
+      // Calculate total counts for this week
+      flowRuns.forEach(r => {
+        if (counts[r.status] !== undefined) counts[r.status]++;
+      });
+
+      document.getElementById('count-succeeded').textContent = counts.Succeeded;
+      document.getElementById('count-failed').textContent    = counts.Failed;
+      document.getElementById('count-running').textContent   = counts.Running;
+      document.getElementById('count-cancelled').textContent = counts.Cancelled;
+      document.getElementById('count-timedout').textContent  = counts.TimedOut;
+
+      const filteredRuns = flowRuns.filter(r => {
+        if (!statusFilters[r.status]) return false;
+        if (selectedFlow !== 'ALL' && r.raw?._regardingobjectid_value !== selectedFlow) return false;
+        if (searchTxt && !r.name.toLowerCase().includes(searchTxt)) return false;
+        return true;
+      });
+
+      // Update Host Tab Title
+      setTitle(`Flow Calendar (${filteredRuns.length} runs)`);
+
+      // Empty State visibility
+      document.getElementById('empty-state').style.display = filteredRuns.length === 0 ? 'flex' : 'none';
+
+      // ── Render Day Header Row ──────────────────────────────
+      const headerRow = document.getElementById('days-header-row');
+      headerRow.innerHTML = '<div class="time-col-header">Time</div>';
+
+      const today = new Date();
+      const isSameDate = (d1, d2) =>
+        d1.getFullYear() === d2.getFullYear() &&
+        d1.getMonth() === d2.getMonth() &&
+        d1.getDate() === d2.getDate();
+
+      const dayDates = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(start);
+        d.setDate(d.getDate() + i);
+        dayDates.push(d);
+
+        const isToday = isSameDate(d, today);
+        const dayCell = document.createElement('div');
+        dayCell.className = `day-header-cell${isToday ? ' is-today' : ''}`;
+
+        const dayRunsCount = filteredRuns.filter(r => isSameDate(r.startTime, d)).length;
+
+        dayCell.innerHTML = `
+          <span class="day-name">${d.toLocaleDateString(undefined, { weekday: 'short' })}</span>
+          <span class="day-date">${d.getDate()}</span>
+          <span class="day-count">${dayRunsCount} runs</span>
+        `;
+        headerRow.appendChild(dayCell);
+      }
+
+      // ── Render Hourly Grid & Day Columns ───────────────────
+      const grid = document.getElementById('hourly-grid');
+      grid.innerHTML = '';
+
+      // Column 0: Hourly labels (00:00 to 23:00)
+      const labelCol = document.createElement('div');
+      labelCol.className = 'time-labels-col';
+      for (let h = 0; h < 24; h++) {
+        const cell = document.createElement('div');
+        cell.className = 'time-slot-label';
+        cell.textContent = `${String(h).padStart(2, '0')}:00`;
+        labelCol.appendChild(cell);
+      }
+      grid.appendChild(labelCol);
+
+      // Columns 1-7: Day columns
+      dayDates.forEach((colDate, dayIdx) => {
+        const col = document.createElement('div');
+        const isToday = isSameDate(colDate, today);
+        col.className = `day-column${isToday ? ' is-today' : ''}`;
+        col.dataset.dayIndex = dayIdx;
+
+        // 24 hour background slots
+        for (let h = 0; h < 24; h++) {
+          const hCell = document.createElement('div');
+          hCell.className = 'hour-cell';
+          col.appendChild(hCell);
+        }
+
+        // Place runs belonging to this day
+        const dayRuns = filteredRuns.filter(r => isSameDate(r.startTime, colDate));
+
+        dayRuns.forEach(run => {
+          const pill = createRunPill(run);
+          col.appendChild(pill);
+        });
+
+        grid.appendChild(col);
+      });
+
+      renderCurrentTimeIndicator();
+    }
+
+    function createRunPill(run) {
+      const el = document.createElement('div');
+      const statusClass = `status-${run.status.toLowerCase()}`;
+      el.className = `run-pill ${statusClass}`;
+
+      // Calculate position based on start time
+      const h = run.startTime.getHours();
+      const m = run.startTime.getMinutes();
+      const topPx = (h * 60) + m;
+
+      // Duration in minutes (min 28px height for readability)
+      let durationMin = 30;
+      if (run.endTime) {
+        durationMin = Math.max(25, Math.min(180, Math.round((run.endTime - run.startTime) / 60000)));
+      }
+
+      el.style.top = `${topPx}px`;
+      el.style.height = `${durationMin}px`;
+
+      const timeStr = run.startTime.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+      const durStr  = formatDuration(run.startTime, run.endTime);
+
+      const statusIcon = {
+        Succeeded: '✔',
+        Failed:    '✖',
+        Running:   '⚡',
+        Cancelled: '⊘',
+        TimedOut:  '⏳'
+      }[run.status] || '•';
+
+      el.innerHTML = `
+        <div class="run-pill-title" title="${esc(run.name)}">
+          <span>${statusIcon}</span>
+          <span>${esc(run.name)}</span>
+        </div>
+        <div class="run-pill-time">${timeStr} · ${durStr}</div>
+      `;
+
+      el.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        openRunModal(run);
+      });
+
+      return el;
+    }
+
+    function renderCurrentTimeIndicator() {
+      // Remove previous line
+      document.querySelectorAll('.current-time-line').forEach(e => e.remove());
+
+      const now = new Date();
+      const { start } = getWeekBounds(currentWeekStart);
+
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(start);
+        d.setDate(d.getDate() + i);
+        if (d.getFullYear() === now.getFullYear() &&
+            d.getMonth() === now.getMonth() &&
+            d.getDate() === now.getDate()) {
+
+          const targetCol = document.querySelector(`.day-column[data-day-index="${i}"]`);
+          if (targetCol) {
+            const line = document.createElement('div');
+            line.className = 'current-time-line';
+            const topPx = (now.getHours() * 60) + now.getMinutes();
+            line.style.top = `${topPx}px`;
+            targetCol.appendChild(line);
+
+            // Scroll near current time on initial load
+            const scrollArea = document.getElementById('grid-scroll-area');
+            if (scrollArea && !scrollArea.dataset.scrolled) {
+              scrollArea.scrollTop = Math.max(0, topPx - 180);
+              scrollArea.dataset.scrolled = '1';
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    /* ─── 10. Run Details Modal ─────────────────────────────── */
+    function openRunModal(run) {
+      document.getElementById('modal-flow-name').textContent = run.name;
+
+      const badge = document.getElementById('modal-status-badge');
+      badge.className = `status-badge status-${run.status.toLowerCase()}`;
+      badge.textContent = run.status;
+
+      document.getElementById('modal-run-id').textContent = run.id;
+      document.getElementById('modal-start-time').textContent = run.startTime.toLocaleString();
+      document.getElementById('modal-end-time').textContent = run.endTime ? run.endTime.toLocaleString() : 'Still running…';
+      document.getElementById('modal-duration').textContent = formatDuration(run.startTime, run.endTime);
+      document.getElementById('modal-trigger').textContent = run.raw?.trigger || 'Automated Trigger';
+
+      const errSec = document.getElementById('modal-error-section');
+      if (run.error) {
+        errSec.style.display = 'block';
+        document.getElementById('modal-error-text').textContent = typeof run.error === 'object' ? JSON.stringify(run.error, null, 2) : String(run.error);
+      } else {
+        errSec.style.display = 'none';
+      }
+
+      document.getElementById('modal-raw-json').textContent = JSON.stringify(run.raw, null, 2);
+
+      document.getElementById('detail-modal').classList.add('open');
+    }
+
+    function closeRunModal() {
+      document.getElementById('detail-modal').classList.remove('open');
+    }
+
+    /* ─── 11. Week Bounds & Date Helpers ────────────────────── */
+    function getMonday(d) {
+      const date = new Date(d);
+      const day  = date.getDay();
+      const diff = date.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+      date.setDate(diff);
+      date.setHours(0, 0, 0, 0);
+      return date;
+    }
+
+    function getWeekBounds(monday) {
+      const start = new Date(monday);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(monday);
+      end.setDate(end.getDate() + 7);
+      end.setHours(23, 59, 59, 999);
+      return { start, end };
+    }
+
+    function formatDuration(start, end) {
+      if (!end) return 'Running';
+      const sec = Math.round((end - start) / 1000);
+      if (sec < 60) return `${sec}s`;
+      const min = Math.floor(sec / 60);
+      const remSec = sec % 60;
+      if (min < 60) return `${min}m ${remSec}s`;
+      const hr = Math.floor(min / 60);
+      return `${hr}h ${min % 60}m`;
+    }
+
+    function esc(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function uid() {
+      return 'R' + Math.random().toString(36).slice(2, 9);
+    }
+
+    /* ─── 12. UI Event Listeners ────────────────────────────── */
+    // Week navigation
+    document.getElementById('btn-prev-week').addEventListener('click', () => {
+      currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+      if (!isSampleData && context) queryDataverseFlowRuns().then(renderCalendar);
+      else renderCalendar();
+    });
+
+    document.getElementById('btn-next-week').addEventListener('click', () => {
+      currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+      if (!isSampleData && context) queryDataverseFlowRuns().then(renderCalendar);
+      else renderCalendar();
+    });
+
+    document.getElementById('btn-today').addEventListener('click', () => {
+      currentWeekStart = getMonday(new Date());
+      if (!isSampleData && context) queryDataverseFlowRuns().then(renderCalendar);
+      else renderCalendar();
+    });
+
+    document.getElementById('btn-refresh').addEventListener('click', () => {
+      if (context) loadFlowsAndRuns();
+      else notify('Waiting for Dataverse context...', 'warning');
+    });
+
+    document.getElementById('btn-sample-toggle').addEventListener('click', () => {
+      if (!isSampleData) useSampleData();
+      else if (context) loadFlowsAndRuns();
+    });
+    document.getElementById('btn-load-sample-empty').addEventListener('click', useSampleData);
+
+    // Filters
+    document.getElementById('flow-filter-select').addEventListener('change', renderCalendar);
+    document.getElementById('search-flow-input').addEventListener('input', renderCalendar);
+
+    ['succeeded', 'failed', 'running', 'cancelled', 'timedout'].forEach(s => {
+      const cap = s.charAt(0).toUpperCase() + s.slice(1);
+      const chk = document.getElementById(`chk-${s}`);
+      const chip = document.getElementById(`chip-${s}`);
+
+      chk.addEventListener('change', () => {
+        statusFilters[cap] = chk.checked;
+        chip.classList.toggle('muted', !chk.checked);
+        toolStore('statusFilters', statusFilters);
+        renderCalendar();
+      });
+    });
+
+    // Inspector Drawer
+    const inspector = document.getElementById('inspector-panel');
+    document.getElementById('btn-toggle-inspector').addEventListener('click', () => {
+      inspector.classList.toggle('open');
+    });
+    document.getElementById('inspector-close-btn').addEventListener('click', () => {
+      inspector.classList.remove('open');
+    });
+
+    document.getElementById('btn-copy-headers').addEventListener('click', () => {
+      const text = Object.entries(lastTelemetry.headers).map(([k, v]) => `${k}: ${v}`).join('\n');
+      navigator.clipboard?.writeText(text).then(() => notify('Copied all headers to clipboard', 'success'));
+    });
+
+    // Modal
+    document.getElementById('modal-close-btn').addEventListener('click', closeRunModal);
+    document.getElementById('modal-ok-btn').addEventListener('click', closeRunModal);
+    document.getElementById('detail-modal').addEventListener('click', e => {
+      if (e.target === document.getElementById('detail-modal')) closeRunModal();
+    });
+    document.getElementById('modal-copy-id').addEventListener('click', () => {
+      const id = document.getElementById('modal-run-id').textContent;
+      navigator.clipboard?.writeText(id).then(() => notify('Copied Run ID to clipboard', 'success'));
+    });
+
+    // Escape key closes modals/drawer
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        closeRunModal();
+        inspector.classList.remove('open');
+      }
+    });
+
+    // Initial render before context arrives
+    renderCalendar();
+  </script>
+</body>
+</html>
