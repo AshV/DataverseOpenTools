@@ -239,6 +239,60 @@
       line-height: 1.2;
     }
 
+    .audit-filter-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ─── Audit Pre/Post Diff Styling ─── */
+    .diff-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      margin-top: 6px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .diff-table th {
+      background: var(--bg-alt);
+      border-bottom: 2px solid var(--border);
+      padding: 6px 10px;
+      text-align: left;
+      font-weight: 700;
+      color: var(--text-sec);
+    }
+    .diff-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border-subtle);
+      vertical-align: top;
+      word-break: break-all;
+    }
+    .diff-table tr:last-child td {
+      border-bottom: none;
+    }
+    .diff-col-name {
+      font-weight: 600;
+      color: var(--primary);
+      width: 28%;
+    }
+    .diff-old {
+      background: rgba(209, 52, 56, 0.08);
+      color: var(--sev-error-color);
+      width: 36%;
+    }
+    .diff-new {
+      background: rgba(16, 124, 16, 0.08);
+      color: var(--sev-success-color);
+      width: 36%;
+    }
+    .diff-empty {
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
     .badge-pill {
       display: inline-block;
       padding: 1px 6px;
@@ -609,6 +663,24 @@
         <button class="seg-btn" data-sev="warnings">🟡 Warnings (<span id="count-sev-warnings">0</span>)</button>
       </div>
 
+      <!-- Audit-Specific Operation & Table Filters -->
+      <div class="audit-filter-controls">
+        <select class="select-range" id="filter-audit-op" title="Filter audits by operation / action">
+          <option value="ALL">All Audit Actions</option>
+          <option value="1">Create</option>
+          <option value="2">Update</option>
+          <option value="3">Delete</option>
+          <option value="activate">Activate / Deactivate</option>
+          <option value="security">Security &amp; Permissions</option>
+          <option value="access">User Login / Access</option>
+          <option value="publish">Publish &amp; Solutions</option>
+        </select>
+
+        <select class="select-range" id="filter-audit-table" title="Filter audits by target table / entity">
+          <option value="ALL">All Audit Tables</option>
+        </select>
+      </div>
+
       <div class="spacer"></div>
 
       <!-- Category Filter Chips -->
@@ -735,6 +807,17 @@
           <pre class="code-block" id="md-trace-text"></pre>
         </div>
 
+        <!-- Pre/Post Audit Field Changes Diff Section -->
+        <div id="md-audit-diff-sec" style="display:none;margin-top:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <div class="detail-label" style="font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;">
+              <span>🔄</span> Pre &amp; Post Data Changes (Diff):
+            </div>
+            <span id="md-audit-diff-status" style="font-size:11px;color:var(--text-sec);font-family:monospace;"></span>
+          </div>
+          <div id="md-audit-diff-content"></div>
+        </div>
+
         <!-- Raw JSON -->
         <div>
           <div class="detail-label" style="margin-bottom:4px;">Raw Event Record:</div>
@@ -799,6 +882,13 @@
     let searchQuery = '';
     let sortColumn  = 'time';
     let sortAsc     = false; // newest first by default
+
+    // Audit-specific filters
+    let selectedAuditOp    = 'ALL';
+    let selectedAuditTable = 'ALL';
+
+    // In-memory window cache for zero-roundtrip sub-range zoom-ins
+    let cachedServerWindow = null;
 
     const catFilters = {
       audit:    true,
@@ -1062,15 +1152,28 @@
       };
     }
 
-    async function loadEnvironmentEvents() {
-      const spin = document.getElementById('spin-icon');
-      spin.style.animation = 'spin .7s linear infinite';
-      isSample = false;
-
+    async function loadEnvironmentEvents(forceServer = false) {
       const { from, to, fromIso, toIso } = getTimeWindow(activeRange);
       const winLabel = formatTimeWindowLabel(from, to);
       const winEl = document.getElementById('kpi-window');
       if (winEl) winEl.textContent = winLabel;
+
+      // In-memory containment check: if requested window is completely inside our cached server window,
+      // filter in memory without issuing 6 network queries.
+      const isContained = !forceServer && cachedServerWindow &&
+                          from.getTime() >= cachedServerWindow.from.getTime() &&
+                          to.getTime() <= cachedServerWindow.to.getTime() &&
+                          allEvents.length > 0;
+
+      if (isContained) {
+        renderTimeline();
+        notify(`⚡ Filtered from memory (${winLabel}) — zero network roundtrip`, 'info', 2500);
+        return;
+      }
+
+      const spin = document.getElementById('spin-icon');
+      spin.style.animation = 'spin .7s linear infinite';
+      isSample = false;
 
       const events = [];
 
@@ -1139,6 +1242,8 @@
         }
       }
 
+      cachedServerWindow = { from, to };
+
       if (uniqueEvents.length === 0) {
         notify(`0 events found (${winLabel}). Try expanding the time range or click "Sample Data".`, 'info', 5000);
       } else {
@@ -1146,6 +1251,7 @@
       }
 
       allEvents = uniqueEvents;
+      updateAuditTableOptions();
       renderTimeline();
     }
 
@@ -1155,6 +1261,210 @@
       11: 'Cascade', 12: 'Merge', 13: 'Assign', 14: 'Share', 16: 'Close',
       64: 'User Access via Web', 65: 'User Access via API', 116: 'Solution Import', 117: 'Publish'
     };
+
+    function matchesAuditOpFilter(ev, opFilter) {
+      if (!opFilter || opFilter === 'ALL') return true;
+      const act = Number(ev.rawAction);
+      if (opFilter === '1') return act === 1; // Create
+      if (opFilter === '2') return act === 2; // Update
+      if (opFilter === '3') return act === 3; // Delete
+      if (opFilter === 'activate') return act === 4 || act === 5; // Activate / Deactivate
+      if (opFilter === 'security') return act === 13 || act === 14 || act === 107 || act === 108; // Assign / Share
+      if (opFilter === 'access') return act === 64 || act === 65; // User Access (Web / API)
+      if (opFilter === 'publish') return act === 116 || act === 117 || act === 118; // Publish / Import
+      return String(act) === String(opFilter);
+    }
+
+    function updateAuditTableOptions() {
+      const select = document.getElementById('filter-audit-table');
+      if (!select) return;
+
+      const previousSelection = selectedAuditTable;
+      const tableCounts = {};
+      let totalAudits = 0;
+
+      allEvents.forEach(ev => {
+        if (ev.category === 'audit' && ev.entity && ev.entity !== '—') {
+          totalAudits++;
+          tableCounts[ev.entity] = (tableCounts[ev.entity] || 0) + 1;
+        }
+      });
+
+      select.innerHTML = `<option value="ALL">All Audit Tables (${totalAudits})</option>`;
+      const sortedTables = Object.keys(tableCounts).sort();
+      sortedTables.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = `${t} (${tableCounts[t]})`;
+        select.appendChild(opt);
+      });
+
+      if (sortedTables.includes(previousSelection)) {
+        select.value = previousSelection;
+        selectedAuditTable = previousSelection;
+      } else {
+        select.value = 'ALL';
+        selectedAuditTable = 'ALL';
+      }
+    }
+
+    /* ─── Field Extractor & Diff Renderer Helpers ───────────── */
+    function extractFieldMap(obj) {
+      if (!obj || typeof obj !== 'object') return { values: {}, formatted: {} };
+      const values = {};
+      const formatted = {};
+
+      if (Array.isArray(obj.Attributes)) {
+        for (const item of obj.Attributes) {
+          if (item && item.Key) {
+            values[item.Key] = item.Value;
+            if (item.FormattedValue !== undefined) {
+              formatted[item.Key] = item.FormattedValue;
+            }
+          }
+        }
+      } else {
+        const source = (obj.Attributes && typeof obj.Attributes === 'object' && !Array.isArray(obj.Attributes)) ? obj.Attributes : obj;
+        for (const [key, val] of Object.entries(source)) {
+          if (key === 'Attributes') continue;
+          if (key.startsWith('@odata.')) continue;
+          if (key.includes('@OData.Community.Display.V1.FormattedValue')) {
+            const attr = key.split('@')[0];
+            formatted[attr] = val;
+          } else {
+            values[key] = val;
+          }
+        }
+      }
+      return { values, formatted };
+    }
+
+    function formatValDisplay(val, formattedVal) {
+      if (val === null || val === undefined) {
+        return `<span class="diff-empty">(empty / null)</span>`;
+      }
+      if (formattedVal !== undefined && formattedVal !== null && formattedVal !== '') {
+        if (typeof val === 'object') {
+          return `<strong>${esc(formattedVal)}</strong>`;
+        }
+        return `<strong>${esc(formattedVal)}</strong> <span style="color:var(--text-muted);font-size:10px;">(${esc(val)})</span>`;
+      }
+      if (typeof val === 'boolean') {
+        return val ? '<code>true</code>' : '<code>false</code>';
+      }
+      if (typeof val === 'object') {
+        if (val.Name || val.LogicalName || val.Id) {
+          const name = val.Name ? `<strong>${esc(val.Name)}</strong> ` : '';
+          const type = val.LogicalName ? `<code>${esc(val.LogicalName)}</code> ` : '';
+          const id = val.Id ? `<span style="font-size:10px;color:var(--text-muted);">${esc(val.Id.slice(0, 8))}…</span>` : '';
+          return `${name}${type}${id}`.trim();
+        }
+        return `<pre style="margin:0;font-size:10px;max-height:80px;overflow:auto;">${esc(JSON.stringify(val, null, 2))}</pre>`;
+      }
+      return `<span>${esc(String(val))}</span>`;
+    }
+
+    function renderAuditDiffTable(detail, container, statusEl) {
+      if (statusEl) statusEl.textContent = '';
+      if (!detail) {
+        container.innerHTML = '<div style="font-size:11px;color:var(--text-sec);padding:6px;font-style:italic;">No diff details returned.</div>';
+        return;
+      }
+
+      const detailType = detail['@odata.type'] || '';
+
+      // 1. AttributeAuditDetail (Create / Update changes)
+      if (detailType.includes('AttributeAuditDetail') || detail.OldValue || detail.NewValue) {
+        const oldExt = extractFieldMap(detail.OldValue);
+        const newExt = extractFieldMap(detail.NewValue);
+
+        const allKeys = Array.from(new Set([...Object.keys(oldExt.values), ...Object.keys(newExt.values)])).sort();
+
+        if (allKeys.length === 0) {
+          container.innerHTML = '<div style="font-size:11px;color:var(--text-sec);padding:6px;font-style:italic;">No field-level attribute changes recorded in this audit record.</div>';
+          return;
+        }
+
+        let rowsHtml = '';
+        for (const key of allKeys) {
+          const oldVal = oldExt.values[key];
+          const oldFmt = oldExt.formatted[key];
+          const newVal = newExt.values[key];
+          const newFmt = newExt.formatted[key];
+
+          rowsHtml += `
+            <tr>
+              <td class="diff-col-name">${esc(key)}</td>
+              <td class="diff-old">${formatValDisplay(oldVal, oldFmt)}</td>
+              <td class="diff-new">${formatValDisplay(newVal, newFmt)}</td>
+            </tr>
+          `;
+        }
+
+        container.innerHTML = `
+          <table class="diff-table">
+            <thead>
+              <tr>
+                <th>Column / Attribute</th>
+                <th>Pre-Change (Old Value)</th>
+                <th>Post-Change (New Value)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        `;
+        return;
+      }
+
+      // 2. RelationshipAuditDetail (N:N associations or disassociations)
+      if (detailType.includes('RelationshipAuditDetail') || detail.RelationshipName) {
+        const relName = detail.RelationshipName || 'N:N Relationship';
+        const records = Array.isArray(detail.TargetRecords) ? detail.TargetRecords : [];
+        let recsHtml = '';
+        if (records.length === 0) {
+          recsHtml = '<span class="diff-empty">(None specified)</span>';
+        } else {
+          recsHtml = records.map(r => `<div><strong>${esc(r.Name || r.LogicalName || 'Record')}</strong> (<code>${esc(r.LogicalName || '—')}</code>: <code>${esc(r.Id || '—')}</code>)</div>`).join('');
+        }
+
+        container.innerHTML = `
+          <div style="font-size:11px;padding:8px;background:var(--bg-alt);border:1px solid var(--border);border-radius:4px;">
+            <div style="margin-bottom:6px;"><strong>Relationship Name:</strong> <code>${esc(relName)}</code></div>
+            <div><strong>Associated Target Records:</strong></div>
+            <div style="margin-top:4px;padding-left:8px;">${recsHtml}</div>
+          </div>
+        `;
+        return;
+      }
+
+      // 3. ShareAuditDetail (Permissions / Privileges)
+      if (detailType.includes('ShareAuditDetail') || detail.OldPrivileges || detail.NewPrivileges) {
+        container.innerHTML = `
+          <table class="diff-table">
+            <thead>
+              <tr>
+                <th>Security Aspect</th>
+                <th>Pre-Change (Old Privileges)</th>
+                <th>Post-Change (New Privileges)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="diff-col-name">Privileges</td>
+                <td class="diff-old">${esc(detail.OldPrivileges || '(none)')}</td>
+                <td class="diff-new">${esc(detail.NewPrivileges || '(none)')}</td>
+              </tr>
+            </tbody>
+          </table>
+        `;
+        return;
+      }
+
+      // 4. Fallback: Generic JSON
+      container.innerHTML = `<pre class="code-block">${esc(JSON.stringify(detail, null, 2))}</pre>`;
+    }
 
     const ASYNC_OP_TYPES = {
       1:  'System Event',
@@ -1193,6 +1503,9 @@
         duration: '—',
         error: null,
         traces: null,
+        rawAction: r.action,
+        rawOperation: r.operation,
+        auditDetail: null,
         raw: r
       };
     }
@@ -1379,10 +1692,30 @@
         {
           id: 's3', category: 'audit', categoryLabel: 'Audit', time: minsAgo(45),
           severity: 'info', severityLabel: 'Update',
-          title: 'Update on contact (emailaddress1 changed)',
+          title: 'Update on contact (emailaddress1 & telephone1 changed)',
           entity: 'contact', user: 'Ashish V.', duration: '—',
+          rawAction: 2, rawOperation: 2,
           error: null, traces: null,
-          raw: { action: 2, entity: 'contact', changedField: 'emailaddress1', old: 'john@old.com', new: 'john@new.com' }
+          auditDetail: {
+            "@odata.type": "#Microsoft.Dynamics.CRM.AttributeAuditDetail",
+            OldValue: {
+              emailaddress1: "john.doe@contoso-legacy.com",
+              telephone1: "+1 (555) 019-2831",
+              statuscode: 1,
+              "statuscode@OData.Community.Display.V1.FormattedValue": "Active",
+              preferredcontactmethodcode: 1,
+              "preferredcontactmethodcode@OData.Community.Display.V1.FormattedValue": "Any"
+            },
+            NewValue: {
+              emailaddress1: "john.doe@contoso.com",
+              telephone1: "+1 (555) 019-9999",
+              statuscode: 2,
+              "statuscode@OData.Community.Display.V1.FormattedValue": "Inactive",
+              preferredcontactmethodcode: 2,
+              "preferredcontactmethodcode@OData.Community.Display.V1.FormattedValue": "Email"
+            }
+          },
+          raw: { action: 2, operation: 2, entity: 'contact', changedField: 'emailaddress1', old: 'john.doe@contoso-legacy.com', new: 'john.doe@contoso.com' }
         },
         {
           id: 's4', category: 'solution', categoryLabel: 'Solution', time: minsAgo(70),
@@ -1397,7 +1730,19 @@
           severity: 'warn', severityLabel: 'Security',
           title: 'Security Role "System Administrator" Assigned',
           entity: 'systemuser', user: 'Global Admin', duration: '—',
+          rawAction: 14, rawOperation: 4,
           error: null, traces: null,
+          auditDetail: {
+            "@odata.type": "#Microsoft.Dynamics.CRM.RelationshipAuditDetail",
+            RelationshipName: "systemuserroles_association",
+            TargetRecords: [
+              {
+                Id: "e931b28c-4a3b-419b-9801-112233445566",
+                LogicalName: "role",
+                Name: "System Administrator"
+              }
+            ]
+          },
           raw: { action: 14, role: 'System Administrator', targetUser: 'service_dev_agent' }
         },
         {
@@ -1425,23 +1770,65 @@
           entity: 'contact', user: 'Sync', duration: '18ms',
           error: null, traces: '[PreValidateContact: Duplicate email check passed]',
           raw: { plugin: 'ContactValidator', durationMs: 18 }
+        },
+        {
+          id: 's9', category: 'audit', categoryLabel: 'Audit', time: minsAgo(320),
+          severity: 'info', severityLabel: 'Create',
+          title: 'Create on account (Fabrikam Inc)',
+          entity: 'account', user: 'Ashish V.', duration: '—',
+          rawAction: 1, rawOperation: 1,
+          error: null, traces: null,
+          auditDetail: {
+            "@odata.type": "#Microsoft.Dynamics.CRM.AttributeAuditDetail",
+            OldValue: {},
+            NewValue: {
+              name: "Fabrikam Inc",
+              revenue: 1500000,
+              "revenue@OData.Community.Display.V1.FormattedValue": "$1,500,000",
+              industrycode: 3,
+              "industrycode@OData.Community.Display.V1.FormattedValue": "Manufacturing"
+            }
+          },
+          raw: { action: 1, operation: 1, entity: 'account', recordId: '8f7a1122-3344-5566-7788-99aabbccddeeff' }
+        },
+        {
+          id: 's10', category: 'audit', categoryLabel: 'Audit', time: minsAgo(390),
+          severity: 'info', severityLabel: 'Delete',
+          title: 'Delete on opportunity (Q4 Enterprise Deal)',
+          entity: 'opportunity', user: 'Sales VP', duration: '—',
+          rawAction: 3, rawOperation: 3,
+          error: null, traces: null,
+          auditDetail: null,
+          raw: { action: 3, operation: 3, entity: 'opportunity', recordId: '11223344-5566-7788-9900-aabbccddeeff' }
         }
       ];
 
-      notify('Loaded 8 realistic sample events across all Dataverse log categories.', 'info');
+      updateAuditTableOptions();
+      notify('Loaded 10 realistic sample events across all Dataverse log categories.', 'info');
       renderTimeline();
     }
 
     /* ─── 9. Filtering, KPI & Timeline Rendering ────────────── */
     function getFilteredEvents() {
       const q = searchQuery.toLowerCase();
+      const { from, to } = getTimeWindow(activeRange);
+
       return allEvents.filter(ev => {
+        // Time window containment (for in-memory sub-range filtering)
+        if (ev.time < from || ev.time > to) return false;
+
         // Category filter
         if (!catFilters[ev.category]) return false;
 
         // Severity segment filter
         if (activeSev === 'errors' && ev.severity !== 'error') return false;
         if (activeSev === 'warnings' && ev.severity !== 'warn') return false;
+
+        // Audit-specific operation & table filters
+        if (ev.category === 'audit') {
+          if (!matchesAuditOpFilter(ev, selectedAuditOp)) return false;
+          if (selectedAuditTable !== 'ALL' && ev.entity !== selectedAuditTable) return false;
+        }
 
         // Search text
         if (q) {
@@ -1593,6 +1980,36 @@
       // Raw json
       document.getElementById('md-raw-json').textContent = JSON.stringify(ev.raw, null, 2);
 
+      // Pre/Post audit field changes diff section
+      const diffSec = document.getElementById('md-audit-diff-sec');
+      const diffStatus = document.getElementById('md-audit-diff-status');
+      const diffContent = document.getElementById('md-audit-diff-content');
+
+      if (ev.category === 'audit') {
+        diffSec.style.display = 'block';
+        if (ev.auditDetail) {
+          renderAuditDiffTable(ev.auditDetail, diffContent, diffStatus);
+        } else if (isSample || !context) {
+          diffStatus.textContent = '';
+          diffContent.innerHTML = '<div style="font-size:11px;color:var(--text-sec);padding:8px;font-style:italic;">No pre/post change details recorded for this sample item.</div>';
+        } else {
+          diffStatus.innerHTML = '<span style="color:var(--primary);">⏳ Loading diff from Dataverse...</span>';
+          diffContent.innerHTML = '';
+          dvFetchWithHeaders(`/audits(${ev.id})/Microsoft.Dynamics.CRM.RetrieveAuditDetails`)
+            .then(data => {
+              ev.auditDetail = data.AuditDetail || data;
+              renderAuditDiffTable(ev.auditDetail, diffContent, diffStatus);
+            })
+            .catch(err => {
+              diffStatus.textContent = '';
+              diffContent.innerHTML = `<div style="font-size:11px;color:var(--text-sec);padding:6px;background:var(--bg-alt);border-radius:4px;">No field-level diff recorded for this audit entry (${esc(err.message)}). Note: Delete operations and user access events do not carry attribute diffs.</div>`;
+            });
+        }
+      } else {
+        diffSec.style.display = 'none';
+        diffContent.innerHTML = '';
+      }
+
       document.getElementById('detail-modal').classList.add('open');
     }
 
@@ -1701,21 +2118,32 @@
       if (context) loadEnvironmentEvents();
     });
 
-    // Refresh button
+    // Refresh button (forces fresh server fetch)
     document.getElementById('btn-refresh').addEventListener('click', () => {
       if (activeRange !== 'custom') {
         syncDatetimeInputs(activeRange);
       }
-      if (context) loadEnvironmentEvents();
+      if (context) loadEnvironmentEvents(true);
       else notify('Waiting for Dataverse context…', 'warning');
     });
 
     document.getElementById('btn-sample-toggle').addEventListener('click', () => {
       if (!isSample) useSampleData();
-      else if (context) loadEnvironmentEvents();
+      else if (context) loadEnvironmentEvents(true);
     });
 
     document.getElementById('btn-export-csv').addEventListener('click', exportTimelineCsv);
+
+    // Audit-specific filters
+    document.getElementById('filter-audit-op').addEventListener('change', e => {
+      selectedAuditOp = e.target.value;
+      renderTimeline();
+    });
+
+    document.getElementById('filter-audit-table').addEventListener('change', e => {
+      selectedAuditTable = e.target.value;
+      renderTimeline();
+    });
 
     // Search input
     document.getElementById('search-input').addEventListener('input', e => {
