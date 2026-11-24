@@ -1109,10 +1109,15 @@
     function getFlowRunUrl(run) {
       if (!run) return null;
       const envId = getEnvironmentId();
-      const flowId = run.flowId || run.raw?._regardingobjectid_value || run.raw?.workflowid || run.raw?._workflowid_value;
-      const runId = run.runId || run.raw?.name || run.raw?.flowrunid || run.raw?.asyncoperationid || run.id;
+      const flowId = run.flowId || run.raw?._workflowid_value || run.raw?._regardingobjectid_value || run.raw?.workflowid;
+      let runId = run.runId;
 
-      if (flowId && runId && !String(runId).startsWith('sample_')) {
+      // Prevent using flow name as runId (which causes Power Automate redirection to flow root)
+      if (runId && (runId === run.name || (run.raw?.name && runId === run.raw.name && run.raw?.operationtype !== undefined))) {
+        runId = null;
+      }
+
+      if (flowId && runId && !String(runId).startsWith('sample_fallback')) {
         return `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows/${encodeURIComponent(flowId)}/runs/${encodeURIComponent(runId)}`;
       }
       if (flowId) {
@@ -1304,7 +1309,7 @@
       // Strategy 1: Attempt standard flowruns table (if enabled in modern environment)
       try {
         const runsData = await dvFetchWithHeaders(
-          `/flowruns?$filter=starttime ge ${startIso} and starttime le ${endIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage&$orderby=starttime desc&$top=200`
+          `/flowruns?$filter=starttime ge ${startIso} and starttime le ${endIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage,_workflowid_value&$orderby=starttime desc&$top=200`
         );
         if (runsData?.value) {
           flowRuns = runsData.value.map(r => normalizeRunRecord(r, 'flowrun'));
@@ -1348,11 +1353,16 @@
         else if (s.includes('cancel')) status = 'Cancelled';
         else if (s.includes('time')) status = 'TimedOut';
 
+        const flowId = r._workflowid_value || r.workflowid || null;
+        const flowMatch = flowId ? flowsList.find(f => f.workflowid && f.workflowid.toLowerCase() === flowId.toLowerCase()) : null;
+        const flowName = r['_workflowid_value@OData.Community.Display.V1.FormattedValue'] || flowMatch?.name || 'Cloud Flow';
+        const runId = r.name || r.flowrunid || null;
+
         return {
           id: r.flowrunid || uid(),
-          name: r.name || 'Automated Cloud Flow',
-          flowId: r._workflowid_value || r.workflowid || null,
-          runId: r.name || r.flowrunid || null,
+          name: flowName,
+          flowId,
+          runId,
           startTime: new Date(r.starttime),
           endTime: r.endtime ? new Date(r.endtime) : null,
           status,
@@ -1371,14 +1381,15 @@
       else if (sc === 30) status = 'Succeeded';
 
       // Match flow name from regarding object if available
-      const flowMatch = flowsList.find(f => f.workflowid === r._regardingobjectid_value);
+      const flowId = r._regardingobjectid_value || null;
+      const flowMatch = flowId ? flowsList.find(f => f.workflowid && f.workflowid.toLowerCase() === flowId.toLowerCase()) : null;
       const flowName = flowMatch?.name || r.name || 'Cloud Flow';
 
       return {
         id: r.asyncoperationid || uid(),
         name: flowName,
-        flowId: r._regardingobjectid_value || flowMatch?.workflowid || null,
-        runId: r.name || r.asyncoperationid || null,
+        flowId: flowId || flowMatch?.workflowid || null,
+        runId: null, // asyncoperations do not contain Logic App run IDs
         startTime: new Date(r.startedon || r.createdon),
         endTime: r.completedon ? new Date(r.completedon) : null,
         status,
@@ -1493,7 +1504,8 @@
 
       const filteredRuns = flowRuns.filter(r => {
         if (!statusFilters[r.status]) return false;
-        if (selectedFlow !== 'ALL' && r.raw?._regardingobjectid_value !== selectedFlow) return false;
+        const itemFlowId = r.flowId || r.raw?._workflowid_value || r.raw?._regardingobjectid_value;
+        if (selectedFlow !== 'ALL' && (!itemFlowId || itemFlowId.toLowerCase() !== selectedFlow.toLowerCase())) return false;
         if (searchTxt && !r.name.toLowerCase().includes(searchTxt)) return false;
         return true;
       });
@@ -1671,7 +1683,7 @@
       badge.className = `status-badge status-${run.status.toLowerCase()}`;
       badge.textContent = run.status;
 
-      document.getElementById('modal-run-id').textContent = run.id;
+      document.getElementById('modal-run-id').textContent = run.runId || run.id || '—';
       document.getElementById('modal-start-time').textContent = run.startTime.toLocaleString();
       document.getElementById('modal-end-time').textContent = run.endTime ? run.endTime.toLocaleString() : 'Still running…';
       document.getElementById('modal-duration').textContent = formatDuration(run.startTime, run.endTime);
@@ -1695,6 +1707,7 @@
           openBtn.href = flowRunUrl;
           openBtn.style.pointerEvents = 'auto';
           openBtn.style.opacity = '1';
+          openBtn.innerHTML = run.runId ? '<span>🚀 Open Flow Run Instance ↗</span>' : '<span>🚀 Open Flow Run History ↗</span>';
         } else {
           openBtn.href = '#';
           openBtn.style.pointerEvents = 'none';

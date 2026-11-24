@@ -1007,7 +1007,35 @@
       }
 
       ensureEnvironmentId().catch(() => {});
+      loadCloudFlowsMap().catch(() => {});
       await loadEnvironmentEvents();
+    }
+
+    /* ─── Cloud Flows Name Lookup Cache ─────────────────────── */
+    let cloudFlowsMap = {};
+    let cloudFlowsPromise = null;
+
+    async function loadCloudFlowsMap() {
+      if (Object.keys(cloudFlowsMap).length > 0) return cloudFlowsMap;
+      if (cloudFlowsPromise) return cloudFlowsPromise;
+
+      cloudFlowsPromise = (async () => {
+        try {
+          const data = await dvFetchWithHeaders(`/workflows?$filter=category eq 5&$select=workflowid,name&$orderby=name asc&$top=250`);
+          if (data?.value) {
+            data.value.forEach(wf => {
+              if (wf.workflowid && wf.name) {
+                cloudFlowsMap[wf.workflowid.toLowerCase()] = wf.name;
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('[EnvTimeline] Workflows query for flow name mapping:', e.message);
+        }
+        return cloudFlowsMap;
+      })();
+
+      return cloudFlowsPromise;
     }
 
     /* ─── 5. Dataverse Fetch with HTTP Headers Capture ──────── */
@@ -1203,6 +1231,9 @@
 
       const events = [];
 
+      // Ensure cloud flows mapping is ready for friendly flow names
+      await loadCloudFlowsMap().catch(() => {});
+
       // Query all sources in parallel with graceful failure and fallback per category
       await Promise.allSettled([
         // 1. Audits
@@ -1224,7 +1255,7 @@
           }).catch(e => console.warn('[EnvTimeline] AsyncOps query:', e.message)),
 
         // 4. Cloud Flow Runs (Modern elastic table flowruns)
-        dvFetchWithHeaders(`/flowruns?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage&$orderby=starttime desc&$top=100`)
+        dvFetchWithHeaders(`/flowruns?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage,_workflowid_value&$orderby=starttime desc&$top=100`)
           .then(data => {
             (data.value || []).forEach(r => events.push(normalizeFlowEvent(r)));
           }).catch(e => {
@@ -1566,10 +1597,15 @@
     function getFlowRunUrl(ev) {
       if (!ev || ev.category !== 'flow') return null;
       const envId = getEnvironmentId();
-      const flowId = ev.flowId || ev.raw?._regardingobjectid_value || ev.raw?.workflowid || ev.raw?._workflowid_value;
-      const runId = ev.runId || ev.raw?.name || ev.raw?.flowrunid || ev.raw?.asyncoperationid || ev.id;
+      const flowId = ev.flowId || ev.raw?._workflowid_value || ev.raw?._regardingobjectid_value || ev.raw?.workflowid;
+      let runId = ev.runId;
 
-      if (flowId && runId) {
+      // Prevent using flow display name or job title as runId (which causes Power Automate 404 / redirection)
+      if (runId && (runId === ev.title || runId === ev.name || (ev.raw?.name && runId === ev.raw.name && ev.raw?.operationtype !== undefined))) {
+        runId = null;
+      }
+
+      if (flowId && runId && !String(runId).startsWith('sample_fallback')) {
         return `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows/${encodeURIComponent(flowId)}/runs/${encodeURIComponent(runId)}`;
       }
       if (flowId) {
@@ -1635,6 +1671,9 @@
       const catKey = isFlow ? 'flow' : 'job';
       const catLbl = isFlow ? 'Flow' : 'System Job';
 
+      const flowId = isFlow ? (r._regardingobjectid_value || null) : null;
+      const flowName = isFlow ? (r.name || (flowId ? cloudFlowsMap[flowId.toLowerCase()] : null) || 'Cloud Flow') : null;
+
       return {
         id: r.asyncoperationid,
         category: catKey,
@@ -1642,14 +1681,14 @@
         time: new Date(r.startedon || r.createdon),
         severity,
         severityLabel: sevLabel,
-        title: r.name || (ASYNC_OP_TYPES[r.operationtype] || 'System Job'),
+        title: isFlow ? flowName : (r.name || (ASYNC_OP_TYPES[r.operationtype] || 'System Job')),
         entity: ASYNC_OP_TYPES[r.operationtype] || `Type ${r.operationtype || ''}`,
         user: r._ownerid_value ? r._ownerid_value.slice(0, 8) + '…' : 'SYSTEM',
         duration: formatTimeDiff(r.startedon || r.createdon, r.completedon),
         error: r.message || null,
         traces: null,
-        flowId: isFlow ? r._regardingobjectid_value : null,
-        runId: isFlow ? (r.name || r.asyncoperationid) : null,
+        flowId,
+        runId: null,
         raw: r
       };
     }
@@ -1662,21 +1701,27 @@
       else if (s.includes('run')) { severity = 'info'; sevLabel = 'Running'; }
       else if (s.includes('cancel')) { severity = 'warn'; sevLabel = 'Cancelled'; }
 
+      const flowId = r._workflowid_value || r.workflowid || null;
+      const flowName = r['_workflowid_value@OData.Community.Display.V1.FormattedValue'] ||
+                       (flowId ? cloudFlowsMap[flowId.toLowerCase()] : null) ||
+                       'Cloud Flow';
+      const runId = r.name || r.flowrunid || null;
+
       return {
-        id: r.flowrunid,
+        id: r.flowrunid || uid(),
         category: 'flow',
         categoryLabel: 'Flow',
         time: new Date(r.starttime),
         severity,
         severityLabel: sevLabel,
-        title: r.name || 'Cloud Flow Run',
+        title: flowName,
         entity: 'flowrun',
         user: 'Automated',
         duration: formatTimeDiff(r.starttime, r.endtime),
         error: r.errormessage ? (r.errorcode ? `[${r.errorcode}] ${r.errormessage}` : r.errormessage) : null,
         traces: null,
-        flowId: r._workflowid_value || r.workflowid || null,
-        runId: r.name || r.flowrunid,
+        flowId,
+        runId,
         raw: r
       };
     }
@@ -2125,8 +2170,8 @@
       const flowSec = document.getElementById('md-flow-nav-sec');
       if (ev.category === 'flow') {
         flowSec.style.display = 'block';
-        const flowId = ev.flowId || ev.raw?._regardingobjectid_value || ev.raw?.workflowid || ev.raw?._workflowid_value;
-        const runId  = ev.runId || ev.raw?.name || ev.raw?.flowrunid || ev.raw?.asyncoperationid || ev.id;
+        const flowId = ev.flowId || ev.raw?._workflowid_value || ev.raw?._regardingobjectid_value || ev.raw?.workflowid;
+        const runId  = ev.runId || (ev.entity === 'flowrun' ? ev.raw?.name : null);
         const flowRunUrl = getFlowRunUrl(ev);
 
         document.getElementById('md-flow-id-val').textContent = flowId || '—';
@@ -2137,6 +2182,7 @@
           openBtn.href = flowRunUrl;
           openBtn.style.pointerEvents = 'auto';
           openBtn.style.opacity = '1';
+          openBtn.textContent = runId ? '🚀 Open Flow Run Instance ↗' : '🚀 Open Flow Run History ↗';
         } else {
           openBtn.href = '#';
           openBtn.style.pointerEvents = 'none';
