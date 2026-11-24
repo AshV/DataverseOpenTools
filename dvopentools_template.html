@@ -89,6 +89,11 @@
     /* ─── Host communication setup ───────────────────────────── */
     const HOST_ORIGIN = window.location.origin;
     let context = null;
+    const _pendingApiRequests = new Map();
+
+    function uid() {
+      return 'R' + Math.random().toString(36).slice(2, 9);
+    }
 
     /**
      * Post a message to the host.
@@ -141,6 +146,19 @@
       if (type === 'TOOL_FOCUS') {
         // e.g. document.getElementById('search-input')?.focus();
       }
+
+      // API_RESPONSE received from host Security Gateway
+      if (type === 'API_RESPONSE' && payload?.reqId) {
+        const handler = _pendingApiRequests.get(payload.reqId);
+        if (handler) {
+          _pendingApiRequests.delete(payload.reqId);
+          if (payload.ok) {
+            handler.resolve(payload.data);
+          } else {
+            handler.reject(new Error(payload.error || `HTTP ${payload.status} ${payload.statusText}`));
+          }
+        }
+      }
     });
 
     /* ─── Called once context is available ───────────────────── */
@@ -154,10 +172,33 @@
 
     /* ─── Tool logic ──────────────────────────────────────────── */
 
-    // ── c) Make Dataverse API calls ────────────────────────────
-    //   Use context.environmentUrl and context.apiVersion.
-    //   The browser's session cookie handles auth automatically.
+    // ── c) Make Dataverse API calls via Host Security Gateway ───
+    //   Routes through host for audit logging and manual approval.
+    //   Falls back to direct fetch if running standalone.
     async function dvFetch(path, opts = {}) {
+      if (window.parent && window.parent !== window) {
+        const reqId = uid();
+        return new Promise((resolve, reject) => {
+          _pendingApiRequests.set(reqId, { resolve, reject });
+          toHost('API_REQUEST', {
+            reqId,
+            method: opts.method || 'GET',
+            path,
+            headers: opts.headers || {},
+            body: opts.body || null
+          });
+
+          // Timeout: 90s to give developer time to review & approve
+          setTimeout(() => {
+            if (_pendingApiRequests.has(reqId)) {
+              _pendingApiRequests.delete(reqId);
+              reject(new Error('Dataverse API request timed out waiting for gateway approval'));
+            }
+          }, 90000);
+        });
+      }
+
+      // Standalone direct fetch fallback
       const url = `${context.environmentUrl}/api/data/v${context.apiVersion}${path}`;
       const res = await fetch(url, {
         ...opts,

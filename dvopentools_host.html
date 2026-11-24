@@ -327,6 +327,69 @@
       padding: 14px 12px; color: rgba(255,255,255,0.4); font-size: 12px; }
     .sb-empty { padding: 12px; color: rgba(255,255,255,0.35); font-size: 12px; line-height: 1.6; }
     .sb-empty code { font-size: 11px; opacity: .8; }
+
+    /* ═══════════════════════════════════════════
+       NETWORK DRAWER & AUDIT CONSOLE
+    ═══════════════════════════════════════════ */
+    .network-drawer {
+      position: fixed; left: 0; right: 0; bottom: 22px;
+      height: 280px; background: var(--modal-bg);
+      border-top: 2px solid var(--accent);
+      box-shadow: 0 -4px 18px rgba(0,0,0,0.22);
+      display: flex; flex-direction: column;
+      z-index: 250; transform: translateY(100%);
+      transition: transform 0.22s cubic-bezier(0.1, 0.9, 0.2, 1);
+    }
+    .network-drawer.open { transform: translateY(0); }
+    .network-drawer-header {
+      padding: 6px 12px; background: var(--header-bg); color: #fff;
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 12px; flex-shrink: 0;
+    }
+    .net-title { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .net-badge { background: var(--accent); color: #fff; padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+    .net-select {
+      background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25);
+      color: #fff; border-radius: 4px; padding: 3px 6px; font-size: 11px;
+    }
+    .net-select option { background: var(--modal-bg); color: var(--text-primary); }
+    .btn-sm { padding: 3px 8px; font-size: 11px; }
+
+    .network-drawer-body { flex: 1; display: flex; overflow: hidden; }
+    .net-table-wrap { flex: 1; overflow: auto; min-width: 0; }
+    .net-table-wrap::-webkit-scrollbar { width: 6px; height: 6px; }
+    .net-table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .net-table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; }
+    .net-table th { position: sticky; top: 0; background: var(--tab-bar-bg); border-bottom: 1px solid var(--border); padding: 5px 8px; color: var(--text-secondary); white-space: nowrap; z-index: 2; }
+    .net-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; text-overflow: ellipsis; }
+    .net-table tr:hover td { background: rgba(0,120,212,0.06); cursor: pointer; }
+
+    .net-method { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: 700; font-family: monospace; }
+    .net-method.get { background: #dff6dd; color: #107c10; }
+    .net-method.post { background: #eff6fc; color: #0078d4; }
+    .net-method.patch { background: #fef3c7; color: #d97706; }
+    .net-method.delete { background: #fde7e9; color: #d13438; }
+
+    [data-theme="dark"] .net-method.get { background: #1c361e; color: #57b35e; }
+    [data-theme="dark"] .net-method.post { background: #102d4d; color: #4da3ff; }
+    [data-theme="dark"] .net-method.patch { background: #422d05; color: #fbbf24; }
+    [data-theme="dark"] .net-method.delete { background: #431c20; color: #f1707b; }
+
+    .net-status { font-weight: 600; font-family: monospace; }
+    .net-status.ok { color: #107c10; }
+    .net-status.err { color: #d13438; }
+    .net-status.rejected { color: #ca5010; font-weight: 700; }
+
+    .net-detail-pane {
+      width: 320px; border-left: 1px solid var(--border); background: var(--main-bg);
+      display: flex; flex-direction: column; overflow: hidden; font-size: 11px;
+    }
+    .net-detail-hdr { padding: 6px 10px; background: var(--tab-bar-bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .net-detail-content { flex: 1; overflow-y: auto; padding: 10px; }
+    .nd-row { margin-bottom: 6px; }
+    .nd-label { font-weight: 700; color: var(--text-secondary); margin-right: 6px; }
+    .nd-pre { background: var(--modal-bg); border: 1px solid var(--border); border-radius: 3px; padding: 6px; font-size: 10px; font-family: monospace; overflow: auto; max-height: 120px; white-space: pre-wrap; margin-top: 3px; user-select: text; }
   </style>
 </head>
 <body>
@@ -389,13 +452,108 @@
     <span id="st-conn">🟡 Connecting</span>
     <span class="s-sep">│</span>
     <span id="st-store" title="Storage backend">💾 —</span>
+    <span class="s-sep">│</span>
+    <span id="st-network" style="cursor:pointer;" title="Click to open Central Network Console">📡 0 API calls</span>
+    <span class="s-sep">│</span>
+    <span id="st-policy" style="cursor:pointer;" title="Current Security Gateway Policy">🛡️ Audit</span>
   </footer>
+
+  <!-- ══════════════ NETWORK ACTIVITY CONSOLE DRAWER ══════════════ -->
+  <aside class="network-drawer" id="network-drawer">
+    <div class="network-drawer-header">
+      <div class="net-title">
+        <span>📡</span> Central API Network Activity &amp; Audit Console
+        <span class="net-badge" id="net-count-badge">0 requests</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <select id="net-filter-tool" class="net-select">
+          <option value="ALL">All Tools</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" id="net-export-btn" title="Export audit trail as CSV">📥 Export CSV</button>
+        <button class="btn btn-secondary btn-sm" id="net-clear-btn" title="Clear recorded network logs">🗑 Clear</button>
+        <button class="hdr-btn" id="net-close-btn" title="Close console" style="font-size:14px;color:#fff;">✕</button>
+      </div>
+    </div>
+    <div class="network-drawer-body">
+      <div class="net-table-wrap">
+        <table class="net-table">
+          <thead>
+            <tr>
+              <th style="width:65px;">Time</th>
+              <th style="width:120px;">Tool</th>
+              <th style="width:65px;">Method</th>
+              <th>Endpoint / Path</th>
+              <th style="width:85px;">Status</th>
+              <th style="width:65px;">Latency</th>
+              <th style="width:75px;text-align:center;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="net-log-tbody">
+            <tr><td colspan="7" style="text-align:center;padding:25px;color:var(--text-secondary);">No API calls made by open tools yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Detail pane on right -->
+      <div class="net-detail-pane" id="net-detail-pane" style="display:none;">
+        <div class="net-detail-hdr">
+          <strong id="nd-title">Call Details</strong>
+          <button class="hdr-btn" id="nd-close-btn" style="color:var(--text-secondary);font-size:12px;">✕</button>
+        </div>
+        <div class="net-detail-content">
+          <div class="nd-row"><span class="nd-label">Endpoint:</span><code id="nd-url" style="word-break:break-all;"></code></div>
+          <div class="nd-row"><span class="nd-label">Status:</span><span id="nd-status"></span></div>
+          <div class="nd-row"><span class="nd-label">Latency:</span><span id="nd-latency"></span></div>
+          <div class="nd-row"><span class="nd-label">Policy:</span><span id="nd-policy"></span></div>
+          <div style="margin-top:8px;"><span class="nd-label">Response Headers:</span><pre id="nd-headers" class="nd-pre"></pre></div>
+          <div style="margin-top:8px;"><span class="nd-label">Request Body:</span><pre id="nd-body" class="nd-pre"></pre></div>
+        </div>
+      </div>
+    </div>
+  </aside>
 
   <!-- ══════════════ TOAST ══════════════ -->
   <div class="toast-wrap" id="toasts"></div>
 
   <!-- Hidden file input -->
   <input type="file" id="file-input" accept=".html" style="display:none">
+
+  <!-- ══════════════ APPROVAL MODAL (SECURITY GATEWAY) ══════════════ -->
+  <div class="overlay" id="approval-modal">
+    <div class="modal" style="width:500px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span style="font-size:22px;">🛡️</span>
+        <div>
+          <h2 style="font-size:15px;margin:0;">Dataverse API Approval Request</h2>
+          <span style="font-size:11px;color:var(--text-secondary);" id="appr-tool-name">Tool: —</span>
+        </div>
+      </div>
+
+      <div class="warn-box" style="margin-bottom:12px;font-size:12px;">
+        A tool is requesting to perform a Dataverse Web API call. Review the endpoint and payload below before approving.
+      </div>
+
+      <div style="background:var(--main-bg);border:1px solid var(--border);border-radius:4px;padding:10px;margin-bottom:14px;font-size:12px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span id="appr-method-badge" class="net-method post">POST</span>
+          <code id="appr-path" style="font-size:11px;word-break:break-all;color:var(--text-primary);">/api/data/v9.2/...</code>
+        </div>
+        <div id="appr-body-wrap" style="display:none;margin-top:8px;">
+          <span style="font-size:11px;font-weight:600;color:var(--text-secondary);">Request Payload Preview:</span>
+          <pre id="appr-body-preview" style="max-height:160px;overflow:auto;background:var(--modal-bg);border:1px solid var(--border);border-radius:3px;padding:6px;font-size:11px;font-family:monospace;margin-top:4px;white-space:pre-wrap;user-select:text;"></pre>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;">
+        <label style="font-size:11px;display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-secondary);">
+          <input type="checkbox" id="appr-always-chk"> Always allow for this tool in this session
+        </label>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary" id="appr-reject-btn" style="color:#d13438;">✕ Reject</button>
+          <button class="btn btn-primary" id="appr-approve-btn">✔ Approve</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- ══════════════ SETTINGS MODAL ══════════════ -->
   <div class="overlay" id="settings-modal">
@@ -413,6 +571,15 @@
           <option value="9.1">9.1</option>
           <option value="9.0">9.0</option>
         </select>
+      </div>
+      <div class="form-row">
+        <label>API Security Gateway Policy</label>
+        <select id="cfg-security">
+          <option value="AUDIT">🟢 Audit Only (Permissive — Auto-execute all calls)</option>
+          <option value="SAFE">🟡 Safe Mode (Recommended — Prompt to approve POST/PATCH/DELETE)</option>
+          <option value="STRICT">🔴 Zero Trust (Strict — Prompt to approve every API call)</option>
+        </select>
+        <div class="form-hint">Protects sensitive environments. Safe Mode pauses mutating operations for manual review before execution.</div>
       </div>
       <div class="form-row">
         <label>Max Open Tabs</label>
@@ -466,12 +633,15 @@
 
     /* ─── State ──────────────────────────────────────────────── */
     const S = {
-      cfg: { prefix: 'dvopentools_', apiVersion: '9.2', tabLimit: 5, theme: 'light' },
+      cfg: { prefix: 'dvopentools_', apiVersion: '9.2', tabLimit: 5, theme: 'light', securityPolicy: 'AUDIT' },
       tabs: [],         // [{tabId, toolId, name, icon, type:'wr'|'file', wrName?}]
       activeTabId: null,
       tools: [],        // discovered [{id, name, icon, category, description, version, wrName}]
       ctx: null,        // context broadcast to tools
       sidebarOpen: true,
+      networkLogs: [],
+      pendingApprovals: [],
+      alwaysAllowedTabs: new Set(),
     };
 
     /* ─── Tiered storage ─────────────────────────────────────────
@@ -562,6 +732,11 @@
       const storeLabels = { localStorage: '💾 Persistent', sessionStorage: '💾 Session', memory: '⚠️ No Storage' };
       document.getElementById('st-store').textContent = storeLabels[ls.type] || '—';
       document.getElementById('st-store').title       = `Storage: ${ls.type}`;
+
+      // Show policy
+      const polLabels = { AUDIT: '🛡️ Audit', SAFE: '🛡️ Safe Mode', STRICT: '🛡️ Zero Trust' };
+      document.getElementById('st-policy').textContent = polLabels[S.cfg.securityPolicy] || '🛡️ Audit';
+      document.getElementById('st-policy').title       = `Security Policy: ${S.cfg.securityPolicy} (click to change in settings)`;
     }
 
     /* ─── Tool discovery ─────────────────────────────────────── */
@@ -724,6 +899,7 @@
         bar.insertBefore(el, addBtn);
       }
       bar.querySelectorAll('.tab-close').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); closeTab(b.dataset.tid); }));
+      updateNetworkFilterDropdown();
     }
 
     function persistTabs() {
@@ -793,8 +969,315 @@
         case 'OPEN_TOOL':
           if (payload?.toolId) openTool(payload.toolId);
           break;
+        case 'API_REQUEST':
+          if (frame && tabId && payload) handleToolApiRequest(frame, tabId, payload);
+          break;
+        case 'API_LOG':
+          if (tabId && payload) handleToolApiLog(tabId, payload);
+          break;
       }
     });
+
+    /* ─── Security Gateway & API Audit Console ───────────────── */
+    async function handleToolApiRequest(frame, tabId, req) {
+      const { reqId, method = 'GET', path = '', headers = {}, body = null } = req;
+      const tab = S.tabs.find(t => t.tabId === tabId);
+      const toolName = tab?.name || 'Unknown Tool';
+      const toolIcon = tab?.icon || '🔧';
+      const methUpper = (method || 'GET').toUpperCase();
+
+      // Check if approval required
+      const isAlwaysAllowed = S.alwaysAllowedTabs.has(tabId);
+      let needsApproval = false;
+
+      if (!isAlwaysAllowed) {
+        if (S.cfg.securityPolicy === 'STRICT') {
+          needsApproval = true;
+        } else if (S.cfg.securityPolicy === 'SAFE' && methUpper !== 'GET' && methUpper !== 'HEAD') {
+          needsApproval = true;
+        }
+      }
+
+      if (needsApproval) {
+        const approved = await requestUserApproval({
+          reqId,
+          tabId,
+          toolName,
+          toolIcon,
+          method: methUpper,
+          path,
+          headers,
+          body
+        });
+
+        if (!approved) {
+          recordNetworkLog({
+            id: reqId,
+            tabId,
+            toolName,
+            toolIcon,
+            method: methUpper,
+            path,
+            url: dvUrl(path),
+            status: 403,
+            statusText: 'Rejected by Security Gateway',
+            latency: 0,
+            headers: {},
+            body,
+            policy: S.cfg.securityPolicy,
+            timestamp: new Date()
+          });
+
+          postToTool(frame, 'API_RESPONSE', {
+            reqId,
+            ok: false,
+            status: 403,
+            statusText: 'Forbidden (Approval Rejected)',
+            error: 'Dataverse API call was rejected by developer approval policy'
+          });
+          return;
+        }
+      }
+
+      // Execute request
+      const t0 = performance.now();
+      const url = dvUrl(path);
+
+      try {
+        const fetchOpts = {
+          method: methUpper,
+          headers: {
+            'OData-MaxVersion': '4.0',
+            'OData-Version':    '4.0',
+            'Accept':           'application/json',
+            'Content-Type':     'application/json',
+            ...headers
+          }
+        };
+        if (body && methUpper !== 'GET' && methUpper !== 'HEAD') {
+          fetchOpts.body = typeof body === 'string' ? body : JSON.stringify(body);
+        }
+
+        const res = await fetch(url, fetchOpts);
+        const latency = Math.round(performance.now() - t0);
+
+        const capturedHeaders = {};
+        res.headers.forEach((val, k) => { capturedHeaders[k.toLowerCase()] = val; });
+
+        let data = null;
+        const isCount = path.includes('/$count');
+        if (isCount) {
+          const text = await res.text();
+          data = parseInt(text.trim(), 10);
+        } else {
+          try { data = await res.json(); } catch { data = null; }
+        }
+
+        recordNetworkLog({
+          id: reqId,
+          tabId,
+          toolName,
+          toolIcon,
+          method: methUpper,
+          path,
+          url,
+          status: res.status,
+          statusText: res.statusText || 'OK',
+          latency,
+          headers: capturedHeaders,
+          body,
+          policy: S.cfg.securityPolicy,
+          timestamp: new Date()
+        });
+
+        postToTool(frame, 'API_RESPONSE', {
+          reqId,
+          ok: res.ok,
+          status: res.status,
+          statusText: res.statusText,
+          headers: capturedHeaders,
+          data,
+          error: res.ok ? null : (data?.error?.message || `${res.status} ${res.statusText}`)
+        });
+      } catch (err) {
+        const latency = Math.round(performance.now() - t0);
+        recordNetworkLog({
+          id: reqId,
+          tabId,
+          toolName,
+          toolIcon,
+          method: methUpper,
+          path,
+          url,
+          status: 0,
+          statusText: 'Network Error',
+          latency,
+          headers: {},
+          body,
+          policy: S.cfg.securityPolicy,
+          timestamp: new Date()
+        });
+
+        postToTool(frame, 'API_RESPONSE', {
+          reqId,
+          ok: false,
+          status: 0,
+          statusText: 'Network Error',
+          error: err.message
+        });
+      }
+    }
+
+    function handleToolApiLog(tabId, log) {
+      const tab = S.tabs.find(t => t.tabId === tabId);
+      recordNetworkLog({
+        id: uid(),
+        tabId,
+        toolName: tab?.name || 'Tool',
+        toolIcon: tab?.icon || '🔧',
+        method: (log.method || 'GET').toUpperCase(),
+        path: log.path || log.url || '',
+        url: log.url || dvUrl(log.path || ''),
+        status: log.status || 200,
+        statusText: log.statusText || 'OK',
+        latency: log.latency || 0,
+        headers: log.headers || {},
+        body: log.body || null,
+        policy: S.cfg.securityPolicy,
+        timestamp: new Date()
+      });
+    }
+
+    /* ─── Approval Queue & Modal ─────────────────────────────── */
+    function requestUserApproval(item) {
+      return new Promise(resolve => {
+        S.pendingApprovals.push({ ...item, resolve });
+        showNextApproval();
+      });
+    }
+
+    function showNextApproval() {
+      if (!S.pendingApprovals.length) {
+        document.getElementById('approval-modal').classList.remove('open');
+        return;
+      }
+      const curr = S.pendingApprovals[0];
+      document.getElementById('appr-tool-name').textContent = `Tool: ${curr.toolIcon} ${curr.toolName}`;
+      document.getElementById('appr-path').textContent = curr.path;
+
+      const mBadge = document.getElementById('appr-method-badge');
+      mBadge.className = `net-method ${curr.method.toLowerCase()}`;
+      mBadge.textContent = curr.method;
+
+      const bodyWrap = document.getElementById('appr-body-wrap');
+      const bodyPrev = document.getElementById('appr-body-preview');
+      if (curr.body) {
+        bodyWrap.style.display = 'block';
+        bodyPrev.textContent = typeof curr.body === 'string' ? curr.body : JSON.stringify(curr.body, null, 2);
+      } else {
+        bodyWrap.style.display = 'none';
+      }
+
+      document.getElementById('appr-always-chk').checked = false;
+      document.getElementById('approval-modal').classList.add('open');
+    }
+
+    /* ─── Network Log Storage & Rendering ────────────────────── */
+    function recordNetworkLog(entry) {
+      S.networkLogs.unshift(entry);
+      if (S.networkLogs.length > 500) S.networkLogs.pop();
+      renderNetworkLogs();
+    }
+
+    function renderNetworkLogs() {
+      const count = S.networkLogs.length;
+      document.getElementById('st-network').textContent = `📡 ${count} API calls`;
+      document.getElementById('net-count-badge').textContent = `${count} requests`;
+
+      const filterTool = document.getElementById('net-filter-tool').value;
+      const tbody = document.getElementById('net-log-tbody');
+
+      const filtered = S.networkLogs.filter(log => filterTool === 'ALL' || log.tabId === filterTool);
+
+      if (!filtered.length) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:25px;color:var(--text-secondary);">No API activity recorded matching filter.</td></tr>`;
+        return;
+      }
+
+      let html = '';
+      for (const log of filtered) {
+        const timeStr = log.timestamp.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        const isOk = log.status >= 200 && log.status < 300;
+        const isRej = log.status === 403 && String(log.statusText).includes('Rejected');
+        const statusClass = isOk ? 'ok' : isRej ? 'rejected' : 'err';
+        const statusLabel = isRej ? 'Rejected' : `${log.status} ${log.statusText}`;
+
+        html += `<tr data-logid="${esc(log.id)}">
+          <td>${timeStr}</td>
+          <td>${esc(log.toolIcon)} ${esc(log.toolName)}</td>
+          <td><span class="net-method ${log.method.toLowerCase()}">${log.method}</span></td>
+          <td title="${esc(log.path)}" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;"><code>${esc(log.path)}</code></td>
+          <td><span class="net-status ${statusClass}">${esc(statusLabel)}</span></td>
+          <td>${log.latency}ms</td>
+          <td style="text-align:center;">
+            <button class="btn btn-secondary btn-sm" onclick="viewLogDetail('${esc(log.id)}')">View</button>
+          </td>
+        </tr>`;
+      }
+      tbody.innerHTML = html;
+    }
+
+    window.viewLogDetail = function(logId) {
+      const log = S.networkLogs.find(l => l.id === logId);
+      if (!log) return;
+      const pane = document.getElementById('net-detail-pane');
+      pane.style.display = 'flex';
+      document.getElementById('nd-url').textContent = log.url || log.path;
+      document.getElementById('nd-status').textContent = `${log.status} ${log.statusText}`;
+      document.getElementById('nd-latency').textContent = `${log.latency} ms`;
+      document.getElementById('nd-policy').textContent = log.policy || '—';
+      document.getElementById('nd-headers').textContent = Object.keys(log.headers || {}).length ? JSON.stringify(log.headers, null, 2) : 'None';
+      document.getElementById('nd-body').textContent = log.body ? (typeof log.body === 'string' ? log.body : JSON.stringify(log.body, null, 2)) : 'None';
+    };
+
+    function updateNetworkFilterDropdown() {
+      const sel = document.getElementById('net-filter-tool');
+      if (!sel) return;
+      const curr = sel.value;
+      sel.innerHTML = '<option value="ALL">All Tools</option>';
+      for (const t of S.tabs) {
+        const opt = document.createElement('option');
+        opt.value = t.tabId;
+        opt.textContent = `${t.icon} ${t.name}`;
+        sel.appendChild(opt);
+      }
+      sel.value = curr || 'ALL';
+    }
+
+    function exportNetworkAuditCsv() {
+      if (!S.networkLogs.length) { toast('No API calls recorded to export.', 'warning'); return; }
+      const headers = ['Timestamp', 'Tool', 'Method', 'Endpoint', 'Status', 'LatencyMs', 'Policy'];
+      const rows = S.networkLogs.map(l => [
+        `"${l.timestamp.toISOString()}"`,
+        `"${l.toolName}"`,
+        l.method,
+        `"${l.path}"`,
+        l.status,
+        l.latency,
+        l.policy
+      ]);
+      const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dataverse_api_audit_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast(`Exported ${S.networkLogs.length} audit records to CSV.`, 'success');
+    }
 
     function updateTabTitle(tabId, title) {
       const tab = S.tabs.find(t => t.tabId === tabId);
@@ -844,10 +1327,11 @@
 
     /* ─── Settings ───────────────────────────────────────────── */
     function openSettings() {
-      document.getElementById('cfg-prefix').value = S.cfg.prefix;
-      document.getElementById('cfg-api').value    = S.cfg.apiVersion;
-      document.getElementById('cfg-tabs').value   = S.cfg.tabLimit;
-      document.getElementById('cfg-theme').value  = S.cfg.theme;
+      document.getElementById('cfg-prefix').value   = S.cfg.prefix;
+      document.getElementById('cfg-api').value      = S.cfg.apiVersion;
+      document.getElementById('cfg-tabs').value     = S.cfg.tabLimit;
+      document.getElementById('cfg-theme').value    = S.cfg.theme;
+      document.getElementById('cfg-security').value = S.cfg.securityPolicy || 'AUDIT';
       document.getElementById('settings-modal').classList.add('open');
     }
 
@@ -856,11 +1340,14 @@
       const api    = document.getElementById('cfg-api').value;
       const tabs   = Math.min(10, Math.max(1, parseInt(document.getElementById('cfg-tabs').value) || 5));
       const theme  = document.getElementById('cfg-theme').value;
+      const sec    = document.getElementById('cfg-security').value || 'AUDIT';
 
       const changed = prefix !== S.cfg.prefix || api !== S.cfg.apiVersion;
       S.cfg.prefix = prefix; S.cfg.apiVersion = api; S.cfg.tabLimit = tabs; S.cfg.theme = theme;
+      S.cfg.securityPolicy = sec;
       ls.set('cfg', S.cfg);
       applyTheme(theme);
+      setStatus(true);
       document.getElementById('settings-modal').classList.remove('open');
       toast('Settings saved.', 'success');
       if (changed) { ls.set(`cache::${prefix}`, null); discoverTools(true); }
@@ -886,6 +1373,42 @@
     document.getElementById('file-proceed').addEventListener('click', () => {
       document.getElementById('file-modal').classList.remove('open');
       document.getElementById('file-input').click();
+    });
+
+    // Network Console bindings
+    document.getElementById('st-network').addEventListener('click', () => {
+      document.getElementById('network-drawer').classList.toggle('open');
+    });
+    document.getElementById('st-policy').addEventListener('click', openSettings);
+    document.getElementById('net-close-btn').addEventListener('click', () => {
+      document.getElementById('network-drawer').classList.remove('open');
+    });
+    document.getElementById('net-clear-btn').addEventListener('click', () => {
+      S.networkLogs = [];
+      renderNetworkLogs();
+      toast('Network audit log cleared.', 'info');
+    });
+    document.getElementById('net-export-btn').addEventListener('click', exportNetworkAuditCsv);
+    document.getElementById('net-filter-tool').addEventListener('change', renderNetworkLogs);
+    document.getElementById('nd-close-btn').addEventListener('click', () => {
+      document.getElementById('net-detail-pane').style.display = 'none';
+    });
+
+    // Approval Modal bindings
+    document.getElementById('appr-approve-btn').addEventListener('click', () => {
+      if (!S.pendingApprovals.length) return;
+      const item = S.pendingApprovals.shift();
+      if (document.getElementById('appr-always-chk').checked) {
+        S.alwaysAllowedTabs.add(item.tabId);
+      }
+      item.resolve(true);
+      showNextApproval();
+    });
+    document.getElementById('appr-reject-btn').addEventListener('click', () => {
+      if (!S.pendingApprovals.length) return;
+      const item = S.pendingApprovals.shift();
+      item.resolve(false);
+      showNextApproval();
     });
 
     // Close overlay on backdrop click
@@ -947,6 +1470,8 @@
       } else {
         renderTabs();
       }
+      renderNetworkLogs();
+    }
     }
 
     init();

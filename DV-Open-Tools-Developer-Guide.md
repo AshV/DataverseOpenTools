@@ -217,6 +217,25 @@ Sent when the user switches to this tool's tab.
 Use it to re-focus an input, refresh time-sensitive data, resume an animation, etc.  
 Payload is empty `{}`.
 
+#### `API_RESPONSE`
+Sent back to the tool when a requested `API_REQUEST` has been executed (or rejected) by the host Security Gateway.
+
+```json
+{
+  "source": "dvopentools-host",
+  "type": "API_RESPONSE",
+  "payload": {
+    "reqId":      "R_x7k92a",
+    "ok":         true,
+    "status":     200,
+    "statusText": "OK",
+    "headers":    { "odata-version": "4.0", "preference-applied": "..." },
+    "data":       { "value": [...] },
+    "error":      null
+  }
+}
+```
+
 ---
 
 ### 6.2 Messages FROM the Tool TO the Host
@@ -296,6 +315,41 @@ Ask the host to open another tool by its manifest `id`. Useful for cross-tool de
 }
 ```
 
+#### `API_REQUEST` (Security Gateway Execution)
+Delegate a Dataverse API call to the host. In **Safe Mode** or **Zero Trust**, the host pauses and prompts the user for manual approval with a payload preview before executing the call.
+
+```json
+{
+  "source": "dvopentools-tool",
+  "type": "API_REQUEST",
+  "payload": {
+    "reqId":   "R_x7k92a",
+    "method":  "POST",
+    "path":    "/RetrieveTotalRecordCount",
+    "headers": { "Prefer": "odata.include-annotations=\"*\"" },
+    "body":    { "EntityNames": ["account", "contact"] }
+  }
+}
+```
+
+#### `API_LOG` (Direct Audit Log)
+Report an API call to the host Central Network Console and Audit Log. Used when a tool performs fetch directly but wants full audit visibility in the host console.
+
+```json
+{
+  "source": "dvopentools-tool",
+  "type": "API_LOG",
+  "payload": {
+    "method":     "GET",
+    "path":       "/accounts?$top=10",
+    "status":     200,
+    "statusText": "OK",
+    "latency":    45,
+    "headers":    { "x-ms-request-id": "..." }
+  }
+}
+```
+
 ---
 
 ## 7. Context Object Reference
@@ -317,7 +371,17 @@ The `context` object (from `CONTEXT_INIT`) contains:
 
 ---
 
-## 8. Calling the Dataverse API
+## 8. Calling the Dataverse API & Security Gateway
+
+### Enterprise Security Gateway & Approval Policies
+
+To protect sensitive environments (Production, UAT, regulated orgs), the host provides an **API Security Gateway** with three configurable policies:
+
+| Policy Mode | Behavior | Recommended Environment |
+|---|---|---|
+| 🟢 **Audit Only (Permissive)** | All API calls execute immediately. Every call is logged with endpoint, status, latency, and headers in the Central Network Console. | Dev / Sandbox |
+| 🟡 **Safe Mode (Prompt on Mutations)** *(Default)* | Read queries (`GET`) execute automatically. Any mutating call (`POST`, `PATCH`, `DELETE`) pauses and prompts the user for manual approval with a payload preview. | UAT / Staging |
+| 🔴 **Zero Trust (Strict)** | **Every single API call** (even `GET`) pauses and requires explicit manual approval before execution. | Production |
 
 ### Standard Headers
 
@@ -332,21 +396,74 @@ const REQUIRED_HEADERS = {
 };
 ```
 
-### Recommended `dvFetch` Helper
+### Recommended Gateway-Aware `dvFetch` Helper
 
-Copy this into every tool:
+This helper automatically routes requests through the host's Security Gateway via `postMessage: API_REQUEST`, supporting audit logging and manual approval, with graceful fallback to direct `window.fetch` if running standalone:
 
 ```javascript
-async function dvFetch(path, options = {}) {
+// Pending gateway requests map
+const _pendingApiRequests = new Map();
+
+function uid() {
+  return 'R' + Math.random().toString(36).slice(2, 9);
+}
+
+// In your message event listener:
+window.addEventListener('message', e => {
+  if (e.origin !== HOST_ORIGIN) return;
+  if (e.data?.source !== 'dvopentools-host') return;
+
+  const { type, payload } = e.data;
+  if (type === 'API_RESPONSE' && payload?.reqId) {
+    const handler = _pendingApiRequests.get(payload.reqId);
+    if (handler) {
+      _pendingApiRequests.delete(payload.reqId);
+      if (payload.ok) {
+        handler.resolve(payload.data);
+      } else {
+        handler.reject(new Error(payload.error || `HTTP ${payload.status} ${payload.statusText}`));
+      }
+    }
+  }
+});
+
+/**
+ * Execute Dataverse API call through the Host Security Gateway
+ */
+async function dvFetch(path, opts = {}) {
+  // If running inside host with gateway support
+  if (window.parent && window.parent !== window) {
+    const reqId = uid();
+    return new Promise((resolve, reject) => {
+      _pendingApiRequests.set(reqId, { resolve, reject });
+      toHost('API_REQUEST', {
+        reqId,
+        method: opts.method || 'GET',
+        path,
+        headers: opts.headers || {},
+        body: opts.body || null
+      });
+
+      // 90s safety timeout to give developer time to review & approve
+      setTimeout(() => {
+        if (_pendingApiRequests.has(reqId)) {
+          _pendingApiRequests.delete(reqId);
+          reject(new Error('Dataverse API request timed out waiting for gateway approval'));
+        }
+      }, 90000);
+    });
+  }
+
+  // Standalone direct fetch fallback
   const url = `${context.environmentUrl}/api/data/v${context.apiVersion}${path}`;
   const res = await fetch(url, {
-    ...options,
+    ...opts,
     headers: {
       'OData-MaxVersion': '4.0',
       'OData-Version':    '4.0',
       'Accept':           'application/json',
       'Content-Type':     'application/json',
-      ...options.headers,     // caller can add/override
+      ...opts.headers,
     },
   });
   if (!res.ok) {

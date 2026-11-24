@@ -1097,6 +1097,18 @@
       };
       updateTelemetryUI();
 
+      // Log to host Central Network Console & Security Gateway
+      toHost('API_LOG', {
+        method: opts.method || 'GET',
+        path,
+        url,
+        status: res.status,
+        statusText: res.statusText || 'OK',
+        latency,
+        headers: capturedHeaders,
+        body: opts.body || null
+      });
+
       if (!res.ok) {
         const msg = json?.error?.message || `${res.status} ${res.statusText}`;
         throw new Error(msg);
