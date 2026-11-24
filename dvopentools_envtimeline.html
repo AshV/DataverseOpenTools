@@ -196,6 +196,49 @@
     }
     .search-input { width: 220px; }
 
+    /* ─── Granular Time Selection Controls ─── */
+    .time-control-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 2px 6px;
+      flex-wrap: wrap;
+    }
+    .dt-range-picker {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .dt-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+      display: inline-flex;
+      align-items: center;
+    }
+    .dt-input {
+      padding: 3px 6px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-card);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 11px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .dt-input:focus {
+      border-color: var(--primary);
+    }
+    .btn.btn-sm {
+      padding: 3px 8px;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
     .badge-pill {
       display: inline-block;
       padding: 1px 6px;
@@ -508,14 +551,32 @@
         <span>🕒</span> Environment Timeline
       </div>
 
-      <!-- Time range presets (Default: Last 24 Hours) -->
-      <select class="select-range" id="time-range-select">
-        <option value="1h">Last 1 Hour</option>
-        <option value="4h">Last 4 Hours</option>
-        <option value="24h" selected>Last 24 Hours (Default)</option>
-        <option value="3d">Last 3 Days</option>
-        <option value="7d">Last 7 Days</option>
-      </select>
+      <!-- Granular Time Range Selector -->
+      <div class="time-control-group">
+        <select class="select-range" id="time-range-select" title="Preset Time Window">
+          <option value="15m">Last 15m</option>
+          <option value="1h">Last 1 Hour</option>
+          <option value="4h">Last 4 Hours</option>
+          <option value="12h">Last 12 Hours</option>
+          <option value="24h" selected>Last 24 Hours</option>
+          <option value="today">Today</option>
+          <option value="yesterday">Yesterday</option>
+          <option value="3d">Last 3 Days</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="custom">Custom Range…</option>
+        </select>
+
+        <div class="dt-range-picker">
+          <label class="dt-label" for="dt-from">From:
+            <input type="datetime-local" class="dt-input" id="dt-from" title="Start date & time (local)">
+          </label>
+          <label class="dt-label" for="dt-to">To:
+            <input type="datetime-local" class="dt-input" id="dt-to" title="End date & time (local)">
+          </label>
+          <button class="btn btn-sm primary" id="btn-apply-range" title="Query Dataverse for this custom window">Apply</button>
+          <button class="btn btn-sm" id="btn-set-now" title="Set 'To' time to current time">⏱️ Now</button>
+        </div>
+      </div>
 
       <button class="btn" id="btn-refresh" title="Reload event logs from Dataverse">
         <span id="spin-icon">↻</span> Refresh
@@ -582,6 +643,11 @@
 
   <!-- ══════════════ KPI METRICS RIBBON ══════════════ -->
   <div class="kpi-ribbon">
+    <div class="kpi-item">
+      <span class="kpi-icon">🕒</span>
+      <span class="kpi-label">Active Window:</span>
+      <span class="kpi-val" id="kpi-window" style="font-size:11px;font-family:monospace;">—</span>
+    </div>
     <div class="kpi-item">
       <span class="kpi-icon">📊</span>
       <span class="kpi-label">Total Events:</span>
@@ -807,9 +873,22 @@
 
       // Restore saved filters
       const savedRange = toolStore('range');
+      const savedFrom  = toolStore('customFrom');
+      const savedTo    = toolStore('customTo');
+
       if (savedRange) {
         activeRange = savedRange;
         document.getElementById('time-range-select').value = savedRange;
+      }
+      if (savedFrom) {
+        document.getElementById('dt-from').value = toDatetimeLocalValue(new Date(savedFrom));
+      }
+      if (savedTo) {
+        document.getElementById('dt-to').value = toDatetimeLocalValue(new Date(savedTo));
+      }
+
+      if (activeRange !== 'custom' || !savedFrom || !savedTo) {
+        syncDatetimeInputs(activeRange);
       }
 
       await loadEnvironmentEvents();
@@ -890,19 +969,97 @@
     }
 
     /* ─── 6. Multi-Source Log Gathering Engine ──────────────── */
+    function toDatetimeLocalValue(date) {
+      if (!date || isNaN(date.getTime())) date = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const yr  = date.getFullYear();
+      const mo  = pad(date.getMonth() + 1);
+      const da  = pad(date.getDate());
+      const hr  = pad(date.getHours());
+      const mi  = pad(date.getMinutes());
+      return `${yr}-${mo}-${da}T${hr}:${mi}`;
+    }
+
+    function syncDatetimeInputs(rangeKey) {
+      const { from, to } = getTimeWindow(rangeKey);
+      const fromEl = document.getElementById('dt-from');
+      const toEl   = document.getElementById('dt-to');
+      if (fromEl) fromEl.value = toDatetimeLocalValue(from);
+      if (toEl)   toEl.value   = toDatetimeLocalValue(to);
+    }
+
+    function formatTimeWindowLabel(from, to) {
+      const pad = n => String(n).padStart(2, '0');
+      const fMo = from.toLocaleString('default', { month: 'short' });
+      const tMo = to.toLocaleString('default', { month: 'short' });
+      const fStr = `${from.getDate()} ${fMo} ${pad(from.getHours())}:${pad(from.getMinutes())}`;
+      const tStr = `${to.getDate()} ${tMo} ${pad(to.getHours())}:${pad(to.getMinutes())}`;
+      const diffSec = Math.max(0, Math.round((to.getTime() - from.getTime()) / 1000));
+      let dur = '';
+      if (diffSec < 3600) dur = `${Math.round(diffSec / 60)}m`;
+      else if (diffSec < 86400) dur = `${(diffSec / 3600).toFixed(1)}h`;
+      else dur = `${(diffSec / 86400).toFixed(1)}d`;
+      return `${fStr} → ${tStr} (${dur})`;
+    }
+
     function getTimeWindow(rangeKey) {
       const now = new Date();
       let from = new Date(now);
+      let to   = new Date(now);
 
       switch (rangeKey) {
-        case '1h':  from.setHours(from.getHours() - 1); break;
-        case '4h':  from.setHours(from.getHours() - 4); break;
-        case '24h': from.setHours(from.getHours() - 24); break;
-        case '3d':  from.setDate(from.getDate() - 3); break;
-        case '7d':  from.setDate(from.getDate() - 7); break;
-        default:    from.setHours(from.getHours() - 24); break;
+        case '15m':
+          from.setMinutes(from.getMinutes() - 15);
+          break;
+        case '1h':
+          from.setHours(from.getHours() - 1);
+          break;
+        case '4h':
+          from.setHours(from.getHours() - 4);
+          break;
+        case '12h':
+          from.setHours(from.getHours() - 12);
+          break;
+        case '24h':
+          from.setHours(from.getHours() - 24);
+          break;
+        case 'today':
+          from.setHours(0, 0, 0, 0);
+          break;
+        case 'yesterday':
+          from.setDate(from.getDate() - 1);
+          from.setHours(0, 0, 0, 0);
+          to.setDate(to.getDate() - 1);
+          to.setHours(23, 59, 59, 999);
+          break;
+        case '3d':
+          from.setDate(from.getDate() - 3);
+          break;
+        case '7d':
+          from.setDate(from.getDate() - 7);
+          break;
+        case 'custom':
+          const fromInput = document.getElementById('dt-from')?.value;
+          const toInput   = document.getElementById('dt-to')?.value;
+          if (fromInput) from = new Date(fromInput);
+          else from.setHours(from.getHours() - 24);
+          if (toInput) to = new Date(toInput);
+          break;
+        default:
+          from.setHours(from.getHours() - 24);
+          break;
       }
-      return { fromIso: from.toISOString(), toIso: now.toISOString() };
+
+      if (from.getTime() > to.getTime()) {
+        const tmp = from; from = to; to = tmp;
+      }
+
+      return {
+        from,
+        to,
+        fromIso: from.toISOString(),
+        toIso: to.toISOString()
+      };
     }
 
     async function loadEnvironmentEvents() {
@@ -910,7 +1067,11 @@
       spin.style.animation = 'spin .7s linear infinite';
       isSample = false;
 
-      const { fromIso, toIso } = getTimeWindow(activeRange);
+      const { from, to, fromIso, toIso } = getTimeWindow(activeRange);
+      const winLabel = formatTimeWindowLabel(from, to);
+      const winEl = document.getElementById('kpi-window');
+      if (winEl) winEl.textContent = winLabel;
+
       const events = [];
 
       // Query all sources in parallel with graceful failure and fallback per category
@@ -979,9 +1140,9 @@
       }
 
       if (uniqueEvents.length === 0) {
-        notify('0 events found for the last 24h. You can click "Sample Data" to preview.', 'info', 5000);
+        notify(`0 events found (${winLabel}). Try expanding the time range or click "Sample Data".`, 'info', 5000);
       } else {
-        notify(`Loaded ${uniqueEvents.length} environment events across Dataverse`, 'success');
+        notify(`Loaded ${uniqueEvents.length} environment events (${winLabel})`, 'success');
       }
 
       allEvents = uniqueEvents;
@@ -1487,14 +1648,64 @@
     }
 
     /* ─── 12. UI Event Bindings ─────────────────────────────── */
-    // Time Range selector
+    // Time Range selector presets
     document.getElementById('time-range-select').addEventListener('change', e => {
       activeRange = e.target.value;
       toolStore('range', activeRange);
+      if (activeRange !== 'custom') {
+        syncDatetimeInputs(activeRange);
+      }
       if (context) loadEnvironmentEvents();
     });
 
+    // Custom date inputs
+    ['dt-from', 'dt-to'].forEach(id => {
+      const el = document.getElementById(id);
+      el.addEventListener('change', () => {
+        activeRange = 'custom';
+        document.getElementById('time-range-select').value = 'custom';
+      });
+      el.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          document.getElementById('btn-apply-range').click();
+        }
+      });
+    });
+
+    // Apply custom range button
+    document.getElementById('btn-apply-range').addEventListener('click', () => {
+      const fromVal = document.getElementById('dt-from').value;
+      const toVal   = document.getElementById('dt-to').value;
+      if (!fromVal || !toVal) {
+        notify('Please specify both From and To dates', 'warn');
+        return;
+      }
+      activeRange = 'custom';
+      document.getElementById('time-range-select').value = 'custom';
+      toolStore('range', 'custom');
+      toolStore('customFrom', new Date(fromVal).toISOString());
+      toolStore('customTo', new Date(toVal).toISOString());
+      if (context) loadEnvironmentEvents();
+    });
+
+    // "Now" button: sets To to current time
+    document.getElementById('btn-set-now').addEventListener('click', () => {
+      const now = new Date();
+      document.getElementById('dt-to').value = toDatetimeLocalValue(now);
+      const fromVal = document.getElementById('dt-from').value;
+      activeRange = 'custom';
+      document.getElementById('time-range-select').value = 'custom';
+      toolStore('range', 'custom');
+      if (fromVal) toolStore('customFrom', new Date(fromVal).toISOString());
+      toolStore('customTo', now.toISOString());
+      if (context) loadEnvironmentEvents();
+    });
+
+    // Refresh button
     document.getElementById('btn-refresh').addEventListener('click', () => {
+      if (activeRange !== 'custom') {
+        syncDatetimeInputs(activeRange);
+      }
       if (context) loadEnvironmentEvents();
       else notify('Waiting for Dataverse context…', 'warning');
     });
