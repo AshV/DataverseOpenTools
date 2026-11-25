@@ -1150,3 +1150,19 @@ Add `class="dv-app"` on `<body>` to activate the host's full design system:
 | `DV.ui.empty / error / badge` | Ready-to-render HTML fragments for empty states, error banners, and badges. |
 
 *(See `dvopentools_template.html` for the minimal `<body class="dv-app">` starter.)*
+
+---
+
+## 16. Local Development Server (`dev-server.js`)
+
+To develop and test tools locally against a live Dataverse environment **without** pasting Bearer tokens into the browser or hitting CORS errors, run the zero-dependency local Node.js proxy:
+
+```bash
+node dev-server.js --env https://yourorg.crm.dynamics.com
+```
+
+Then open **http://127.0.0.1:8787/dvopentools_host.html**:
+- Serves all local `dvopentools_*.html` files straight from disk (`/WebResources/*`) with no upload step and no browser caching.
+- Merges un-uploaded local tools into `/api/data/*/webresourceset` discovery automatically.
+- Acquires and caches OAuth Bearer tokens **strictly server-side** via `pac auth token` or `az account get-access-token` (`DV_TOKEN` env var optional) — tokens never touch browser JS or storage.
+- Uses same-origin `http://127.0.0.1:8787` requests in the browser (zero CORS, zero Mixed Content).
