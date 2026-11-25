@@ -484,6 +484,7 @@
     <button class="hdr-btn" id="sidebar-toggle" title="Toggle Sidebar  Ctrl+B">☰</button>
     <div class="header-logo">⚡ DV <em>Open</em> Tools</div>
     <button class="hdr-pill-btn" id="cmd-palette-btn" title="Quick Open Tools &amp; Commands  Ctrl+K">🔍 Quick Open <kbd>Ctrl+K</kbd></button>
+    <button class="hdr-pill-btn" id="ext-conn-btn" style="display:none;background:rgba(255,165,0,0.22);border-color:rgba(255,165,0,0.5);" title="Configure External Dataverse URL &amp; Bearer Token">🔌 Connect Env</button>
     <div class="hdr-sep"></div>
     <div class="header-meta">
       <span class="env" id="hdr-env">Connecting…</span>
@@ -523,8 +524,11 @@
         <div class="empty" id="empty-state">
           <div class="e-icon">⚡</div>
           <h2>DV Open Tools</h2>
-          <p>Select a tool from the sidebar, or load a local <strong>.html</strong> tool file.</p>
-          <button class="btn btn-secondary e-btn" id="empty-load-btn">📂 Load from File</button>
+          <p id="empty-desc">Select a tool from the sidebar, or load a local <strong>.html</strong> tool file.</p>
+          <div style="display:flex;gap:10px;pointer-events:auto;">
+            <button class="btn btn-primary e-btn" id="empty-conn-btn" style="display:none;">🔌 Connect Dataverse Env</button>
+            <button class="btn btn-secondary e-btn" id="empty-load-btn">📂 Load from File</button>
+          </div>
         </div>
       </div>
     </main>
@@ -533,13 +537,15 @@
 
   <!-- ══════════════ STATUS BAR ══════════════ -->
   <footer class="status-bar">
-    <span>⚡ DV Open Tools v2025.11.0</span>
+    <span>⚡ DV Open Tools v2025.11.1</span>
+    <span class="s-sep">│</span>
+    <span id="st-mode" title="Detected host environment">—</span>
     <span class="s-sep">│</span>
     <span id="st-api">API v9.2</span>
     <span class="s-sep">│</span>
     <span id="st-env" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="Dataverse Host">—</span>
     <span class="s-sep">│</span>
-    <span id="st-conn">🟡 Connecting</span>
+    <span id="st-conn" style="cursor:pointer;" title="Connection Status">🟡 Connecting</span>
     <span class="s-sep">│</span>
     <span id="st-store" title="Storage backend">💾 —</span>
     <span class="s-sep">│</span>
@@ -604,8 +610,8 @@
   <!-- ══════════════ TOAST ══════════════ -->
   <div class="toast-wrap" id="toasts"></div>
 
-  <!-- Hidden file input -->
-  <input type="file" id="file-input" accept=".html" style="display:none">
+  <!-- Hidden file input (supports multi-file loading locally) -->
+  <input type="file" id="file-input" accept=".html" multiple style="display:none">
 
   <!-- ══════════════ APPROVAL MODAL (SECURITY GATEWAY) ══════════════ -->
   <div class="overlay" id="approval-modal">
@@ -684,9 +690,44 @@
           <option value="dark">Dark</option>
         </select>
       </div>
+      <div class="form-row" id="ext-settings-row" style="display:none;border-top:1px solid var(--border);padding-top:12px;">
+        <label>External Dataverse Connection</label>
+        <div class="form-hint" id="ext-settings-summary" style="margin-bottom:8px;">Not connected.</div>
+        <button class="btn btn-secondary" type="button" id="cfg-open-conn-btn">🔌 Configure Environment URL &amp; Bearer Token…</button>
+      </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="settings-cancel">Cancel</button>
         <button class="btn btn-primary" id="settings-save">Save &amp; Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ EXTERNAL CONNECTION MODAL ══════════════ -->
+  <div class="overlay" id="conn-modal">
+    <div class="modal" style="width:520px;">
+      <h2>🔌 Connect to Dataverse Environment</h2>
+      <div class="warn-box" id="conn-mode-banner" style="margin-bottom:14px;">
+        Running outside Power Platform. Enter your Dataverse Environment URL and an OAuth Bearer access token to authenticate API requests.
+      </div>
+      <div class="form-row">
+        <label>Dataverse Environment URL</label>
+        <input type="url" id="conn-url" placeholder="https://yourorg.crm.dynamics.com">
+        <div class="form-hint">Base organization URL (without <code>/api/data/...</code>).</div>
+      </div>
+      <div class="form-row">
+        <label>Bearer Access Token</label>
+        <textarea id="conn-token" rows="4" placeholder="Paste OAuth access token (with or without 'Bearer ' prefix)…" style="width:100%;padding:7px 10px;border:1px solid var(--input-border);border-radius:4px;font-size:11px;font-family:monospace;background:var(--input-bg);color:var(--text-primary);resize:vertical;"></textarea>
+        <div class="form-hint">
+          Token is kept in session storage only (never persisted to <code>localStorage</code>).<br>
+          Tip: Run <code>az account get-access-token --resource https://yourorg.crm.dynamics.com --query accessToken -o tsv</code>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content:space-between;">
+        <button class="btn btn-secondary" id="conn-clear" style="color:#d13438;">Clear Token</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary" id="conn-cancel">Cancel</button>
+          <button class="btn btn-primary" id="conn-save">Test &amp; Connect</button>
+        </div>
       </div>
     </div>
   </div>
@@ -889,9 +930,27 @@
       }
     `;
 
+    /* ─── Environment / Runtime Detection ────────────────────── */
+    function detectHostRuntime() {
+      if (location.protocol === 'file:') return 'local_file';
+      const h = (location.hostname || '').toLowerCase();
+      const isPpDomain = /\.(dynamics\.com|dynamics\.cn|microsoftdynamics\.us|appsplatform\.us|powerapps\.com|powerplatform\.com)$/i.test(h);
+      if (location.protocol === 'https:' && isPpDomain) return 'powerplatform';
+      try { if (window.parent?.Xrm?.Utility?.getGlobalContext) return 'powerplatform'; } catch {}
+      return 'external_domain';
+    }
+
+    const HOST_RUNTIME = detectHostRuntime();
+    const IS_EXTERNAL_MODE = HOST_RUNTIME !== 'powerplatform';
+    const SAFE_POST_ORIGIN = (location.origin && location.origin !== 'null') ? location.origin : '*';
+
     /* ─── State ──────────────────────────────────────────────── */
     const S = {
-      cfg: { prefix: 'dvopentools_', apiVersion: '9.2', tabLimit: 5, theme: 'light', securityPolicy: 'AUDIT' },
+      cfg: { prefix: 'dvopentools_', apiVersion: '9.2', tabLimit: 5, theme: 'light', securityPolicy: 'AUDIT', externalEnvUrl: '' },
+      runtimeMode: HOST_RUNTIME,
+      isExternalMode: IS_EXTERNAL_MODE,
+      authToken: '',
+      externalHtmlCache: new Map(),
       tabs: [],         // [{tabId, toolId, name, icon, type:'wr'|'file', wrName?}]
       activeTabId: null,
       tools: [],        // discovered [{id, name, icon, category, description, version, wrName}]
@@ -905,6 +964,49 @@
       pendingApprovals: [],
       alwaysAllowedTabs: new Set(),
     };
+
+    /* ─── Session-only Token Storage ─────────────────────────── */
+    const tokenStore = (() => {
+      let _memToken = '';
+      return {
+        get() {
+          try { if (typeof sessionStorage !== 'undefined') return sessionStorage.getItem(STORAGE_NS + 'token') || _memToken; } catch {}
+          return _memToken;
+        },
+        set(tok) {
+          _memToken = tok || '';
+          try {
+            if (typeof sessionStorage !== 'undefined') {
+              if (_memToken) sessionStorage.setItem(STORAGE_NS + 'token', _memToken);
+              else sessionStorage.removeItem(STORAGE_NS + 'token');
+            }
+          } catch {}
+        }
+      };
+    })();
+
+    function normalizeEnvUrl(raw) {
+      let s = (raw || '').trim();
+      if (!s) return '';
+      if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+      try { return new URL(s).origin; } catch { return s.replace(/\/+$/, ''); }
+    }
+
+    function normalizeBearerToken(raw) {
+      return (raw || '').trim().replace(/^Bearer\s+/i, '').trim();
+    }
+
+    function getTargetOrigin() {
+      if (!S.isExternalMode) return location.origin;
+      return normalizeEnvUrl(S.cfg.externalEnvUrl);
+    }
+
+    function decodeBase64Utf8(b64) {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder('utf-8').decode(bytes);
+    }
 
     /* ─── Tiered storage ─────────────────────────────────────────
        Priority: localStorage → sessionStorage → in-memory
@@ -957,19 +1059,34 @@
     }
 
     /* ─── Dataverse API fetch ────────────────────────────────── */
-    function dvUrl(path) { return `${location.origin}/api/data/v${S.cfg.apiVersion}${path}`; }
+    function dvUrl(path) {
+      const base = getTargetOrigin();
+      if (!base) throw new Error('Environment URL is not configured.');
+      return `${base}/api/data/v${S.cfg.apiVersion}${path}`;
+    }
     async function dv(path, opts = {}) {
-      const r = await fetch(dvUrl(path), {
-        ...opts,
-        headers: { 'OData-MaxVersion': '4.0', 'OData-Version': '4.0',
-                   'Accept': 'application/json', 'Content-Type': 'application/json', ...opts.headers }
-      });
-      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      const headers = {
+        'OData-MaxVersion': '4.0', 'OData-Version': '4.0',
+        'Accept': 'application/json', 'Content-Type': 'application/json',
+        ...opts.headers
+      };
+      if (S.isExternalMode) {
+        if (!S.authToken) throw new Error('Bearer token is required outside Power Platform.');
+        headers['Authorization'] = `Bearer ${S.authToken}`;
+      }
+      const r = await fetch(dvUrl(path), { ...opts, headers });
+      if (!r.ok) {
+        const errJson = await r.json().catch(() => ({}));
+        throw new Error(errJson?.error?.message || `${r.status} ${r.statusText}`);
+      }
       return r.json();
     }
 
     /* ─── Context init ───────────────────────────────────────── */
     async function buildContext() {
+      if (S.isExternalMode && (!getTargetOrigin() || !S.authToken)) {
+        throw new Error('External connection not configured.');
+      }
       const who = await dv('/WhoAmI');
       let name = '', email = '', environmentId = '';
       try {
@@ -993,7 +1110,7 @@
       }
 
       return {
-        environmentUrl: location.origin,
+        environmentUrl: getTargetOrigin(),
         apiVersion: S.cfg.apiVersion,
         userId: who.UserId,
         userName: name,
@@ -1001,18 +1118,41 @@
         organizationId: who.OrganizationId || '',
         environmentId: environmentId || who.OrganizationId || '',
         hostVersion: HOST_VERSION,
-        theme: S.cfg.theme
+        theme: S.cfg.theme,
+        runtimeMode: S.runtimeMode
       };
     }
 
     /* ─── Status bar + header ────────────────────────────────── */
     function setStatus(ok) {
-      const host = ok ? new URL(S.ctx.environmentUrl).hostname : '—';
-      document.getElementById('hdr-env').textContent   = ok ? host : 'Connection failed';
+      let host = '—';
+      try { if (S.ctx?.environmentUrl && S.ctx.environmentUrl !== 'null') host = new URL(S.ctx.environmentUrl).hostname; } catch {}
+
+      const modeEl = document.getElementById('st-mode');
+      if (modeEl) {
+        const modeMap = {
+          powerplatform: '☁️ Power Platform',
+          external_domain: `🌐 External (${location.hostname || 'domain'})`,
+          local_file: '📁 Local File'
+        };
+        modeEl.textContent = modeMap[S.runtimeMode] || '—';
+      }
+
+      const extBtn = document.getElementById('ext-conn-btn');
+      const emptyConnBtn = document.getElementById('empty-conn-btn');
+      if (S.isExternalMode) {
+        extBtn.style.display = 'inline-flex';
+        extBtn.textContent = ok ? '🔑 Connected (Change)' : '🔌 Connect Env';
+        extBtn.style.background = ok ? 'rgba(16,124,16,0.3)' : 'rgba(255,165,0,0.22)';
+        extBtn.style.borderColor = ok ? 'rgba(87,179,94,0.6)' : 'rgba(255,165,0,0.5)';
+        if (emptyConnBtn) emptyConnBtn.style.display = ok ? 'none' : 'inline-flex';
+      }
+
+      document.getElementById('hdr-env').textContent   = ok ? host : (S.isExternalMode ? 'Not Connected' : 'Connection failed');
       document.getElementById('hdr-user').textContent  = S.ctx?.userName || '—';
       document.getElementById('st-api').textContent    = `API v${S.cfg.apiVersion}`;
       document.getElementById('st-env').textContent    = host;
-      document.getElementById('st-conn').textContent   = ok ? '🟢 Connected' : '🔴 Error';
+      document.getElementById('st-conn').textContent   = ok ? '🟢 Connected' : (S.isExternalMode && !S.authToken ? '🟡 Needs Auth' : '🔴 Error');
       // Show storage backend in status bar
       const storeLabels = { localStorage: '💾 Persistent', sessionStorage: '💾 Session', memory: '⚠️ No Storage' };
       document.getElementById('st-store').textContent = storeLabels[ls.type] || '—';
@@ -1026,8 +1166,14 @@
 
     /* ─── Tool discovery ─────────────────────────────────────── */
     async function discoverTools(force = false) {
+      if (S.isExternalMode && (!getTargetOrigin() || !S.authToken)) {
+        S.tools = [];
+        renderSidebar();
+        return;
+      }
+
       setSidebarLoading();
-      const cacheKey = `cache::${S.cfg.prefix}`;
+      const cacheKey = `cache::${getTargetOrigin()}::${S.cfg.prefix}`;
       const hit = ls.get(cacheKey);
       if (!force && hit && Date.now() - hit.ts < CACHE_TTL) { S.tools = hit.tools; renderSidebar(); return; }
 
@@ -1035,33 +1181,63 @@
         const p = S.cfg.prefix;
         // Exclude host file itself
         const filter = `startswith(name,'${p}') and webresourcetype eq 1 and name ne '${p}host.html'`;
-        const data   = await dv(`/webresourceset?$select=name,displayname&$filter=${encodeURIComponent(filter)}&$orderby=name asc`);
-        const list   = data.value || [];
-        const tools  = [];
+        const selectFields = S.isExternalMode ? 'name,displayname,content' : 'name,displayname';
+        let list = [];
+        let nextPath = `/webresourceset?$select=${selectFields}&$filter=${encodeURIComponent(filter)}&$orderby=name asc`;
+        while (nextPath) {
+          const data = await dv(nextPath.startsWith('http') ? nextPath.replace(`${getTargetOrigin()}/api/data/v${S.cfg.apiVersion}`, '') : nextPath);
+          list.push(...(data.value || []));
+          nextPath = data['@odata.nextLink'] || '';
+        }
 
-        await Promise.allSettled(list.map(wr =>
-          fetchManifest(wr.name).then(m => tools.push({
-            wrName:      wr.name,
-            id:          m?.id          || wrToId(wr.name),
-            name:        m?.name        || wr.displayname || wr.name,
-            icon:        m?.icon        || '🔧',
-            category:    m?.category    || 'General',
-            description: m?.description || '',
-            version:     m?.version     || '—',
-            minHostVer:  m?.minHostVersion || null,
-          })).catch(() => tools.push({
-            wrName: wr.name, id: wrToId(wr.name),
-            name: wr.displayname || wr.name, icon: '🔧',
-            category: 'General', description: '', version: '—',
-          }))
-        ));
+        const tools = [];
+        if (S.isExternalMode) {
+          S.externalHtmlCache.clear();
+          for (const wr of list) {
+            let m = null;
+            if (wr.content) {
+              try {
+                const html = decodeBase64Utf8(wr.content);
+                S.externalHtmlCache.set(wr.name, html);
+                m = parseManifest(html);
+              } catch {}
+            }
+            tools.push({
+              wrName:      wr.name,
+              id:          m?.id          || wrToId(wr.name),
+              name:        m?.name        || wr.displayname || wr.name,
+              icon:        m?.icon        || '🔧',
+              category:    m?.category    || 'General',
+              description: m?.description || '',
+              version:     m?.version     || '—',
+              minHostVer:  m?.minHostVersion || null,
+            });
+          }
+        } else {
+          await Promise.allSettled(list.map(wr =>
+            fetchManifest(wr.name).then(m => tools.push({
+              wrName:      wr.name,
+              id:          m?.id          || wrToId(wr.name),
+              name:        m?.name        || wr.displayname || wr.name,
+              icon:        m?.icon        || '🔧',
+              category:    m?.category    || 'General',
+              description: m?.description || '',
+              version:     m?.version     || '—',
+              minHostVer:  m?.minHostVersion || null,
+            })).catch(() => tools.push({
+              wrName: wr.name, id: wrToId(wr.name),
+              name: wr.displayname || wr.name, icon: '🔧',
+              category: 'General', description: '', version: '—',
+            }))
+          ));
+        }
 
         tools.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
         S.tools = tools;
         ls.set(cacheKey, { ts: Date.now(), tools });
       } catch (e) {
         console.error('[dvopentools] Discovery failed:', e);
-        toast('Failed to discover tools — check console.', 'error');
+        toast(`Failed to discover tools: ${e.message}`, 'error');
         S.tools = [];
       }
       renderSidebar();
@@ -1101,7 +1277,11 @@
     function renderSidebar() {
       const el = document.getElementById('sidebar-list');
       if (!S.tools.length) {
-        el.innerHTML = `<div class="sb-empty">No tools found.<br>Upload web resources named<br><code>${esc(S.cfg.prefix)}*.html</code></div>`;
+        if (S.isExternalMode && (!getTargetOrigin() || !S.authToken)) {
+          el.innerHTML = `<div class="sb-empty">Running outside Power Platform.<br>Click <strong>Connect Env</strong> to supply an Environment URL &amp; Bearer token, or load local <code>.html</code> files below.</div>`;
+        } else {
+          el.innerHTML = `<div class="sb-empty">No tools found.<br>Upload web resources named<br><code>${esc(S.cfg.prefix)}*.html</code></div>`;
+        }
         return;
       }
 
@@ -1149,7 +1329,7 @@
     }
 
     /* ─── Tab management ─────────────────────────────────────── */
-    function openTool(toolId, launchData = null) {
+    async function openTool(toolId, launchData = null) {
       if (launchData) S.launchPayloads[toolId] = launchData;
       const existing = S.tabs.find(t => t.toolId === toolId);
       if (existing) {
@@ -1163,6 +1343,29 @@
       if (S.tabs.length >= S.cfg.tabLimit) { toast(`Max ${S.cfg.tabLimit} tabs open — close one first.`, 'warning'); return; }
       const tool  = S.tools.find(t => t.id === toolId);
       if (!tool) { toast(`Tool "${toolId}" not found in environment.`, 'warning'); return; }
+
+      if (S.isExternalMode) {
+        let html = S.externalHtmlCache.get(tool.wrName);
+        if (!html) {
+          try {
+            toast(`Loading ${tool.name}…`, 'info', 1800);
+            const res = await dv(`/webresourceset?$select=content&$filter=${encodeURIComponent(`name eq '${tool.wrName}'`)}&$top=1`);
+            const b64 = res.value?.[0]?.content;
+            if (!b64) throw new Error('Web resource HTML content not returned.');
+            html = decodeBase64Utf8(b64);
+            S.externalHtmlCache.set(tool.wrName, html);
+          } catch (err) {
+            toast(`Could not load ${tool.name}: ${err.message}`, 'error');
+            return;
+          }
+        }
+        const tabId = uid();
+        S.tabs.push({ tabId, toolId, name: tool.name, icon: tool.icon, type: 'wr', wrName: tool.wrName });
+        createFrame(tabId, { type: 'file', html });
+        renderTabs(); activate(tabId); persistTabs();
+        return;
+      }
+
       const tabId = uid();
       S.tabs.push({ tabId, toolId, name: tool.name, icon: tool.icon, type: 'wr', wrName: tool.wrName });
       createFrame(tabId, { type: 'wr', src: `/WebResources/${tool.wrName}` });
@@ -1413,8 +1616,14 @@
       if (opts.type === 'wr') {
         frame.src = opts.src;
       } else {
-        // Blob URL keeps same-origin so postMessage works identically to WR frames
-        const blob = new Blob([opts.html], { type: 'text/html' });
+        // Blob URL keeps same-origin so postMessage works identically to WR frames.
+        // On file:// protocol, location.origin is 'null' which throws on postMessage(msg, 'null'); shim it safely.
+        let htmlStr = opts.html || '';
+        if (location.origin === 'null') {
+          const shim = `<script>(function(){if(window.location.origin==='null'){var p=Window.prototype.postMessage;Window.prototype.postMessage=function(m,o,t){return p.call(this,m,o==='null'?'*':o,t);};}})();<\/script>`;
+          htmlStr = /<head[^>]*>/i.test(htmlStr) ? htmlStr.replace(/<head[^>]*>/i, m => m + shim) : shim + htmlStr;
+        }
+        const blob = new Blob([htmlStr], { type: 'text/html' });
         const url  = URL.createObjectURL(blob);
         frame.src  = url;
         frame.dataset.blob = url;
@@ -1449,13 +1658,17 @@
     function postToTool(frame, type, payload) {
       frame.contentWindow?.postMessage(
         { source: 'dvopentools-host', type, payload },
-        location.origin
+        SAFE_POST_ORIGIN
       );
     }
 
     /* ─── postMessage — receive from tools ───────────────────── */
     window.addEventListener('message', e => {
-      if (e.origin !== location.origin) return;
+      if (location.origin === 'null') {
+        if (e.origin !== 'null' && e.origin !== location.origin) return;
+      } else if (e.origin !== location.origin) {
+        return;
+      }
       const { source, type, payload } = e.data || {};
       if (source !== 'dvopentools-tool') return;
 
@@ -1585,7 +1798,29 @@
 
             const t0 = performance.now();
             try {
-              const res = await originalFetch.apply(win, arguments);
+              const nextArgs = [...arguments];
+              let effectiveUrl = urlStr;
+              if (S.isExternalMode) {
+                const targetBase = getTargetOrigin();
+                if (effectiveUrl.startsWith('/api/data/v') && targetBase) {
+                  effectiveUrl = `${targetBase}${effectiveUrl}`;
+                }
+                if (typeof nextArgs[0] === 'string') {
+                  nextArgs[0] = effectiveUrl;
+                  const nextInit = { ...(nextArgs[1] || {}) };
+                  const hdrs = new (win.Headers || Headers)(nextInit.headers || {});
+                  if (S.authToken && !hdrs.has('Authorization')) hdrs.set('Authorization', `Bearer ${S.authToken}`);
+                  nextInit.headers = hdrs;
+                  nextArgs[1] = nextInit;
+                } else if (nextArgs[0] && typeof nextArgs[0] === 'object') {
+                  const reqObj = nextArgs[0];
+                  const hdrs = new (win.Headers || Headers)(reqObj.headers || nextArgs[1]?.headers || {});
+                  if (S.authToken && !hdrs.has('Authorization')) hdrs.set('Authorization', `Bearer ${S.authToken}`);
+                  nextArgs[0] = new (win.Request || Request)(effectiveUrl !== urlStr ? effectiveUrl : reqObj, { headers: hdrs });
+                }
+              }
+
+              const res = await originalFetch.apply(win, nextArgs);
               const latency = Math.round(performance.now() - t0);
               const capturedHeaders = {};
               if (res.headers && typeof res.headers.forEach === 'function') {
@@ -1711,6 +1946,7 @@
             'OData-Version':    '4.0',
             'Accept':           'application/json',
             'Content-Type':     'application/json',
+            ...(S.isExternalMode && S.authToken ? { 'Authorization': `Bearer ${S.authToken}` } : {}),
             ...headers
           }
         };
@@ -1997,11 +2233,11 @@
     function triggerFilePicker() { document.getElementById('file-modal').classList.add('open'); }
 
     document.getElementById('file-input').addEventListener('change', async e => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const html = await file.text();
-      const meta = parseManifest(html);
-      openFileTool(html, meta);
+      const files = [...(e.target.files || [])];
+      for (const file of files) {
+        const html = await file.text();
+        openFileTool(html, parseManifest(html));
+      }
       e.target.value = '';
     });
 
@@ -2013,6 +2249,68 @@
       } catch { return null; }
     }
 
+    /* ─── External Connection Modal ──────────────────────────── */
+    function openConnectionModal() {
+      const banner = document.getElementById('conn-mode-banner');
+      if (S.runtimeMode === 'local_file') {
+        banner.innerHTML = '📁 <strong>Running as a Local File (<code>file://</code>)</strong> — outside Power Platform. Enter your Dataverse Environment URL and Bearer token to connect.';
+      } else {
+        banner.innerHTML = `🌐 <strong>Running on External Domain (<code>${esc(location.hostname)}</code>)</strong> — outside Power Platform. Enter your Dataverse Environment URL and Bearer token to connect.`;
+      }
+      document.getElementById('conn-url').value = S.cfg.externalEnvUrl || '';
+      document.getElementById('conn-token').value = S.authToken || '';
+      document.getElementById('conn-modal').classList.add('open');
+    }
+
+    async function saveConnection() {
+      const urlRaw = document.getElementById('conn-url').value;
+      const tokRaw = document.getElementById('conn-token').value;
+      const envUrl = normalizeEnvUrl(urlRaw);
+      const token  = normalizeBearerToken(tokRaw);
+
+      if (!envUrl) { toast('Please enter a valid Dataverse Environment URL.', 'warning'); return; }
+      if (!token)  { toast('Please enter a Bearer access token.', 'warning'); return; }
+
+      const btn = document.getElementById('conn-save');
+      btn.disabled = true; btn.textContent = 'Connecting…';
+
+      const prevUrl = S.cfg.externalEnvUrl;
+      const prevTok = S.authToken;
+      S.cfg.externalEnvUrl = envUrl;
+      S.authToken = token;
+
+      try {
+        S.ctx = await buildContext();
+        ls.set('cfg', S.cfg);
+        tokenStore.set(token);
+        setStatus(true);
+        document.getElementById('conn-modal').classList.remove('open');
+        toast(`Connected to ${new URL(envUrl).hostname}`, 'success');
+        // Update open tool frames with new context
+        document.querySelectorAll('.tool-frame').forEach(f => sendContext(f));
+        await discoverTools(true);
+      } catch (err) {
+        S.cfg.externalEnvUrl = prevUrl;
+        S.authToken = prevTok;
+        setStatus(!!S.ctx?.userId);
+        const corsHint = err.message === 'Failed to fetch' ? ' (Check URL, network, or browser CORS access for external origin)' : '';
+        toast(`Connection failed: ${err.message}${corsHint}`, 'error', 6500);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Test & Connect';
+      }
+    }
+
+    function clearConnection() {
+      S.authToken = '';
+      tokenStore.set('');
+      document.getElementById('conn-token').value = '';
+      if (S.ctx) S.ctx.userId = '';
+      setStatus(false);
+      S.tools = [];
+      renderSidebar();
+      toast('Bearer token cleared from session.', 'info');
+    }
+
     /* ─── Settings ───────────────────────────────────────────── */
     function openSettings() {
       document.getElementById('cfg-prefix').value   = S.cfg.prefix;
@@ -2020,6 +2318,17 @@
       document.getElementById('cfg-tabs').value     = S.cfg.tabLimit;
       document.getElementById('cfg-theme').value    = S.cfg.theme;
       document.getElementById('cfg-security').value = S.cfg.securityPolicy || 'AUDIT';
+
+      const extRow = document.getElementById('ext-settings-row');
+      if (S.isExternalMode) {
+        extRow.style.display = 'block';
+        const target = getTargetOrigin();
+        document.getElementById('ext-settings-summary').textContent =
+          target && S.authToken ? `Connected to ${target} (Bearer token active in session)` : 'Not connected (Environment URL & Bearer token needed).';
+      } else {
+        extRow.style.display = 'none';
+      }
+
       document.getElementById('settings-modal').classList.add('open');
     }
 
@@ -2061,10 +2370,10 @@
 
       ls.set('cfg', S.cfg);
       applyTheme(theme);
-      setStatus(true);
+      setStatus(!!S.ctx?.userId);
       document.getElementById('settings-modal').classList.remove('open');
       toast('Settings saved.', 'success');
-      if (changed) { ls.set(`cache::${prefix}`, null); discoverTools(true); }
+      if (changed) { ls.set(`cache::${getTargetOrigin()}::${prefix}`, null); discoverTools(true); }
     }
 
     /* ─── UI event bindings ──────────────────────────────────── */
@@ -2082,6 +2391,16 @@
     document.getElementById('settings-btn').addEventListener('click', openSettings);
     document.getElementById('settings-cancel').addEventListener('click', () => document.getElementById('settings-modal').classList.remove('open'));
     document.getElementById('settings-save').addEventListener('click', saveSettings);
+    document.getElementById('ext-conn-btn').addEventListener('click', openConnectionModal);
+    document.getElementById('empty-conn-btn').addEventListener('click', openConnectionModal);
+    document.getElementById('st-conn').addEventListener('click', () => { if (S.isExternalMode) openConnectionModal(); });
+    document.getElementById('cfg-open-conn-btn').addEventListener('click', () => {
+      document.getElementById('settings-modal').classList.remove('open');
+      openConnectionModal();
+    });
+    document.getElementById('conn-cancel').addEventListener('click', () => document.getElementById('conn-modal').classList.remove('open'));
+    document.getElementById('conn-save').addEventListener('click', saveConnection);
+    document.getElementById('conn-clear').addEventListener('click', clearConnection);
 
     let pendingDroppedHtml = null;
     document.getElementById('file-cancel').addEventListener('click', () => {
@@ -2196,6 +2515,7 @@
         { icon: '🌙', label: 'Toggle Light / Dark Theme', sub: 'Command', run: () => document.getElementById('theme-btn').click() },
         { icon: '📡', label: 'Toggle Network Activity Console', sub: 'Command', run: () => document.getElementById('network-drawer').classList.toggle('open') },
         { icon: '⚙️', label: 'Open Host Settings & Security Policy', sub: 'Command', run: openSettings },
+        ...(S.isExternalMode ? [{ icon: '🔌', label: 'Connect / Change Dataverse Environment & Token', sub: 'External Auth', run: openConnectionModal }] : []),
         { icon: '↻', label: 'Refresh Discovered Tools', sub: 'Command', run: () => discoverTools(true) },
         { icon: '📂', label: 'Load Tool from Local .html File', sub: 'Command', run: triggerFilePicker }
       ];
@@ -2276,9 +2596,10 @@
 
     /* ─── Init ───────────────────────────────────────────────── */
     async function init() {
-      // Load saved config & pinned tools
+      // Load saved config, session token, & pinned tools
       const saved = ls.get('cfg', {});
       Object.assign(S.cfg, saved);
+      S.authToken = tokenStore.get();
       S.pinnedTools = new Set(ls.get('pinnedTools', []));
       applyTheme(S.cfg.theme);
 
@@ -2290,15 +2611,35 @@
       }
 
       // Build Dataverse context
-      try {
-        S.ctx = await buildContext();
-        setStatus(true);
-      } catch (err) {
-        console.error('[dvopentools] Context failed:', err);
-        S.ctx = { environmentUrl: location.origin, apiVersion: S.cfg.apiVersion,
-                  userId: '', userName: '', userEmail: '', hostVersion: HOST_VERSION, theme: S.cfg.theme };
+      if (S.isExternalMode && (!getTargetOrigin() || !S.authToken)) {
+        S.ctx = {
+          environmentUrl: getTargetOrigin() || '',
+          apiVersion: S.cfg.apiVersion,
+          userId: '', userName: '', userEmail: '',
+          hostVersion: HOST_VERSION, theme: S.cfg.theme, runtimeMode: S.runtimeMode
+        };
         setStatus(false);
-        toast('Could not connect to Dataverse API. Running in limited mode.', 'error', 7000);
+        openConnectionModal();
+      } else {
+        try {
+          S.ctx = await buildContext();
+          setStatus(true);
+        } catch (err) {
+          console.error('[dvopentools] Context failed:', err);
+          S.ctx = {
+            environmentUrl: getTargetOrigin() || location.origin,
+            apiVersion: S.cfg.apiVersion,
+            userId: '', userName: '', userEmail: '',
+            hostVersion: HOST_VERSION, theme: S.cfg.theme, runtimeMode: S.runtimeMode
+          };
+          setStatus(false);
+          if (S.isExternalMode) {
+            toast(`Dataverse connection failed: ${err.message}. Re-enter URL/token.`, 'warning', 7000);
+            openConnectionModal();
+          } else {
+            toast('Could not connect to Dataverse API. Running in limited mode.', 'error', 7000);
+          }
+        }
       }
 
       // Discover tools
@@ -2310,8 +2651,12 @@
       for (const t of saved_tabs) {
         const tool = S.tools.find(x => x.id === t.toolId);
         if (!tool) continue;
-        S.tabs.push({ ...t });
-        createFrame(t.tabId, { type: 'wr', src: `/WebResources/${tool.wrName}` });
+        if (S.isExternalMode) {
+          await openTool(tool.id);
+        } else {
+          S.tabs.push({ ...t });
+          createFrame(t.tabId, { type: 'wr', src: `/WebResources/${tool.wrName}` });
+        }
       }
       if (S.tabs.length) {
         const toActivate = S.tabs.find(t => t.tabId === saved_active) || S.tabs[0];
