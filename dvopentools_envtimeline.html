@@ -502,6 +502,51 @@
       padding: 3px 6px;
       border-radius: 4px;
       border: 1px solid var(--border-subtle);
+      flex-wrap: wrap;
+    }
+
+    .cat-actions-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-right: 3px;
+      padding-right: 6px;
+      border-right: 1px solid var(--border);
+    }
+    .cat-action-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+      cursor: pointer;
+      line-height: 1.4;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .cat-action-btn:hover:not(:disabled) {
+      background: var(--bg-hover, rgba(0,0,0,0.05));
+      color: var(--primary);
+      border-color: var(--primary);
+    }
+    body.dark .cat-action-btn {
+      background: var(--bg-subtle, #1e1e1e);
+      border-color: var(--border);
+      color: var(--text-sec);
+    }
+    body.dark .cat-action-btn:hover:not(:disabled) {
+      background: rgba(255,255,255,0.08);
+      color: var(--primary);
+      border-color: var(--primary);
+    }
+    .cat-action-btn:active:not(:disabled) {
+      transform: scale(0.96);
+    }
+    .cat-action-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
 
     .filter-chip {
@@ -900,35 +945,39 @@
 
       <!-- Category Filter Chips -->
       <div class="filter-group">
-        <label class="filter-chip chip-audit" id="chip-audit">
+        <div class="cat-actions-group">
+          <button type="button" class="cat-action-btn" id="btn-cat-select-all" title="Select all categories">Select All</button>
+          <button type="button" class="cat-action-btn" id="btn-cat-unselect-all" title="Unselect all categories">Unselect All</button>
+        </div>
+        <label class="filter-chip chip-audit" id="chip-audit" title="Alt+Click to solo Audits">
           <input type="checkbox" id="chk-audit" checked>
           <span>🛡️ Audits</span> <strong id="cnt-audit">0</strong>
         </label>
-        <label class="filter-chip chip-plugin" id="chip-plugin">
+        <label class="filter-chip chip-plugin" id="chip-plugin" title="Alt+Click to solo Plugins">
           <input type="checkbox" id="chk-plugin" checked>
           <span>🧩 Plugins</span> <strong id="cnt-plugin">0</strong>
         </label>
-        <label class="filter-chip chip-flow" id="chip-flow" title="Power Automate Cloud Flows">
+        <label class="filter-chip chip-flow" id="chip-flow" title="Power Automate Cloud Flows (Alt+Click to solo)">
           <input type="checkbox" id="chk-flow" checked>
           <span>⚡ Cloud Flows</span> <strong id="cnt-flow">0</strong>
         </label>
-        <label class="filter-chip chip-workflow" id="chip-workflow" title="Classic Background/Real-time Workflows & BPFs">
+        <label class="filter-chip chip-workflow" id="chip-workflow" title="Classic Background/Real-time Workflows & BPFs (Alt+Click to solo)">
           <input type="checkbox" id="chk-workflow" checked>
           <span>⚙️ Workflows</span> <strong id="cnt-workflow">0</strong>
         </label>
-        <label class="filter-chip chip-action" id="chip-action" title="Custom Process Actions">
+        <label class="filter-chip chip-action" id="chip-action" title="Custom Process Actions (Alt+Click to solo)">
           <input type="checkbox" id="chk-action" checked>
           <span>🎯 Actions</span> <strong id="cnt-action">0</strong>
         </label>
-        <label class="filter-chip chip-job" id="chip-job" title="System Jobs (Bulk Delete, Import, Rollup, etc.)">
+        <label class="filter-chip chip-job" id="chip-job" title="System Jobs: Bulk Delete, Import, Rollup (Alt+Click to solo)">
           <input type="checkbox" id="chk-job" checked>
           <span>🔧 Jobs</span> <strong id="cnt-job">0</strong>
         </label>
-        <label class="filter-chip chip-solution" id="chip-solution">
+        <label class="filter-chip chip-solution" id="chip-solution" title="Alt+Click to solo Solutions">
           <input type="checkbox" id="chk-solution" checked>
           <span>📦 Solutions</span> <strong id="cnt-solution">0</strong>
         </label>
-        <label class="filter-chip chip-sync" id="chip-sync">
+        <label class="filter-chip chip-sync" id="chip-sync" title="Alt+Click to solo Sync Logs">
           <input type="checkbox" id="chk-sync" checked>
           <span>📧 Sync Logs</span> <strong id="cnt-sync">0</strong>
         </label>
@@ -1138,6 +1187,8 @@
     // In-memory window cache for zero-roundtrip sub-range zoom-ins
     let cachedServerWindow = null;
 
+    const ALL_CATEGORIES = ['audit', 'plugin', 'flow', 'workflow', 'action', 'job', 'solution', 'sync'];
+
     const catFilters = {
       audit:    true,
       plugin:   true,
@@ -1148,6 +1199,31 @@
       solution: true,
       sync:     true,
     };
+
+    function setAllCategoryFilters(selectAll) {
+      ALL_CATEGORIES.forEach(cat => {
+        catFilters[cat] = selectAll;
+        const chk = document.getElementById(`chk-${cat}`);
+        const chip = document.getElementById(`chip-${cat}`);
+        if (chk) chk.checked = selectAll;
+        if (chip) chip.classList.toggle('muted', !selectAll);
+      });
+      toolStore('catFilters', catFilters);
+      updateCategoryActionButtons();
+      renderTimeline();
+    }
+
+    function updateCategoryActionButtons() {
+      const activeCount = ALL_CATEGORIES.filter(c => catFilters[c]).length;
+      const btnAll = document.getElementById('btn-cat-select-all');
+      const btnNone = document.getElementById('btn-cat-unselect-all');
+      if (btnAll) {
+        btnAll.disabled = activeCount === ALL_CATEGORIES.length;
+      }
+      if (btnNone) {
+        btnNone.disabled = activeCount === 0;
+      }
+    }
 
     let lastTelemetry = { url: '', status: 200, statusText: 'OK', latency: 0, headers: {} };
 
@@ -1239,6 +1315,21 @@
       const savedTables = toolStore('auditTables');
       if (savedTables && Array.isArray(savedTables) && savedTables.length > 0) {
         selectedAuditTables = new Set(savedTables);
+      }
+
+      // Restore saved category filters if present
+      const savedCats = toolStore('catFilters');
+      if (savedCats && typeof savedCats === 'object') {
+        ALL_CATEGORIES.forEach(cat => {
+          if (typeof savedCats[cat] === 'boolean') {
+            catFilters[cat] = savedCats[cat];
+            const chk = document.getElementById(`chk-${cat}`);
+            const chip = document.getElementById(`chip-${cat}`);
+            if (chk) chk.checked = savedCats[cat];
+            if (chip) chip.classList.toggle('muted', !savedCats[cat]);
+          }
+        });
+        updateCategoryActionButtons();
       }
 
       ensureEnvironmentId().catch(() => {});
@@ -2473,6 +2564,8 @@
       document.getElementById('cnt-solution').textContent = catCounts.solution;
       document.getElementById('cnt-sync').textContent     = catCounts.sync;
 
+      updateCategoryActionButtons();
+
       document.getElementById('count-sev-errors').textContent   = errCount;
       document.getElementById('count-sev-warnings').textContent = warnCount;
 
@@ -2980,18 +3073,50 @@
       });
     });
 
-    // Category chips
-    ['audit', 'plugin', 'flow', 'workflow', 'action', 'job', 'solution', 'sync'].forEach(cat => {
+    // Category chips & Bulk Select/Unselect All
+    const btnSelectAll = document.getElementById('btn-cat-select-all');
+    if (btnSelectAll) {
+      btnSelectAll.addEventListener('click', () => setAllCategoryFilters(true));
+    }
+
+    const btnUnselectAll = document.getElementById('btn-cat-unselect-all');
+    if (btnUnselectAll) {
+      btnUnselectAll.addEventListener('click', () => setAllCategoryFilters(false));
+    }
+
+    ALL_CATEGORIES.forEach(cat => {
       const chk = document.getElementById(`chk-${cat}`);
       const chip = document.getElementById(`chip-${cat}`);
       if (chk && chip) {
         chk.addEventListener('change', () => {
           catFilters[cat] = chk.checked;
           chip.classList.toggle('muted', !chk.checked);
+          toolStore('catFilters', catFilters);
+          updateCategoryActionButtons();
           renderTimeline();
+        });
+
+        // Alt+Click on chip solos this category (deselects all others)
+        chip.addEventListener('click', e => {
+          if (e.altKey) {
+            e.preventDefault();
+            ALL_CATEGORIES.forEach(c => {
+              const isTarget = c === cat;
+              catFilters[c] = isTarget;
+              const otherChk = document.getElementById(`chk-${c}`);
+              const otherChip = document.getElementById(`chip-${c}`);
+              if (otherChk) otherChk.checked = isTarget;
+              if (otherChip) otherChip.classList.toggle('muted', !isTarget);
+            });
+            toolStore('catFilters', catFilters);
+            updateCategoryActionButtons();
+            renderTimeline();
+          }
         });
       }
     });
+
+    updateCategoryActionButtons();
 
     // Modal
     document.getElementById('md-close-btn').addEventListener('click', closeDetailModal);
