@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FetchXML &amp; Web API Playground</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "fetchxml-playground",
+    "name":           "FetchXML & Web API",
+    "version":        "1.0.0",
+    "description":    "Execute FetchXML queries (with paging & batch fallback) and OData Web API requests with table inspection, code generation, and CSV/JSON export.",
+    "icon":           "🔍",
+    "category":       "Query",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.0"
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #ffffff;
+      --bg-alt: #f8f9fa;
+      --bg-card: #ffffff;
+      --border: #e1dfdd;
+      --border-subtle: #edebe9;
+      --text: #201f1e;
+      --text-sec: #605e5c;
+      --text-muted: #8a8886;
+      --primary: #0078d4;
+      --primary-hover: #106ebe;
+      --primary-subtle: #eff6fc;
+      --status-success: #107c10;
+      --status-warn: #d97706;
+      --status-error: #d13438;
+      --code-bg: #f3f2f1;
+      --modal-overlay: rgba(0, 0, 0, 0.45);
+      --shadow-md: 0 6.4px 14.4px rgba(0,0,0,0.13);
+    }
+    body.dark {
+      --bg: #1e1e1e;
+      --bg-alt: #252526;
+      --bg-card: #2d2d2d;
+      --border: #3e3e42;
+      --border-subtle: #333337;
+      --text: #d4d4d4;
+      --text-sec: #a6a6a6;
+      --text-muted: #767676;
+      --primary: #2886de;
+      --primary-hover: #4797e2;
+      --primary-subtle: #19324d;
+      --status-success: #57b35e;
+      --status-warn: #fbbf24;
+      --status-error: #f1707b;
+      --code-bg: #181818;
+      --modal-overlay: rgba(0, 0, 0, 0.7);
+      --shadow-md: 0 8px 18px rgba(0,0,0,0.6);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Toolbar */
+    .toolbar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 8px 14px; background: var(--bg-alt); border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .seg-group {
+      display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: var(--bg);
+    }
+    .seg-btn {
+      padding: 5px 12px; border: none; background: transparent; color: var(--text-sec);
+      cursor: pointer; font-size: 12px; font-weight: 600; font-family: inherit;
+    }
+    .seg-btn.active { background: var(--primary); color: #fff; }
+    .btn {
+      padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border);
+      background: var(--bg-card); color: var(--text); cursor: pointer;
+      font-size: 12px; font-family: inherit; display: inline-flex; align-items: center; gap: 5px;
+      transition: background .12s;
+    }
+    .btn:hover:not(:disabled) { background: var(--primary-subtle); border-color: var(--primary); }
+    .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    select, input[type="text"] {
+      padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;
+      background: var(--bg); color: var(--text); font-size: 12px; font-family: inherit;
+    }
+    .spacer { flex: 1; }
+
+    /* Split Workspace */
+    .workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .editor-pane {
+      display: flex; flex-direction: column; border-bottom: 2px solid var(--border);
+      background: var(--bg); min-height: 185px; max-height: 46%; flex-shrink: 0;
+    }
+    .editor-subbar {
+      display: flex; align-items: center; gap: 8px; padding: 6px 14px;
+      background: var(--bg-alt); border-bottom: 1px solid var(--border-subtle); font-size: 12px;
+    }
+    .code-area {
+      flex: 1; width: 100%; border: none; outline: none; resize: none; padding: 10px 14px;
+      font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 12px; line-height: 1.5;
+      background: var(--code-bg); color: var(--text); overflow: auto;
+    }
+    .odata-bar {
+      display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+      background: var(--bg-alt); border-bottom: 1px solid var(--border-subtle);
+    }
+    .odata-split { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+    .odata-col { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); }
+    .odata-col:last-child { border-right: none; }
+    .col-hdr { padding: 4px 10px; font-size: 11px; font-weight: 700; color: var(--text-sec); background: var(--bg-alt); border-bottom: 1px solid var(--border-subtle); }
+
+    /* Results Pane */
+    .results-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .results-bar {
+      display: flex; align-items: center; gap: 8px; padding: 6px 14px;
+      background: var(--bg-alt); border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .badge {
+      padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+      background: var(--primary-subtle); color: var(--primary);
+    }
+    .results-body { flex: 1; min-height: 0; overflow: auto; position: relative; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+    th {
+      position: sticky; top: 0; background: var(--bg-alt); z-index: 2;
+      padding: 7px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border-subtle);
+      font-weight: 600; color: var(--text-sec); white-space: nowrap;
+    }
+    td {
+      padding: 6px 10px; border-bottom: 1px solid var(--border-subtle); border-right: 1px solid var(--border-subtle);
+      max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text;
+    }
+    tr:hover td { background: var(--primary-subtle); }
+    .raw-sub { display: block; font-size: 10px; color: var(--text-muted); font-family: monospace; }
+    .json-pre {
+      padding: 12px 14px; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 12px;
+      line-height: 1.5; white-space: pre-wrap; word-break: break-word; user-select: text;
+    }
+    .empty-msg {
+      padding: 40px 20px; text-align: center; color: var(--text-sec); line-height: 1.6;
+    }
+    .err-banner {
+      margin: 12px 14px; padding: 10px 12px; border-radius: 4px;
+      background: rgba(209,52,56,0.1); border: 1px solid var(--status-error); color: var(--status-error);
+      font-size: 12px; white-space: pre-wrap; user-select: text;
+    }
+
+    /* Footer Telemetry */
+    .footer {
+      display: flex; align-items: center; gap: 12px; padding: 5px 14px;
+      background: var(--bg-alt); border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--text-sec); flex-shrink: 0;
+    }
+    .pill {
+      padding: 2px 8px; border-radius: 10px; color: #fff; font-weight: 600; cursor: pointer;
+      background: var(--text-muted);
+    }
+
+    /* Modal */
+    .overlay {
+      display: none; position: fixed; inset: 0; background: var(--modal-overlay);
+      z-index: 100; align-items: center; justify-content: center;
+    }
+    .overlay.open { display: flex; }
+    .modal {
+      background: var(--bg-card); border-radius: 6px; width: 660px; max-width: 94vw; max-height: 85vh;
+      display: flex; flex-direction: column; box-shadow: var(--shadow-md); border: 1px solid var(--border);
+    }
+    .modal-hdr {
+      padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;
+      font-weight: 700;
+    }
+    .modal-body { padding: 14px 16px; overflow: auto; flex: 1; }
+    .hdr-table td, .hdr-table th { white-space: normal; word-break: break-all; max-width: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="seg-group">
+      <button class="seg-btn active" data-mode="fetchxml">FetchXML</button>
+      <button class="seg-btn" data-mode="odata">OData Web API</button>
+    </div>
+
+    <select id="preset-select" title="Load sample query preset">
+      <option value="">Load Preset…</option>
+    </select>
+
+    <select id="history-select" title="Recent queries">
+      <option value="">History (0)</option>
+    </select>
+
+    <button class="btn" id="btn-format" title="Format XML or JSON">✨ Format</button>
+    <button class="btn" id="btn-save" title="Save snippet locally">💾 Save</button>
+
+    <div class="spacer"></div>
+
+    <span id="entity-map-status" style="font-size:11px;color:var(--text-muted);">Loading table map…</span>
+    <button class="btn btn-primary" id="btn-run" disabled>▶ Execute (Ctrl+Enter)</button>
+  </div>
+
+  <!-- Workspace -->
+  <div class="workspace">
+    <!-- FetchXML Editor -->
+    <div class="editor-pane" id="pane-fetchxml">
+      <div class="editor-subbar">
+        <strong>FetchXML Editor</strong>
+        <span style="color:var(--text-muted);">Target EntitySet auto-resolved via Metadata</span>
+        <div class="spacer"></div>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="chk-use-batch"> Force <code>$batch</code> POST (for long queries)
+        </label>
+      </div>
+      <textarea id="fetchxml-input" class="code-area" spellcheck="false"></textarea>
+    </div>
+
+    <!-- OData Web API Editor -->
+    <div class="editor-pane" id="pane-odata" style="display:none;">
+      <div class="odata-bar">
+        <select id="odata-method" style="width:95px;font-weight:700;">
+          <option value="GET">GET</option>
+          <option value="POST">POST</option>
+          <option value="PATCH">PATCH</option>
+          <option value="DELETE">DELETE</option>
+        </select>
+        <input type="text" id="odata-path" style="flex:1;font-family:monospace;" value="/accounts?$select=name,accountnumber,statecode,createdon&$top=20" placeholder="/entityset?$select=...">
+      </div>
+      <div class="odata-split">
+        <div class="odata-col">
+          <div class="col-hdr">Request Headers (JSON)</div>
+          <textarea id="odata-headers" class="code-area" spellcheck="false">{
+  "Prefer": "odata.include-annotations=\"*\""
+}</textarea>
+        </div>
+        <div class="odata-col">
+          <div class="col-hdr">Request Body (JSON — for POST / PATCH)</div>
+          <textarea id="odata-body" class="code-area" spellcheck="false" placeholder="{\n  &quot;name&quot;: &quot;Contoso Ltd&quot;\n}"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Pane -->
+    <div class="results-pane">
+      <div class="results-bar">
+        <div class="seg-group">
+          <button class="seg-btn active" data-view="table">Table</button>
+          <button class="seg-btn" data-view="json">JSON</button>
+          <button class="seg-btn" data-view="code">Code Snippets</button>
+        </div>
+        <span class="badge" id="res-count-badge">0 rows</span>
+        <input type="text" id="res-filter" placeholder="Filter rows..." style="width:180px;">
+        <button class="btn" id="btn-next-page" style="display:none;">Next Page →</button>
+        <div class="spacer"></div>
+        <button class="btn" id="btn-copy-json" disabled>📋 Copy JSON</button>
+        <button class="btn" id="btn-export-csv" disabled>📥 Export CSV</button>
+      </div>
+
+      <div class="results-body" id="results-body">
+        <div class="empty-msg">
+          Enter a FetchXML query or OData path above and press <strong>Execute (Ctrl+Enter)</strong>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Telemetry Footer -->
+  <footer class="footer">
+    <span class="pill" id="tel-pill" title="Click to inspect full HTTP response headers">Ready</span>
+    <span id="tel-url" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:480px;font-family:monospace;">—</span>
+    <div class="spacer"></div>
+    <span id="tel-store">Storage: —</span>
+  </footer>
+
+  <!-- Headers Modal -->
+  <div class="overlay" id="headers-modal">
+    <div class="modal">
+      <div class="modal-hdr">
+        <span>📡 Last HTTP Response Telemetry</span>
+        <button class="btn" id="headers-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:11px;color:var(--text-sec);margin-bottom:10px;word-break:break-all;" id="modal-url"></p>
+        <table class="hdr-table">
+          <thead><tr><th>Header</th><th>Value</th></tr></thead>
+          <tbody id="headers-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    const TOOL_STORE  = 'dvopentools::tool::fetchxml-playground::';
+    let context = null;
+    let activeMode = 'fetchxml';
+    let activeView = 'table';
+    let entityMap = new Map(); // logicalName -> { entitySetName, displayName, primaryId }
+    let lastRows = [];
+    let lastRawJson = null;
+    let lastHeaders = {};
+    let lastUrl = '';
+    let nextPageInfo = null; // { type: 'fetchxml'|'odata', cookie?, nextPage?, nextLink?, baseXml? }
+    let history = [];
+
+    /* ─── Host Communication & Tiered Storage ────────────────── */
+    function toHost(type, payload = {}) {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
+      }
+    }
+    function notify(message, level = 'info', duration = 3500) { toHost('NOTIFY', { message, level, duration }); }
+    function setTitle(title) { toHost('SET_TITLE', { title }); }
+
+    const _store = (() => {
+      function canUse(s) { try { const k = '__dvot__'; s.setItem(k, '1'); s.removeItem(k); return true; } catch { return false; } }
+      const _ls = typeof localStorage !== 'undefined' && canUse(localStorage) ? localStorage : null;
+      const _ss = typeof sessionStorage !== 'undefined' && canUse(sessionStorage) ? sessionStorage : null;
+      const _mem = Object.create(null);
+      const _b = _ls || _ss;
+      return {
+        type: _ls ? 'localStorage' : _ss ? 'sessionStorage' : 'memory',
+        get(k) { if (_b) try { return JSON.parse(_b.getItem(k)); } catch {} return _mem[k] ?? null; },
+        set(k, v) { if (_b) try { _b.setItem(k, JSON.stringify(v)); return; } catch {} _mem[k] = v; },
+      };
+    })();
+    function toolStore(k, v) { return v === undefined ? _store.get(TOOL_STORE + k) : _store.set(TOOL_STORE + k, v); }
+
+    toHost('TOOL_READY');
+    const _standaloneTimer = setTimeout(() => {
+      if (!context) {
+        context = { environmentUrl: location.origin, apiVersion: '9.2', theme: 'light' };
+        onContextReady();
+      }
+    }, 1500);
+
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN) return;
+      const { source, type, payload } = e.data || {};
+      if (source !== 'dvopentools-host') return;
+      if (type === 'CONTEXT_INIT') { clearTimeout(_standaloneTimer); context = payload; onContextReady(); }
+      if (type === 'THEME_CHANGE') { document.body.classList.toggle('dark', payload.theme === 'dark'); }
+    });
+
+    /* ─── Presets ────────────────────────────────────────────── */
+    const FETCHXML_PRESETS = {
+      accounts: `<fetch top="25">\n  <entity name="account">\n    <attribute name="accountid" />\n    <attribute name="name" />\n    <attribute name="accountnumber" />\n    <attribute name="statecode" />\n    <attribute name="ownerid" />\n    <attribute name="createdon" />\n    <order attribute="createdon" descending="true" />\n  </entity>\n</fetch>`,
+      flows: `<fetch top="25">\n  <entity name="workflow">\n    <attribute name="workflowid" />\n    <attribute name="name" />\n    <attribute name="category" />\n    <attribute name="statecode" />\n    <attribute name="modifiedon" />\n    <filter>\n      <condition attribute="category" operator="eq" value="5" />\n      <condition attribute="type" operator="eq" value="1" />\n    </filter>\n    <order attribute="modifiedon" descending="true" />\n  </entity>\n</fetch>`,
+      users: `<fetch top="25">\n  <entity name="systemuser">\n    <attribute name="systemuserid" />\n    <attribute name="fullname" />\n    <attribute name="internalemailaddress" />\n    <attribute name="isdisabled" />\n    <filter>\n      <condition attribute="isdisabled" operator="eq" value="0" />\n    </filter>\n  </entity>\n</fetch>`,
+      aggregate: `<fetch aggregate="true">\n  <entity name="asyncoperation">\n    <attribute name="asyncoperationid" alias="job_count" aggregate="count" />\n    <attribute name="statuscode" alias="status" groupby="true" />\n  </entity>\n</fetch>`
+    };
+
+    const ODATA_PRESETS = {
+      whoami: { method: 'GET', path: '/WhoAmI', body: '' },
+      accounts: { method: 'GET', path: '/accounts?$select=name,accountnumber,statecode,createdon&$top=20', body: '' },
+      solutions: { method: 'GET', path: '/solutions?$select=uniquename,friendlyname,version,ismanaged&$filter=isvisible eq true&$orderby=friendlyname asc', body: '' },
+      plugins: { method: 'GET', path: '/plugintracelogs?$select=typename,messagename,primaryentity,performanceexecutionduration,createdon&$orderby=createdon desc&$top=20', body: '' }
+    };
+
+    function populatePresets() {
+      const sel = document.getElementById('preset-select');
+      sel.innerHTML = '<option value="">Load Preset…</option>';
+      const source = activeMode === 'fetchxml' ? FETCHXML_PRESETS : ODATA_PRESETS;
+      for (const k of Object.keys(source)) {
+        const opt = document.createElement('option');
+        opt.value = k;
+        opt.textContent = k.charAt(0).toUpperCase() + k.slice(1);
+        sel.appendChild(opt);
+      }
+    }
+
+    /* ─── Init ───────────────────────────────────────────────── */
+    async function onContextReady() {
+      document.body.classList.toggle('dark', context.theme === 'dark');
+      document.getElementById('tel-store').textContent = `Storage: ${_store.type}`;
+      document.getElementById('btn-run').disabled = false;
+
+      history = toolStore('history') || [];
+      renderHistoryDropdown();
+      populatePresets();
+
+      const lastXml = toolStore('lastFetchXml');
+      document.getElementById('fetchxml-input').value = lastXml || FETCHXML_PRESETS.accounts;
+
+      const lastOData = toolStore('lastOData');
+      if (lastOData) {
+        document.getElementById('odata-method').value = lastOData.method || 'GET';
+        document.getElementById('odata-path').value = lastOData.path || '/WhoAmI';
+        document.getElementById('odata-body').value = lastOData.body || '';
+      }
+
+      // Check if opened with prefill payload from Schema Browser
+      const prefill = toolStore('prefillFetchXml');
+      if (prefill) {
+        document.getElementById('fetchxml-input').value = prefill;
+        toolStore('prefillFetchXml', null);
+      }
+
+      await loadEntityMap();
+    }
+
+    async function loadEntityMap() {
+      const cached = toolStore('entityMapCache');
+      if (cached && Date.now() - cached.ts < 15 * 60000) {
+        entityMap = new Map(cached.entries);
+        document.getElementById('entity-map-status').textContent = `${entityMap.size} tables cached`;
+        return;
+      }
+      try {
+        const url = `${context.environmentUrl}/api/data/v${context.apiVersion}/EntityDefinitions?$select=LogicalName,EntitySetName,DisplayName,PrimaryIdAttribute`;
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error(`${res.status}`);
+        const data = await res.json();
+        entityMap.clear();
+        for (const e of (data.value || [])) {
+          if (e.LogicalName && e.EntitySetName) {
+            entityMap.set(e.LogicalName.toLowerCase(), {
+              entitySetName: e.EntitySetName,
+              displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+              primaryId: e.PrimaryIdAttribute || ''
+            });
+          }
+        }
+        toolStore('entityMapCache', { ts: Date.now(), entries: [...entityMap.entries()] });
+        document.getElementById('entity-map-status').textContent = `${entityMap.size} tables mapped`;
+      } catch (e) {
+        document.getElementById('entity-map-status').textContent = 'Table map unavailable (fallback active)';
+      }
+    }
+
+    async function resolveEntitySet(logicalName) {
+      const key = logicalName.toLowerCase();
+      if (entityMap.has(key)) return entityMap.get(key).entitySetName;
+      try {
+        const url = `${context.environmentUrl}/api/data/v${context.apiVersion}/EntityDefinitions(LogicalName='${encodeURIComponent(key)}')?$select=EntitySetName`;
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (res.ok) {
+          const d = await res.json();
+          if (d.EntitySetName) {
+            entityMap.set(key, { entitySetName: d.EntitySetName, displayName: key, primaryId: '' });
+            return d.EntitySetName;
+          }
+        }
+      } catch {}
+      return key.endsWith('s') ? key + 'es' : key.endsWith('y') ? key.slice(0, -1) + 'ies' : key + 's';
+    }
+
+    /* ─── Execution Engine ───────────────────────────────────── */
+    async function executeQuery(isNextPage = false) {
+      if (!context) return;
+      const btn = document.getElementById('btn-run');
+      btn.disabled = true;
+      btn.textContent = '⏳ Running…';
+
+      try {
+        if (activeMode === 'fetchxml') {
+          await executeFetchXml(isNextPage);
+        } else {
+          await executeOData(isNextPage);
+        }
+      } catch (err) {
+        showError(err.message);
+        notify(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '▶ Execute (Ctrl+Enter)';
+      }
+    }
+
+    async function executeFetchXml(isNextPage) {
+      let xmlText = isNextPage && nextPageInfo?.baseXml ? nextPageInfo.baseXml : document.getElementById('fetchxml-input').value.trim();
+      if (!xmlText) throw new Error('FetchXML editor is empty.');
+
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xmlText, 'text/xml');
+      const parseErr = doc.querySelector('parsererror');
+      if (parseErr) throw new Error('Invalid XML syntax:\n' + parseErr.textContent);
+
+      const fetchEl = doc.querySelector('fetch');
+      const entityEl = doc.querySelector('fetch > entity');
+      if (!fetchEl || !entityEl) throw new Error('FetchXML must contain <fetch><entity name="...">...</entity></fetch>.');
+
+      const logicalName = entityEl.getAttribute('name');
+      if (!logicalName) throw new Error('<entity> element is missing the "name" attribute.');
+
+      if (!isNextPage) {
+        toolStore('lastFetchXml', xmlText);
+        addHistory('fetchxml', logicalName, xmlText);
+      } else if (nextPageInfo?.type === 'fetchxml') {
+        fetchEl.setAttribute('page', String(nextPageInfo.nextPage));
+        if (nextPageInfo.cookie) {
+          fetchEl.setAttribute('paging-cookie', nextPageInfo.cookie);
+        }
+        xmlText = new XMLSerializer().serializeToString(doc);
+      }
+
+      const entitySetName = await resolveEntitySet(logicalName);
+      const encodedXml = encodeURIComponent(xmlText);
+      const relPath = `/${entitySetName}?fetchXml=${encodedXml}`;
+      const forceBatch = document.getElementById('chk-use-batch').checked;
+
+      let json;
+      if (forceBatch || relPath.length > 2000) {
+        json = await executeViaBatch(relPath);
+      } else {
+        json = await callDataverse('GET', relPath, { 'Prefer': 'odata.include-annotations="*"' });
+      }
+
+      // Check paging cookie
+      const rawCookieXml = json['@Microsoft.Dynamics.CRM.fetchxmlpagingcookie'];
+      const hasMore = json['@Microsoft.Dynamics.CRM.morerecords'] === true || !!rawCookieXml;
+      if (hasMore && rawCookieXml) {
+        const cookieDoc = new DOMParser().parseFromString(rawCookieXml, 'text/xml');
+        const cEl = cookieDoc.querySelector('cookie');
+        const currPage = parseInt(cEl?.getAttribute('page') || fetchEl.getAttribute('page') || '1', 10);
+        let decodedCookie = cEl?.getAttribute('pagingcookie') || '';
+        try { decodedCookie = decodeURIComponent(decodeURIComponent(decodedCookie)); } catch {}
+        nextPageInfo = {
+          type: 'fetchxml',
+          baseXml: xmlText,
+          nextPage: currPage + 1,
+          cookie: decodedCookie
+        };
+      } else {
+        nextPageInfo = null;
+      }
+
+      handleResultData(json, logicalName);
+    }
+
+    async function executeViaBatch(relPath) {
+      const batchId = 'batch_' + Math.random().toString(36).slice(2, 10);
+      const fullInnerUrl = `${context.environmentUrl}/api/data/v${context.apiVersion}${relPath}`;
+      const batchBody = [
+        `--${batchId}`,
+        'Content-Type: application/http',
+        'Content-Transfer-Encoding: binary',
+        '',
+        `GET ${fullInnerUrl} HTTP/1.1`,
+        'Accept: application/json',
+        'Prefer: odata.include-annotations="*"',
+        '',
+        `--${batchId}--`
+      ].join('\r\n');
+
+      const t0 = performance.now();
+      const url = `${context.environmentUrl}/api/data/v${context.apiVersion}/$batch`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'OData-MaxVersion': '4.0',
+          'OData-Version': '4.0',
+          'Content-Type': `multipart/mixed;boundary=${batchId}`,
+          'Accept': 'application/json'
+        },
+        body: batchBody
+      });
+      recordTelemetry(url, res, Math.round(performance.now() - t0));
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `Batch HTTP ${res.status}`);
+      }
+      const txt = await res.text();
+      const jsonStart = txt.indexOf('{');
+      const jsonEnd = txt.lastIndexOf('}');
+      if (jsonStart === -1 || jsonEnd === -1) throw new Error('Invalid $batch response format.');
+      const parsed = JSON.parse(txt.slice(jsonStart, jsonEnd + 1));
+      if (parsed.error) throw new Error(parsed.error.message || 'Batch inner query error');
+      return parsed;
+    }
+
+    async function executeOData(isNextPage) {
+      const method = document.getElementById('odata-method').value;
+      let path = isNextPage && nextPageInfo?.nextLink
+        ? nextPageInfo.nextLink.replace(`${context.environmentUrl}/api/data/v${context.apiVersion}`, '')
+        : document.getElementById('odata-path').value.trim();
+
+      if (!path) throw new Error('OData path cannot be empty.');
+      if (!path.startsWith('/')) path = '/' + path;
+
+      let customHeaders = {};
+      const hdrText = document.getElementById('odata-headers').value.trim();
+      if (hdrText) {
+        try { customHeaders = JSON.parse(hdrText); }
+        catch { throw new Error('Request Headers must be valid JSON.'); }
+      }
+
+      let body = null;
+      const bodyText = document.getElementById('odata-body').value.trim();
+      if (method !== 'GET' && method !== 'DELETE' && bodyText) {
+        try { JSON.parse(bodyText); body = bodyText; }
+        catch { throw new Error('Request Body must be valid JSON.'); }
+      }
+
+      if (!isNextPage) {
+        toolStore('lastOData', { method, path, body: bodyText });
+        addHistory('odata', `${method} ${path}`, JSON.stringify({ method, path, body: bodyText }));
+      }
+
+      const json = await callDataverse(method, path, customHeaders, body);
+      nextPageInfo = json['@odata.nextLink'] ? { type: 'odata', nextLink: json['@odata.nextLink'] } : null;
+      handleResultData(json, path.split('?')[0]);
+    }
+
+    async function callDataverse(method, path, customHeaders = {}, body = null) {
+      const url = `${context.environmentUrl}/api/data/v${context.apiVersion}${path}`;
+      const t0 = performance.now();
+      const opts = {
+        method,
+        headers: {
+          'OData-MaxVersion': '4.0',
+          'OData-Version': '4.0',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          ...customHeaders
+        }
+      };
+      if (body && method !== 'GET' && method !== 'HEAD') opts.body = body;
+
+      const res = await fetch(url, opts);
+      recordTelemetry(url, res, Math.round(performance.now() - t0));
+
+      let data = {};
+      if (res.status !== 204) {
+        const text = await res.text();
+        try { data = text ? JSON.parse(text) : {}; }
+        catch { data = { raw: text }; }
+      }
+      if (!res.ok) {
+        throw new Error(data?.error?.message || `HTTP ${res.status} ${res.statusText}`);
+      }
+      return data;
+    }
+
+    function recordTelemetry(url, res, latency) {
+      lastUrl = url;
+      lastHeaders = {};
+      res.headers?.forEach?.((v, k) => { lastHeaders[k.toLowerCase()] = v; });
+      const pill = document.getElementById('tel-pill');
+      pill.textContent = `${res.status} ${res.statusText || 'OK'} (${latency}ms)`;
+      pill.style.background = res.ok ? 'var(--status-success)' : 'var(--status-error)';
+      document.getElementById('tel-url').textContent = url.replace(context?.environmentUrl || '', '');
+    }
+
+    /* ─── Rendering Results ──────────────────────────────────── */
+    function handleResultData(json, label) {
+      lastRawJson = json;
+      if (Array.isArray(json.value)) {
+        lastRows = json.value;
+      } else if (json && typeof json === 'object' && Object.keys(json).length) {
+        lastRows = [json];
+      } else {
+        lastRows = [];
+      }
+
+      document.getElementById('btn-next-page').style.display = nextPageInfo ? 'inline-flex' : 'none';
+      document.getElementById('btn-copy-json').disabled = !lastRawJson;
+      document.getElementById('btn-export-csv').disabled = !lastRows.length;
+      setTitle(`Query — ${lastRows.length} rows (${label})`);
+      renderActiveView();
+    }
+
+    function renderActiveView() {
+      const container = document.getElementById('results-body');
+      const filter = document.getElementById('res-filter').value.trim().toLowerCase();
+
+      if (activeView === 'code') {
+        renderCodeSnippets(container);
+        return;
+      }
+
+      if (!lastRawJson) {
+        container.innerHTML = '<div class="empty-msg">No results yet. Execute a query to inspect data.</div>';
+        return;
+      }
+
+      if (activeView === 'json') {
+        document.getElementById('res-count-badge').textContent = `${lastRows.length} rows`;
+        container.innerHTML = `<pre class="json-pre">${esc(JSON.stringify(lastRawJson, null, 2))}</pre>`;
+        return;
+      }
+
+      // Table view
+      const filteredRows = !filter ? lastRows : lastRows.filter(r => JSON.stringify(r).toLowerCase().includes(filter));
+      document.getElementById('res-count-badge').textContent = `${filteredRows.length} rows${nextPageInfo ? ' (more)' : ''}`;
+
+      if (!filteredRows.length) {
+        container.innerHTML = '<div class="empty-msg">Query succeeded with 0 matching rows.</div>';
+        return;
+      }
+
+      // Collect clean column names (skip @odata.* annotations as standalone columns)
+      const colSet = new Set();
+      for (const r of filteredRows) {
+        for (const k of Object.keys(r)) {
+          if (!k.startsWith('@odata.') && !k.includes('@OData.Community.') && !k.includes('@Microsoft.Dynamics.CRM.')) {
+            colSet.add(k);
+          }
+        }
+      }
+      const cols = [...colSet];
+      if (!cols.length) {
+        container.innerHTML = `<pre class="json-pre">${esc(JSON.stringify(lastRawJson, null, 2))}</pre>`;
+        return;
+      }
+
+      let html = '<table><thead><tr><th>#</th>';
+      for (const c of cols) html += `<th>${esc(c)}</th>`;
+      html += '</tr></thead><tbody>';
+
+      filteredRows.forEach((row, idx) => {
+        html += `<tr><td style="color:var(--text-muted);">${idx + 1}</td>`;
+        for (const c of cols) {
+          const raw = row[c];
+          const formatted = row[`${c}@OData.Community.Display.V1.FormattedValue`];
+          const rawStr = raw === null || raw === undefined ? '' : typeof raw === 'object' ? JSON.stringify(raw) : String(raw);
+          if (formatted !== undefined && String(formatted) !== rawStr) {
+            html += `<td title="${esc(formatted)} (${esc(rawStr)})">${esc(formatted)}<span class="raw-sub">${esc(rawStr)}</span></td>`;
+          } else {
+            html += `<td title="${esc(rawStr)}">${raw === null || raw === undefined ? '<span style="color:var(--text-muted)">null</span>' : esc(rawStr)}</td>`;
+          }
+        }
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    function renderCodeSnippets(container) {
+      const baseUrl = context ? `${context.environmentUrl}/api/data/v${context.apiVersion}` : 'https://org.crm.dynamics.com/api/data/v9.2';
+      let snippet = '';
+      if (activeMode === 'fetchxml') {
+        const xml = document.getElementById('fetchxml-input').value.trim();
+        const doc = new DOMParser().parseFromString(xml, 'text/xml');
+        const entity = doc.querySelector('entity')?.getAttribute('name') || 'account';
+        const entitySet = entityMap.get(entity.toLowerCase())?.entitySetName || (entity + 's');
+        snippet = `// 1. Vanilla JavaScript Fetch API\nconst fetchXml = ${JSON.stringify(xml)};\nconst res = await fetch(\`${baseUrl}/${entitySet}?fetchXml=\${encodeURIComponent(fetchXml)}\`, {\n  headers: {\n    "OData-MaxVersion": "4.0",\n    "OData-Version": "4.0",\n    "Accept": "application/json",\n    "Prefer": "odata.include-annotations=\\"*\\""\n  }\n});\nconst data = await res.json();\n\n// 2. Model-Driven App Client API (Xrm.WebApi)\nconst result = await Xrm.WebApi.retrieveMultipleRecords("${entity}", "?fetchXml=" + encodeURIComponent(fetchXml));\nconsole.log(result.entities);`;
+      } else {
+        const method = document.getElementById('odata-method').value;
+        const path = document.getElementById('odata-path').value.trim();
+        const body = document.getElementById('odata-body').value.trim();
+        snippet = `// Vanilla JavaScript Fetch API\nconst res = await fetch("${baseUrl}${path.startsWith('/') ? path : '/' + path}", {\n  method: "${method}",\n  headers: {\n    "OData-MaxVersion": "4.0",\n    "OData-Version": "4.0",\n    "Accept": "application/json",\n    "Content-Type": "application/json",\n    "Prefer": "odata.include-annotations=\\"*\\""\n  }${method !== 'GET' && method !== 'DELETE' && body ? `,\n  body: JSON.stringify(${body})` : ''}\n});\nconst data = res.status === 204 ? null : await res.json();`;
+      }
+      container.innerHTML = `<pre class="json-pre">${esc(snippet)}</pre>`;
+    }
+
+    function showError(msg) {
+      document.getElementById('results-body').innerHTML = `<div class="err-banner">❌ ${esc(msg)}</div>`;
+      document.getElementById('res-count-badge').textContent = 'Error';
+    }
+
+    /* ─── History & Export ───────────────────────────────────── */
+    function addHistory(mode, label, data) {
+      history = history.filter(h => h.data !== data);
+      history.unshift({ mode, label, data, ts: new Date().toLocaleTimeString() });
+      if (history.length > 20) history.pop();
+      toolStore('history', history);
+      renderHistoryDropdown();
+    }
+
+    function renderHistoryDropdown() {
+      const sel = document.getElementById('history-select');
+      sel.innerHTML = `<option value="">History (${history.length})</option>`;
+      history.forEach((h, i) => {
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        opt.textContent = `[${h.mode.toUpperCase()}] ${h.label} (${h.ts})`;
+        sel.appendChild(opt);
+      });
+    }
+
+    function csvSafe(v) {
+      let s = v === null || v === undefined ? '' : String(v);
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+
+    function exportCsv() {
+      if (!lastRows.length) return;
+      const cols = [...new Set(lastRows.flatMap(r => Object.keys(r).filter(k => !k.startsWith('@odata.') && !k.includes('@OData.'))))];
+      const lines = [cols.map(csvSafe).join(',')];
+      for (const r of lastRows) {
+        lines.push(cols.map(c => csvSafe(r[`${c}@OData.Community.Display.V1.FormattedValue`] ?? r[c])).join(','));
+      }
+      const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dataverse_query_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      notify(`Exported ${lastRows.length} rows to CSV`, 'success');
+    }
+
+    /* ─── UI Events ──────────────────────────────────────────── */
+    document.querySelectorAll('[data-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeMode = btn.dataset.mode;
+        document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b === btn));
+        document.getElementById('pane-fetchxml').style.display = activeMode === 'fetchxml' ? 'flex' : 'none';
+        document.getElementById('pane-odata').style.display = activeMode === 'odata' ? 'flex' : 'none';
+        populatePresets();
+        if (activeView === 'code') renderActiveView();
+      });
+    });
+
+    document.querySelectorAll('[data-view]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeView = btn.dataset.view;
+        document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b === btn));
+        renderActiveView();
+      });
+    });
+
+    document.getElementById('preset-select').addEventListener('change', e => {
+      const k = e.target.value;
+      if (!k) return;
+      if (activeMode === 'fetchxml') {
+        document.getElementById('fetchxml-input').value = FETCHXML_PRESETS[k];
+      } else {
+        const p = ODATA_PRESETS[k];
+        document.getElementById('odata-method').value = p.method;
+        document.getElementById('odata-path').value = p.path;
+        document.getElementById('odata-body').value = p.body;
+      }
+      e.target.value = '';
+    });
+
+    document.getElementById('history-select').addEventListener('change', e => {
+      const idx = e.target.value;
+      if (idx === '') return;
+      const item = history[Number(idx)];
+      if (!item) return;
+      document.querySelector(`[data-mode="${item.mode}"]`).click();
+      if (item.mode === 'fetchxml') {
+        document.getElementById('fetchxml-input').value = item.data;
+      } else {
+        const p = JSON.parse(item.data);
+        document.getElementById('odata-method').value = p.method;
+        document.getElementById('odata-path').value = p.path;
+        document.getElementById('odata-body').value = p.body || '';
+      }
+      e.target.value = '';
+    });
+
+    document.getElementById('btn-format').addEventListener('click', () => {
+      if (activeMode === 'odata') {
+        const b = document.getElementById('odata-body');
+        try { if (b.value.trim()) b.value = JSON.stringify(JSON.parse(b.value), null, 2); } catch { notify('Invalid JSON in body', 'warning'); }
+        const h = document.getElementById('odata-headers');
+        try { if (h.value.trim()) h.value = JSON.stringify(JSON.parse(h.value), null, 2); } catch { notify('Invalid JSON in headers', 'warning'); }
+      } else {
+        const el = document.getElementById('fetchxml-input');
+        try {
+          const doc = new DOMParser().parseFromString(el.value.trim(), 'text/xml');
+          if (doc.querySelector('parsererror')) throw new Error('Invalid XML');
+          el.value = formatXml(new XMLSerializer().serializeToString(doc));
+        } catch { notify('Invalid XML cannot be formatted', 'warning'); }
+      }
+    });
+
+    function formatXml(xml) {
+      let formatted = '', indent = '';
+      xml.split(/>\s*</).forEach(node => {
+        if (node.match(/^\/\w/)) indent = indent.substring(2);
+        formatted += indent + '<' + node + '>\r\n';
+        if (node.match(/^<?\w[^>]*[^\/]$/) && !node.startsWith('?')) indent += '  ';
+      });
+      return formatted.substring(1, formatted.length - 3);
+    }
+
+    document.getElementById('btn-save').addEventListener('click', () => {
+      if (activeMode === 'fetchxml') {
+        toolStore('lastFetchXml', document.getElementById('fetchxml-input').value);
+      } else {
+        toolStore('lastOData', {
+          method: document.getElementById('odata-method').value,
+          path: document.getElementById('odata-path').value,
+          body: document.getElementById('odata-body').value
+        });
+      }
+      notify('Query saved to local tool storage', 'success');
+    });
+
+    document.getElementById('btn-run').addEventListener('click', () => executeQuery(false));
+    document.getElementById('btn-next-page').addEventListener('click', () => executeQuery(true));
+    document.getElementById('res-filter').addEventListener('input', renderActiveView);
+    document.getElementById('btn-export-csv').addEventListener('click', exportCsv);
+    document.getElementById('btn-copy-json').addEventListener('click', async () => {
+      if (!lastRawJson) return;
+      await navigator.clipboard.writeText(JSON.stringify(lastRawJson, null, 2));
+      notify('JSON copied to clipboard', 'success');
+    });
+
+    document.getElementById('tel-pill').addEventListener('click', () => {
+      document.getElementById('modal-url').textContent = lastUrl || 'No requests executed yet.';
+      const tbody = document.getElementById('headers-tbody');
+      tbody.innerHTML = Object.entries(lastHeaders).map(([k, v]) => `<tr><td style="font-weight:600;color:var(--primary);">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')
+        || '<tr><td colspan="2" style="color:var(--text-muted)">No headers captured yet.</td></tr>';
+      document.getElementById('headers-modal').classList.add('open');
+    });
+    document.getElementById('headers-close').addEventListener('click', () => document.getElementById('headers-modal').classList.remove('open'));
+    document.getElementById('headers-modal').addEventListener('click', e => { if (e.target.id === 'headers-modal') e.target.classList.remove('open'); });
+
+    document.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); executeQuery(false); }
+    });
+
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+  </script>
+</body>
+</html>

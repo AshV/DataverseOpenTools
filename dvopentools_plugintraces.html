@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plugin Trace Log Streamer</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "plugin-traces",
+    "name":           "Plugin Trace Logs",
+    "version":        "1.0.0",
+    "description":    "Stream and filter Dataverse plugintracelog entries, trace full correlation cascades by depth, inspect stack traces, and spot slow plugins.",
+    "icon":           "📜",
+    "category":       "Diagnostics",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.0"
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #ffffff;
+      --bg-alt: #f8f9fa;
+      --bg-card: #ffffff;
+      --border: #e1dfdd;
+      --border-subtle: #edebe9;
+      --text: #201f1e;
+      --text-sec: #605e5c;
+      --text-muted: #8a8886;
+      --primary: #0078d4;
+      --primary-hover: #106ebe;
+      --primary-subtle: #eff6fc;
+      --status-success: #107c10;
+      --status-warn: #d97706;
+      --status-error: #d13438;
+      --err-bg: #fde7e9;
+      --ok-bg: #dff6dd;
+      --code-bg: #f3f2f1;
+    }
+    body.dark {
+      --bg: #1e1e1e;
+      --bg-alt: #252526;
+      --bg-card: #2d2d2d;
+      --border: #3e3e42;
+      --border-subtle: #333337;
+      --text: #d4d4d4;
+      --text-sec: #a6a6a6;
+      --text-muted: #767676;
+      --primary: #2886de;
+      --primary-hover: #4797e2;
+      --primary-subtle: #19324d;
+      --status-success: #57b35e;
+      --status-warn: #fbbf24;
+      --status-error: #f1707b;
+      --err-bg: #431c20;
+      --ok-bg: #1c361e;
+      --code-bg: #181818;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 13px; background: var(--bg); color: var(--text);
+      display: flex; flex-direction: column;
+    }
+
+    .toolbar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 8px 14px; background: var(--bg-alt); border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    select, input[type="text"], input[type="number"] {
+      padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;
+      background: var(--bg); color: var(--text); font-size: 12px; font-family: inherit;
+    }
+    .btn {
+      padding: 5px 11px; border: 1px solid var(--border); border-radius: 4px;
+      background: var(--bg-card); color: var(--text); cursor: pointer; font-size: 12px; font-family: inherit;
+    }
+    .btn:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-subtle); }
+    .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
+    .spacer { flex: 1; }
+
+    .stats-strip {
+      display: flex; gap: 16px; padding: 6px 14px; border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg); font-size: 12px; align-items: center; flex-shrink: 0;
+    }
+    .pulse {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); margin-right: 4px;
+    }
+    .pulse.live { background: var(--status-success); box-shadow: 0 0 0 3px rgba(16,124,16,0.2); }
+
+    .main-split { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+    .table-wrap { flex: 1; min-width: 0; overflow: auto; }
+    .detail-pane {
+      width: 440px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--bg-alt);
+      display: none; flex-direction: column; overflow: hidden;
+    }
+    .detail-pane.open { display: flex; }
+    .detail-hdr {
+      padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;
+      font-weight: 700;
+    }
+    .detail-body { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+    th {
+      position: sticky; top: 0; background: var(--bg-alt); padding: 7px 10px;
+      border-bottom: 1px solid var(--border); color: var(--text-sec); font-weight: 600; z-index: 2; white-space: nowrap;
+    }
+    td {
+      padding: 6px 10px; border-bottom: 1px solid var(--border-subtle);
+      max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+    }
+    tr:hover td { background: var(--primary-subtle); }
+    tr.selected td { background: var(--primary-subtle); font-weight: 600; }
+
+    .badge { padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; display: inline-block; }
+    .badge-err { background: var(--err-bg); color: var(--status-error); }
+    .badge-ok  { background: var(--ok-bg); color: var(--status-success); }
+    .badge-mode { background: var(--border-subtle); color: var(--text-sec); }
+
+    .block-box {
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px;
+      padding: 8px 10px; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 11px;
+      white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; user-select: text;
+    }
+    .block-box.err { border-color: var(--status-error); color: var(--status-error); }
+
+    .footer {
+      padding: 5px 14px; border-top: 1px solid var(--border); background: var(--bg-alt);
+      display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--text-sec);
+    }
+    .pill { padding: 2px 8px; border-radius: 10px; color: #fff; font-weight: 600; background: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <select id="f-range" title="Time range">
+      <option value="15m">Last 15 min</option>
+      <option value="1h" selected>Last 1 hour</option>
+      <option value="24h">Last 24 hours</option>
+      <option value="7d">Last 7 days</option>
+    </select>
+
+    <select id="f-mode" title="Execution mode">
+      <option value="ALL">Sync + Async</option>
+      <option value="0">Sync Only</option>
+      <option value="1">Async Only</option>
+    </select>
+
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;">
+      <input type="checkbox" id="f-errors"> Errors Only
+    </label>
+
+    <input type="number" id="f-mindur" placeholder="Min ms" style="width:76px;" min="0" title="Minimum duration in ms">
+    <input type="text" id="f-search" placeholder="Filter plugin, entity, message, trace..." style="width:220px;">
+    <input type="text" id="f-corr" placeholder="Correlation ID (optional)" style="width:185px;font-family:monospace;">
+
+    <div class="spacer"></div>
+
+    <select id="auto-poll" title="Auto-refresh interval">
+      <option value="0">Stream: Off</option>
+      <option value="5000">Stream: 5s</option>
+      <option value="15000">Stream: 15s</option>
+      <option value="30000">Stream: 30s</option>
+    </select>
+    <button class="btn btn-primary" id="btn-refresh">↻ Refresh</button>
+    <button class="btn" id="btn-export">📥 CSV</button>
+  </div>
+
+  <div class="stats-strip">
+    <span><span class="pulse" id="live-dot"></span><strong id="st-total">0</strong> traces</span>
+    <span>Errors: <strong id="st-errors" style="color:var(--status-error);">0</strong></span>
+    <span>Avg Duration: <strong id="st-avg">0 ms</strong></span>
+    <span>Max Duration: <strong id="st-max">0 ms</strong></span>
+    <div class="spacer"></div>
+    <button class="btn" id="btn-clear-corr" style="display:none;padding:2px 8px;font-size:11px;">✕ Clear Correlation Filter</button>
+  </div>
+
+  <div class="main-split">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Status</th>
+            <th>Plugin Type</th>
+            <th>Message</th>
+            <th>Entity</th>
+            <th>Depth</th>
+            <th>Mode</th>
+            <th>Duration</th>
+          </tr>
+        </thead>
+        <tbody id="trace-tbody">
+          <tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">Connecting to Dataverse…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <aside class="detail-pane" id="detail-pane">
+      <div class="detail-hdr">
+        <span>Trace Inspector</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn" id="btn-filter-corr" style="padding:3px 8px;font-size:11px;">🔗 Trace Cascade</button>
+          <button class="btn" id="btn-copy-report" style="padding:3px 8px;font-size:11px;">📋 Copy Report</button>
+          <button class="btn" id="btn-close-detail" style="padding:3px 8px;font-size:11px;">✕</button>
+        </div>
+      </div>
+      <div class="detail-body" id="detail-body"></div>
+    </aside>
+  </div>
+
+  <footer class="footer">
+    <span class="pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Plugin Trace Log Streamer</span>
+    <div class="spacer"></div>
+    <span id="tel-hint">Note: Requires Dataverse Plugin Trace Log enabled in Admin Center</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    const TOOL_STORE = 'dvopentools::tool::plugin-traces::';
+    let context = null;
+    let logs = [];
+    let selectedLog = null;
+    let pollTimer = null;
+
+    function toHost(type, payload = {}) {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
+      }
+    }
+    function notify(message, level = 'info', duration = 3500) { toHost('NOTIFY', { message, level, duration }); }
+    function setTitle(title) { toHost('SET_TITLE', { title }); }
+
+    const _store = (() => {
+      function canUse(s) { try { const k = '__dvot__'; s.setItem(k, '1'); s.removeItem(k); return true; } catch { return false; } }
+      const _ls = typeof localStorage !== 'undefined' && canUse(localStorage) ? localStorage : null;
+      const _ss = typeof sessionStorage !== 'undefined' && canUse(sessionStorage) ? sessionStorage : null;
+      const _mem = Object.create(null);
+      const _b = _ls || _ss;
+      return {
+        get(k) { if (_b) try { return JSON.parse(_b.getItem(k)); } catch {} return _mem[k] ?? null; },
+        set(k, v) { if (_b) try { _b.setItem(k, JSON.stringify(v)); return; } catch {} _mem[k] = v; },
+      };
+    })();
+    function toolStore(k, v) { return v === undefined ? _store.get(TOOL_STORE + k) : _store.set(TOOL_STORE + k, v); }
+
+    toHost('TOOL_READY');
+    const _standaloneTimer = setTimeout(() => {
+      if (!context) {
+        context = { environmentUrl: location.origin, apiVersion: '9.2', theme: 'light' };
+        onContextReady();
+      }
+    }, 1500);
+
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN) return;
+      const { source, type, payload } = e.data || {};
+      if (source !== 'dvopentools-host') return;
+      if (type === 'CONTEXT_INIT') { clearTimeout(_standaloneTimer); context = payload; onContextReady(); }
+      if (type === 'THEME_CHANGE') { document.body.classList.toggle('dark', payload.theme === 'dark'); }
+    });
+
+    async function onContextReady() {
+      document.body.classList.toggle('dark', context.theme === 'dark');
+      const savedRange = toolStore('range');
+      if (savedRange) document.getElementById('f-range').value = savedRange;
+      await fetchLogs();
+    }
+
+    function getRangeIso(code) {
+      const msMap = { '15m': 15 * 60000, '1h': 3600000, '24h': 86400000, '7d': 7 * 86400000 };
+      return new Date(Date.now() - (msMap[code] || 3600000)).toISOString();
+    }
+
+    async function fetchLogs() {
+      if (!context) return;
+      const range = document.getElementById('f-range').value;
+      const modeVal = document.getElementById('f-mode').value;
+      const errorsOnly = document.getElementById('f-errors').checked;
+      const corrId = document.getElementById('f-corr').value.trim();
+
+      toolStore('range', range);
+
+      const filters = [];
+      if (corrId) {
+        filters.push(`correlationid eq ${corrId}`);
+      } else {
+        filters.push(`createdon ge ${getRangeIso(range)}`);
+      }
+      if (modeVal !== 'ALL') filters.push(`mode eq ${modeVal}`);
+      if (errorsOnly) filters.push(`exceptiondetails ne null`);
+
+      const select = 'plugintracelogid,typename,messagename,primaryentity,depth,mode,operationtype,performanceexecutionduration,performanceexecutionstarttime,createdon,correlationid,requestid,exceptiondetails,messageblock,configuration,persistencekey';
+      const orderBy = corrId ? 'performanceexecutionstarttime asc,depth asc' : 'createdon desc';
+      const path = `/plugintracelogs?$select=${select}&$filter=${encodeURIComponent(filters.join(' and '))}&$orderby=${encodeURIComponent(orderBy)}&$top=250`;
+
+      const t0 = performance.now();
+      const url = `${context.environmentUrl}/api/data/v${context.apiVersion}${path}`;
+      try {
+        const res = await fetch(url, {
+          headers: { 'OData-MaxVersion': '4.0', 'OData-Version': '4.0', 'Accept': 'application/json' }
+        });
+        const ms = Math.round(performance.now() - t0);
+        const pill = document.getElementById('tel-pill');
+        pill.textContent = `${res.status} (${ms}ms)`;
+        pill.style.background = res.ok ? 'var(--status-success)' : 'var(--status-error)';
+        document.getElementById('tel-msg').textContent = `Fetched plugintracelogs`;
+
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
+        logs = json.value || [];
+        renderTable();
+      } catch (err) {
+        document.getElementById('trace-tbody').innerHTML = `<tr><td colspan="8" style="color:var(--status-error);padding:20px;">❌ ${esc(err.message)}</td></tr>`;
+        notify(err.message, 'error');
+      }
+    }
+
+    function getFilteredLogs() {
+      const q = document.getElementById('f-search').value.trim().toLowerCase();
+      const minDur = parseInt(document.getElementById('f-mindur').value, 10) || 0;
+      return logs.filter(l => {
+        if (minDur > 0 && (l.performanceexecutionduration || 0) < minDur) return false;
+        if (!q) return true;
+        return `${l.typename || ''} ${l.messagename || ''} ${l.primaryentity || ''} ${l.messageblock || ''} ${l.exceptiondetails || ''}`.toLowerCase().includes(q);
+      });
+    }
+
+    function renderTable() {
+      const filtered = getFilteredLogs();
+      const tbody = document.getElementById('trace-tbody');
+      const corrVal = document.getElementById('f-corr').value.trim();
+      document.getElementById('btn-clear-corr').style.display = corrVal ? 'inline-block' : 'none';
+
+      let errCount = 0, sumDur = 0, maxDur = 0;
+      for (const l of filtered) {
+        if (l.exceptiondetails) errCount++;
+        const d = Number(l.performanceexecutionduration) || 0;
+        sumDur += d;
+        if (d > maxDur) maxDur = d;
+      }
+
+      document.getElementById('st-total').textContent = filtered.length;
+      document.getElementById('st-errors').textContent = errCount;
+      document.getElementById('st-avg').textContent = filtered.length ? `${Math.round(sumDur / filtered.length)} ms` : '0 ms';
+      document.getElementById('st-max').textContent = `${maxDur} ms`;
+      setTitle(errCount ? `Traces — ${errCount} errors` : `Traces (${filtered.length})`);
+
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">No plugin trace logs match the active filters.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(l => {
+        const hasErr = !!l.exceptiondetails;
+        const ts = l.createdon ? new Date(l.createdon).toLocaleTimeString(undefined, { hour12: false }) : '—';
+        const modeTxt = l.mode === 1 ? 'Async' : 'Sync';
+        const dur = l.performanceexecutionduration ?? '—';
+        const isSel = selectedLog?.plugintracelogid === l.plugintracelogid;
+        return `<tr data-id="${esc(l.plugintracelogid)}" class="${isSel ? 'selected' : ''}">
+          <td>${esc(ts)}</td>
+          <td><span class="badge ${hasErr ? 'badge-err' : 'badge-ok'}">${hasErr ? 'Error' : 'OK'}</span></td>
+          <td title="${esc(l.typename || '')}">${esc(l.typename || '—')}</td>
+          <td><code>${esc(l.messagename || '—')}</code></td>
+          <td><code>${esc(l.primaryentity || 'none')}</code></td>
+          <td>${'· '.repeat(Math.max(0, (l.depth || 1) - 1))}${l.depth ?? 1}</td>
+          <td><span class="badge badge-mode">${modeTxt}</span></td>
+          <td style="font-weight:600;color:${dur > 1000 ? 'var(--status-warn)' : 'inherit'};">${dur} ms</td>
+        </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('tr[data-id]').forEach(tr => {
+        tr.addEventListener('click', () => openDetail(tr.dataset.id));
+      });
+    }
+
+    function openDetail(id) {
+      selectedLog = logs.find(l => l.plugintracelogid === id);
+      if (!selectedLog) return;
+      renderTable();
+
+      const l = selectedLog;
+      const pane = document.getElementById('detail-pane');
+      const body = document.getElementById('detail-body');
+      pane.classList.add('open');
+
+      body.innerHTML = `
+        <div style="font-size:12px;line-height:1.6;">
+          <div><strong>Plugin:</strong> <code>${esc(l.typename || '—')}</code></div>
+          <div><strong>Message / Entity:</strong> <code>${esc(l.messagename || '—')}</code> on <code>${esc(l.primaryentity || 'none')}</code></div>
+          <div><strong>Mode / Op / Depth:</strong> ${l.mode === 1 ? 'Async' : 'Sync'} · ${l.operationtype === 2 ? 'Workflow Activity' : 'Plugin'} · Depth ${l.depth ?? 1}</div>
+          <div><strong>Duration:</strong> ${l.performanceexecutionduration ?? 0} ms</div>
+          <div><strong>Correlation ID:</strong> <code>${esc(l.correlationid || '—')}</code></div>
+          <div><strong>Created:</strong> ${l.createdon ? new Date(l.createdon).toLocaleString() : '—'}</div>
+        </div>
+        ${l.exceptiondetails ? `<div><strong style="font-size:11px;color:var(--status-error);">Exception Stack Trace</strong><div class="block-box err">${esc(l.exceptiondetails)}</div></div>` : ''}
+        <div><strong style="font-size:11px;color:var(--text-sec);">ITracingService Message Block</strong><div class="block-box">${esc(l.messageblock || '(empty)')}</div></div>
+        ${l.configuration ? `<div><strong style="font-size:11px;color:var(--text-sec);">Unsecure Configuration</strong><div class="block-box">${esc(l.configuration)}</div></div>` : ''}
+      `;
+    }
+
+    /* ─── Events ─────────────────────────────────────────────── */
+    ['f-range', 'f-mode', 'f-errors'].forEach(id => document.getElementById(id).addEventListener('change', fetchLogs));
+    document.getElementById('f-corr').addEventListener('change', fetchLogs);
+    document.getElementById('f-search').addEventListener('input', renderTable);
+    document.getElementById('f-mindur').addEventListener('input', renderTable);
+    document.getElementById('btn-refresh').addEventListener('click', fetchLogs);
+
+    document.getElementById('btn-clear-corr').addEventListener('click', () => {
+      document.getElementById('f-corr').value = '';
+      fetchLogs();
+    });
+
+    document.getElementById('btn-filter-corr').addEventListener('click', () => {
+      if (!selectedLog?.correlationid) return;
+      document.getElementById('f-corr').value = selectedLog.correlationid;
+      fetchLogs();
+    });
+
+    document.getElementById('btn-close-detail').addEventListener('click', () => {
+      document.getElementById('detail-pane').classList.remove('open');
+      selectedLog = null;
+      renderTable();
+    });
+
+    document.getElementById('btn-copy-report').addEventListener('click', async () => {
+      if (!selectedLog) return;
+      const l = selectedLog;
+      const md = `### Dataverse Plugin Trace\n- **Plugin:** \`${l.typename}\`\n- **Message/Entity:** \`${l.messagename}\` / \`${l.primaryentity}\`\n- **Depth:** ${l.depth} | **Duration:** ${l.performanceexecutionduration} ms\n- **Correlation ID:** \`${l.correlationid}\`\n\n#### Exception\n\`\`\`\n${l.exceptiondetails || 'None'}\n\`\`\`\n\n#### Trace Output\n\`\`\`\n${l.messageblock || 'None'}\n\`\`\``;
+      await navigator.clipboard.writeText(md);
+      notify('Markdown trace report copied', 'success');
+    });
+
+    document.getElementById('auto-poll').addEventListener('change', e => {
+      clearInterval(pollTimer);
+      const ms = Number(e.target.value);
+      document.getElementById('live-dot').classList.toggle('live', ms > 0);
+      if (ms > 0) pollTimer = setInterval(fetchLogs, ms);
+    });
+
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const rows = getFilteredLogs();
+      if (!rows.length) return;
+      const csvSafe = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return `"${s.replace(/"/g, '""')}"`; };
+      const lines = ['CreatedOn,TypeName,MessageName,PrimaryEntity,Depth,Mode,DurationMs,CorrelationId,ExceptionDetails,MessageBlock'];
+      for (const l of rows) {
+        lines.push([l.createdon, l.typename, l.messagename, l.primaryentity, l.depth, l.mode === 1 ? 'Async' : 'Sync', l.performanceexecutionduration, l.correlationid, l.exceptiondetails || '', l.messageblock || ''].map(csvSafe).join(','));
+      }
+      const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `plugin_traces_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      notify(`Exported ${rows.length} trace logs`, 'success');
+    });
+
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+  </script>
+</body>
+</html>
