@@ -1341,47 +1341,94 @@
     let workflowsMap = {}; // workflowid (lowercase) -> { name, category }
     let cloudFlowsMap = {}; // backwards compatibility: workflowid -> name
     let workflowsPromise = null;
+    const pendingFlowLookups = new Map();
 
     async function loadCloudFlowsMap() {
       if (Object.keys(workflowsMap).length > 0) return workflowsMap;
       if (workflowsPromise) return workflowsPromise;
 
       workflowsPromise = (async () => {
-        try {
-          // Query all automation process categories:
-          // 0: Classic Workflow, 3: Action, 4: Business Process Flow, 5: Modern Cloud Flow
-          const data = await dvFetchWithHeaders(
-            `/workflows?$filter=(category eq 0 or category eq 3 or category eq 4 or category eq 5)&$select=workflowid,name,category&$orderby=name asc&$top=350`
-          );
-          if (data?.value) {
-            data.value.forEach(wf => {
-              if (wf.workflowid && wf.name) {
-                const id = wf.workflowid.toLowerCase();
-                workflowsMap[id] = { name: wf.name, category: wf.category };
-                cloudFlowsMap[id] = wf.name;
-              }
-            });
-          }
-        } catch (e) {
+        // Query 1: Cloud Flows (category eq 5 and type eq 1) with pagination support
+        const loadCloudFlows = async () => {
           try {
-            const fallback = await dvFetchWithHeaders(`/workflows?$select=workflowid,name,category&$top=250`);
-            if (fallback?.value) {
-              fallback.value.forEach(wf => {
+            let path = `/workflows?$filter=category eq 5 and type eq 1&$select=workflowid,name,category&$orderby=name asc&$top=500`;
+            let pages = 0;
+            while (path && pages < 3) {
+              pages++;
+              const cleanPath = path.startsWith('http')
+                ? path.replace(new RegExp(`^.*?/api/data/v[^/]+`), '')
+                : path;
+              const res = await dvFetchWithHeaders(cleanPath);
+              if (res?.value) {
+                res.value.forEach(wf => {
+                  if (wf.workflowid && wf.name) {
+                    const id = wf.workflowid.toLowerCase();
+                    workflowsMap[id] = { name: wf.name, category: 5 };
+                    cloudFlowsMap[id] = wf.name;
+                  }
+                });
+              }
+              path = res?.['@odata.nextLink'] || null;
+            }
+          } catch (e) {
+            console.warn('[EnvTimeline] Cloud flows query:', e.message);
+          }
+        };
+
+        // Query 2: Actions, BPFs & Classic Workflows (category 3, 4, 0) in parallel
+        const loadOtherProcesses = async () => {
+          try {
+            const res = await dvFetchWithHeaders(
+              `/workflows?$filter=(category eq 3 or category eq 0 or category eq 4) and type eq 1&$select=workflowid,name,category&$orderby=modifiedon desc&$top=350`
+            );
+            if (res?.value) {
+              res.value.forEach(wf => {
                 if (wf.workflowid && wf.name) {
                   const id = wf.workflowid.toLowerCase();
-                  workflowsMap[id] = { name: wf.name, category: wf.category };
-                  cloudFlowsMap[id] = wf.name;
+                  if (!workflowsMap[id]) {
+                    workflowsMap[id] = { name: wf.name, category: wf.category };
+                    cloudFlowsMap[id] = wf.name;
+                  }
                 }
               });
             }
-          } catch (e2) {
-            console.warn('[EnvTimeline] Workflows query for process metadata mapping:', e2.message);
+          } catch (e) {
+            console.warn('[EnvTimeline] Other workflows query:', e.message);
           }
-        }
+        };
+
+        await Promise.allSettled([loadCloudFlows(), loadOtherProcesses()]);
         return workflowsMap;
       })();
 
       return workflowsPromise;
+    }
+
+    async function resolveFlowMetadata(flowId) {
+      if (!flowId) return null;
+      const id = flowId.toLowerCase();
+      if (workflowsMap[id]) return workflowsMap[id];
+      if (pendingFlowLookups.has(id)) return pendingFlowLookups.get(id);
+
+      const promise = (async () => {
+        try {
+          const res = await dvFetchWithHeaders(`/workflows(${id})?$select=workflowid,name,category`);
+          if (res && res.name) {
+            const meta = { name: res.name, category: res.category ?? 5 };
+            workflowsMap[id] = meta;
+            cloudFlowsMap[id] = res.name;
+            return meta;
+          }
+        } catch (e) {
+          // Process not found or access denied
+        } finally {
+          pendingFlowLookups.delete(id);
+        }
+        return null;
+      })();
+
+      pendingFlowLookups.set(id, promise);
+      return promise;
     }
 
     /* ─── 5. Dataverse Fetch with HTTP Headers Capture ──────── */
@@ -1658,6 +1705,34 @@
       updateAuditOpOptions();
       updateAuditTableOptions();
       renderTimeline();
+
+      // On-demand resolution for any flow/process runs with missing friendly names
+      const unresolvedFlowIds = new Set();
+      allEvents.forEach(ev => {
+        if ((ev.category === 'flow' || ev.category === 'workflow' || ev.category === 'action') && ev.flowId) {
+          const fid = ev.flowId.toLowerCase();
+          if (!workflowsMap[fid] && (!ev.title || ev.title === 'Cloud Flow' || ev.title === 'Classic Workflow' || ev.title === 'Action Process')) {
+            unresolvedFlowIds.add(fid);
+          }
+        }
+      });
+
+      if (unresolvedFlowIds.size > 0) {
+        Promise.allSettled(Array.from(unresolvedFlowIds).slice(0, 25).map(id => resolveFlowMetadata(id)))
+          .then(() => {
+            let changed = false;
+            allEvents.forEach(ev => {
+              if (ev.flowId && (ev.title === 'Cloud Flow' || ev.title === 'Classic Workflow' || ev.title === 'Action Process')) {
+                const meta = workflowsMap[ev.flowId.toLowerCase()];
+                if (meta?.name) {
+                  ev.title = meta.name;
+                  changed = true;
+                }
+              }
+            });
+            if (changed) renderTimeline();
+          });
+      }
     }
 
     /* ─── 7. Event Normalization & Multi-Select Filter Helpers ──────── */

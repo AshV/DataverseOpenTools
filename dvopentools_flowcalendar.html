@@ -1277,18 +1277,54 @@
       spin.style.animation = 'spin .7s linear infinite';
 
       try {
-        // Query workflows (Cloud Flows: category eq 5, Actions: category eq 3, Classic Workflows: category eq 0)
-        let wfData = null;
-        try {
-          wfData = await dvFetchWithHeaders(
-            `/workflows?$filter=(category eq 5 or category eq 3 or category eq 0) and type eq 1&$select=workflowid,name,category,statecode,statuscode,modifiedon&$orderby=name asc&$top=200`
-          );
-        } catch {
-          wfData = await dvFetchWithHeaders(
-            `/workflows?$filter=category eq 5 and type eq 1&$select=workflowid,name,statecode,statuscode,modifiedon&$orderby=name asc&$top=150`
-          );
-        }
-        flowsList = wfData?.value || [];
+        // Query 1: Cloud Flows (category eq 5 and type eq 1) with pagination
+        const loadCloudFlows = async () => {
+          try {
+            let path = `/workflows?$filter=category eq 5 and type eq 1&$select=workflowid,name,category,statecode,statuscode,modifiedon&$orderby=name asc&$top=500`;
+            let pages = 0;
+            const items = [];
+            while (path && pages < 3) {
+              pages++;
+              const cleanPath = path.startsWith('http')
+                ? path.replace(new RegExp(`^.*?/api/data/v[^/]+`), '')
+                : path;
+              const res = await dvFetchWithHeaders(cleanPath);
+              if (res?.value) {
+                items.push(...res.value);
+              }
+              path = res?.['@odata.nextLink'] || null;
+            }
+            return items;
+          } catch (e) {
+            console.warn('[FlowCalendar] Cloud flows query:', e);
+            return [];
+          }
+        };
+
+        // Query 2: Custom Actions & Classic Workflows in parallel
+        const loadOtherProcesses = async () => {
+          try {
+            const res = await dvFetchWithHeaders(
+              `/workflows?$filter=(category eq 3 or category eq 0) and type eq 1&$select=workflowid,name,category,statecode,statuscode,modifiedon&$orderby=modifiedon desc&$top=200`
+            );
+            return res?.value || [];
+          } catch (e) {
+            return [];
+          }
+        };
+
+        const [cFlows, oFlows] = await Promise.all([loadCloudFlows(), loadOtherProcesses()]);
+        const flowMap = new Map();
+        cFlows.forEach(f => {
+          if (f.workflowid) flowMap.set(f.workflowid.toLowerCase(), f);
+        });
+        oFlows.forEach(f => {
+          if (f.workflowid) {
+            const id = f.workflowid.toLowerCase();
+            if (!flowMap.has(id)) flowMap.set(id, f);
+          }
+        });
+        flowsList = Array.from(flowMap.values());
         populateFlowSelect();
 
         // Query flow run history
@@ -1350,6 +1386,47 @@
       } else {
         isSampleData = false;
         notify(`Loaded ${flowRuns.length} flow runs from Dataverse`, 'success');
+      }
+
+      // On-demand resolution of any missing flow names
+      const missingFlowIds = new Set();
+      flowRuns.forEach(r => {
+        if (r.flowId) {
+          const fid = r.flowId.toLowerCase();
+          const found = flowsList.some(f => f.workflowid && f.workflowid.toLowerCase() === fid);
+          if (!found) missingFlowIds.add(fid);
+        }
+      });
+
+      if (missingFlowIds.size > 0) {
+        Promise.allSettled(Array.from(missingFlowIds).slice(0, 20).map(async fid => {
+          try {
+            const wf = await dvFetchWithHeaders(`/workflows(${fid})?$select=workflowid,name,category`);
+            if (wf && wf.name) {
+              flowsList.push(wf);
+              return wf;
+            }
+          } catch {}
+          return null;
+        })).then(() => {
+          populateFlowSelect();
+          let updated = false;
+          flowRuns.forEach(r => {
+            if (r.flowId && (!r.name || r.name === 'Cloud Flow' || r.name === 'Classic Workflow')) {
+              const fid = r.flowId.toLowerCase();
+              const match = flowsList.find(f => f.workflowid && f.workflowid.toLowerCase() === fid);
+              if (match?.name) {
+                let prefix = '';
+                if (match.category === 3) prefix = '[Action] ';
+                else if (match.category === 0) prefix = '[Workflow] ';
+                else if (match.category === 5) prefix = '[Cloud Flow] ';
+                r.name = `${prefix}${match.name}`;
+                updated = true;
+              }
+            }
+          });
+          if (updated) renderCalendar();
+        });
       }
     }
 
