@@ -51,10 +51,14 @@
       --cat-audit-color: #0078d4;
       --cat-plugin-bg:  rgba(135, 100, 184, 0.14);
       --cat-plugin-color: #724b9f;
-      --cat-flow-bg:    rgba(16, 124, 16, 0.12);
-      --cat-flow-color: #107c10;
-      --cat-job-bg:     rgba(180, 83, 9, 0.12);
-      --cat-job-color:  #b45309;
+      --cat-flow-bg:        rgba(16, 124, 16, 0.12);
+      --cat-flow-color:     #107c10;
+      --cat-workflow-bg:    rgba(217, 119, 6, 0.14);
+      --cat-workflow-color: #b45309;
+      --cat-action-bg:      rgba(225, 29, 72, 0.14);
+      --cat-action-color:   #be123c;
+      --cat-job-bg:         rgba(100, 116, 139, 0.14);
+      --cat-job-color:      #475569;
       --cat-solution-bg:rgba(15, 118, 110, 0.14);
       --cat-solution-color: #0f766e;
       --cat-sync-bg:    rgba(100, 116, 139, 0.14);
@@ -91,10 +95,14 @@
       --cat-audit-color: #60b4ff;
       --cat-plugin-bg:  rgba(180, 140, 240, 0.2);
       --cat-plugin-color: #c49eff;
-      --cat-flow-bg:    rgba(87, 179, 94, 0.2);
-      --cat-flow-color: #79d780;
-      --cat-job-bg:     rgba(251, 191, 36, 0.2);
-      --cat-job-color:  #fbbf24;
+      --cat-flow-bg:        rgba(87, 179, 94, 0.2);
+      --cat-flow-color:     #79d780;
+      --cat-workflow-bg:    rgba(251, 191, 36, 0.2);
+      --cat-workflow-color: #fbbf24;
+      --cat-action-bg:      rgba(251, 113, 133, 0.2);
+      --cat-action-color:   #fda4af;
+      --cat-job-bg:         rgba(148, 163, 184, 0.2);
+      --cat-job-color:      #94a3b8;
       --cat-solution-bg:rgba(45, 212, 191, 0.2);
       --cat-solution-color: #2dd4bf;
       --cat-sync-bg:    rgba(148, 163, 184, 0.2);
@@ -513,6 +521,8 @@
     .filter-chip.chip-audit    { background: var(--cat-audit-bg); color: var(--cat-audit-color); }
     .filter-chip.chip-plugin   { background: var(--cat-plugin-bg); color: var(--cat-plugin-color); }
     .filter-chip.chip-flow     { background: var(--cat-flow-bg); color: var(--cat-flow-color); }
+    .filter-chip.chip-workflow { background: var(--cat-workflow-bg); color: var(--cat-workflow-color); }
+    .filter-chip.chip-action   { background: var(--cat-action-bg); color: var(--cat-action-color); }
     .filter-chip.chip-job      { background: var(--cat-job-bg); color: var(--cat-job-color); }
     .filter-chip.chip-solution { background: var(--cat-solution-bg); color: var(--cat-solution-color); }
     .filter-chip.chip-sync     { background: var(--cat-sync-bg); color: var(--cat-sync-color); }
@@ -622,6 +632,8 @@
     .badge-cat.cat-audit    { background: var(--cat-audit-bg); color: var(--cat-audit-color); }
     .badge-cat.cat-plugin   { background: var(--cat-plugin-bg); color: var(--cat-plugin-color); }
     .badge-cat.cat-flow     { background: var(--cat-flow-bg); color: var(--cat-flow-color); }
+    .badge-cat.cat-workflow { background: var(--cat-workflow-bg); color: var(--cat-workflow-color); }
+    .badge-cat.cat-action   { background: var(--cat-action-bg); color: var(--cat-action-color); }
     .badge-cat.cat-job      { background: var(--cat-job-bg); color: var(--cat-job-color); }
     .badge-cat.cat-solution { background: var(--cat-solution-bg); color: var(--cat-solution-color); }
     .badge-cat.cat-sync     { background: var(--cat-sync-bg); color: var(--cat-sync-color); }
@@ -896,13 +908,21 @@
           <input type="checkbox" id="chk-plugin" checked>
           <span>🧩 Plugins</span> <strong id="cnt-plugin">0</strong>
         </label>
-        <label class="filter-chip chip-flow" id="chip-flow">
+        <label class="filter-chip chip-flow" id="chip-flow" title="Power Automate Cloud Flows">
           <input type="checkbox" id="chk-flow" checked>
-          <span>⚡ Flows</span> <strong id="cnt-flow">0</strong>
+          <span>⚡ Cloud Flows</span> <strong id="cnt-flow">0</strong>
         </label>
-        <label class="filter-chip chip-job" id="chip-job">
+        <label class="filter-chip chip-workflow" id="chip-workflow" title="Classic Background/Real-time Workflows & BPFs">
+          <input type="checkbox" id="chk-workflow" checked>
+          <span>⚙️ Workflows</span> <strong id="cnt-workflow">0</strong>
+        </label>
+        <label class="filter-chip chip-action" id="chip-action" title="Custom Process Actions">
+          <input type="checkbox" id="chk-action" checked>
+          <span>🎯 Actions</span> <strong id="cnt-action">0</strong>
+        </label>
+        <label class="filter-chip chip-job" id="chip-job" title="System Jobs (Bulk Delete, Import, Rollup, etc.)">
           <input type="checkbox" id="chk-job" checked>
-          <span>⚙️ Jobs</span> <strong id="cnt-job">0</strong>
+          <span>🔧 Jobs</span> <strong id="cnt-job">0</strong>
         </label>
         <label class="filter-chip chip-solution" id="chip-solution">
           <input type="checkbox" id="chk-solution" checked>
@@ -1021,14 +1041,14 @@
           <div id="md-audit-diff-content"></div>
         </div>
 
-        <!-- Cloud Flow Run Navigation Section -->
+        <!-- Process & Flow Navigation Section -->
         <div id="md-flow-nav-sec" style="display:none;margin-top:10px;padding:12px;background:rgba(138,43,226,0.06);border:1px solid rgba(138,43,226,0.25);border-radius:6px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
             <div>
-              <div style="font-weight:700;font-size:12px;color:var(--primary);display:flex;align-items:center;gap:6px;">
+              <div id="md-flow-nav-heading" style="font-weight:700;font-size:12px;color:var(--primary);display:flex;align-items:center;gap:6px;">
                 <span>⚡</span> Cloud Flow Execution Navigation
               </div>
-              <div style="font-size:11px;color:var(--text-sec);margin-top:2px;">
+              <div id="md-flow-nav-sub" style="font-size:11px;color:var(--text-sec);margin-top:2px;">
                 Direct deep-link to this specific run instance diagram in Microsoft Power Automate maker portal.
               </div>
             </div>
@@ -1040,9 +1060,9 @@
             </div>
           </div>
           <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;display:flex;gap:14px;flex-wrap:wrap;color:var(--text-sec);font-family:monospace;">
-            <div><strong>Flow ID:</strong> <span id="md-flow-id-val">—</span></div>
-            <div><strong>Run ID:</strong> <span id="md-flow-runid-val">—</span></div>
-            <div><a href="#" target="_blank" rel="noopener noreferrer" id="md-flow-history-link" style="color:var(--primary);text-decoration:underline;">View All Runs for this Flow ↗</a></div>
+            <div><strong id="md-flow-id-label">Flow ID:</strong> <span id="md-flow-id-val">—</span></div>
+            <div id="md-flow-runid-box"><strong>Run ID:</strong> <span id="md-flow-runid-val">—</span></div>
+            <div id="md-flow-history-box"><a href="#" target="_blank" rel="noopener noreferrer" id="md-flow-history-link" style="color:var(--primary);text-decoration:underline;">View All Runs for this Flow ↗</a></div>
           </div>
         </div>
 
@@ -1122,6 +1142,8 @@
       audit:    true,
       plugin:   true,
       flow:     true,
+      workflow: true,
+      action:   true,
       job:      true,
       solution: true,
       sync:     true,
@@ -1224,31 +1246,51 @@
       await loadEnvironmentEvents();
     }
 
-    /* ─── Cloud Flows Name Lookup Cache ─────────────────────── */
-    let cloudFlowsMap = {};
-    let cloudFlowsPromise = null;
+    /* ─── Workflows & Process Metadata Lookup Cache ─────────── */
+    let workflowsMap = {}; // workflowid (lowercase) -> { name, category }
+    let cloudFlowsMap = {}; // backwards compatibility: workflowid -> name
+    let workflowsPromise = null;
 
     async function loadCloudFlowsMap() {
-      if (Object.keys(cloudFlowsMap).length > 0) return cloudFlowsMap;
-      if (cloudFlowsPromise) return cloudFlowsPromise;
+      if (Object.keys(workflowsMap).length > 0) return workflowsMap;
+      if (workflowsPromise) return workflowsPromise;
 
-      cloudFlowsPromise = (async () => {
+      workflowsPromise = (async () => {
         try {
-          const data = await dvFetchWithHeaders(`/workflows?$filter=category eq 5&$select=workflowid,name&$orderby=name asc&$top=250`);
+          // Query all automation process categories:
+          // 0: Classic Workflow, 3: Action, 4: Business Process Flow, 5: Modern Cloud Flow
+          const data = await dvFetchWithHeaders(
+            `/workflows?$filter=(category eq 0 or category eq 3 or category eq 4 or category eq 5)&$select=workflowid,name,category&$orderby=name asc&$top=350`
+          );
           if (data?.value) {
             data.value.forEach(wf => {
               if (wf.workflowid && wf.name) {
-                cloudFlowsMap[wf.workflowid.toLowerCase()] = wf.name;
+                const id = wf.workflowid.toLowerCase();
+                workflowsMap[id] = { name: wf.name, category: wf.category };
+                cloudFlowsMap[id] = wf.name;
               }
             });
           }
         } catch (e) {
-          console.warn('[EnvTimeline] Workflows query for flow name mapping:', e.message);
+          try {
+            const fallback = await dvFetchWithHeaders(`/workflows?$select=workflowid,name,category&$top=250`);
+            if (fallback?.value) {
+              fallback.value.forEach(wf => {
+                if (wf.workflowid && wf.name) {
+                  const id = wf.workflowid.toLowerCase();
+                  workflowsMap[id] = { name: wf.name, category: wf.category };
+                  cloudFlowsMap[id] = wf.name;
+                }
+              });
+            }
+          } catch (e2) {
+            console.warn('[EnvTimeline] Workflows query for process metadata mapping:', e2.message);
+          }
         }
-        return cloudFlowsMap;
+        return workflowsMap;
       })();
 
-      return cloudFlowsPromise;
+      return workflowsPromise;
     }
 
     /* ─── 5. Dataverse Fetch with HTTP Headers Capture ──────── */
@@ -1461,8 +1503,9 @@
             (data.value || []).forEach(r => events.push(normalizePluginEvent(r)));
           }).catch(e => console.warn('[EnvTimeline] PluginTraces query:', e.message)),
 
-        // 3. System Jobs (Async Operations: createdon is universal; _ownerid_value is the lookup)
-        dvFetchWithHeaders(`/asyncoperations?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=asyncoperationid,name,operationtype,statuscode,statecode,startedon,completedon,createdon,message,_ownerid_value&$orderby=createdon desc&$top=150`)
+        // 3. System Jobs (Async Operations: createdon is universal; _workflowactivationid_value & _regardingobjectid_value link to workflow)
+        dvFetchWithHeaders(`/asyncoperations?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=asyncoperationid,name,operationtype,statuscode,statecode,startedon,completedon,createdon,message,_ownerid_value,_regardingobjectid_value,_workflowactivationid_value&$orderby=createdon desc&$top=150`)
+          .catch(() => dvFetchWithHeaders(`/asyncoperations?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=asyncoperationid,name,operationtype,statuscode,statecode,startedon,completedon,createdon,message,_ownerid_value,_regardingobjectid_value&$orderby=createdon desc&$top=150`))
           .then(data => {
             (data.value || []).forEach(r => events.push(normalizeJobEvent(r)));
           }).catch(e => console.warn('[EnvTimeline] AsyncOps query:', e.message)),
@@ -1855,6 +1898,7 @@
       9:  'Bulk Delete',
       10: 'Workflow',
       14: 'Import',
+      22: 'Bulk Delete',
       25: 'Quick Campaign',
       29: 'Cloud Flow',
       30: 'Rollup Field',
@@ -1921,25 +1965,41 @@
       return getEnvironmentId();
     }
 
-    function getFlowRunUrl(ev) {
-      if (!ev || ev.category !== 'flow') return null;
+    function getProcessUrl(ev) {
+      if (!ev) return null;
       const envId = getEnvironmentId();
-      const flowId = ev.flowId || ev.raw?.workflowid || ev.raw?._workflowid_value || ev.raw?._regardingobjectid_value;
+      const flowId = ev.flowId || ev.raw?.workflowid || ev.raw?._workflowid_value || ev.raw?._workflowactivationid_value || ev.raw?._regardingobjectid_value;
       let runId = ev.runId;
 
-      // Prevent using flow display name or job title as runId (which causes Power Automate 404 / redirection)
-      if (runId && (runId === ev.title || runId === ev.name || (ev.raw?.name && runId === ev.raw.name && ev.raw?.operationtype !== undefined))) {
-        runId = null;
+      if (ev.category === 'flow') {
+        // Prevent using flow display name or job title as runId (which causes Power Automate 404 / redirection)
+        if (runId && (runId === ev.title || runId === ev.name || (ev.raw?.name && runId === ev.raw.name && ev.raw?.operationtype !== undefined))) {
+          runId = null;
+        }
+
+        if (flowId && runId && !String(runId).startsWith('sample_fallback')) {
+          return `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows/${encodeURIComponent(flowId)}/runs/${encodeURIComponent(runId)}`;
+        }
+        if (flowId) {
+          return `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows/${encodeURIComponent(flowId)}/runs`;
+        }
+        return `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows`;
       }
 
-      if (flowId && runId && !String(runId).startsWith('sample_fallback')) {
-        return `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows/${encodeURIComponent(flowId)}/runs/${encodeURIComponent(runId)}`;
+      if (ev.category === 'workflow' || ev.category === 'action') {
+        const baseUrl = context?.environmentUrl || '';
+        if (flowId && baseUrl) {
+          return `${baseUrl}/main.aspx?etn=workflow&pagetype=entityrecord&id=${encodeURIComponent(flowId)}`;
+        }
+        if (ev.id && baseUrl) {
+          return `${baseUrl}/main.aspx?etn=asyncoperation&pagetype=entityrecord&id=${encodeURIComponent(ev.id)}`;
+        }
       }
-      if (flowId) {
-        return `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows/${encodeURIComponent(flowId)}/runs`;
-      }
-      return `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows`;
+
+      return null;
     }
+
+    const getFlowRunUrl = getProcessUrl;
 
     function normalizeAuditEvent(r) {
       const act = AUDIT_ACTIONS[r.action] || `Audit Action ${r.action}`;
@@ -1993,23 +2053,57 @@
       else if (sc === 20) { severity = 'info'; sevLabel = 'Running'; }
       else if (sc === 10 || sc === 0) { severity = 'info'; sevLabel = 'Waiting'; }
 
-      // Route Workflow (10) and Cloud Flow (29) runs to the 'flow' category tab
-      const isFlow = r.operationtype === 29 || r.operationtype === 10;
-      const catKey = isFlow ? 'flow' : 'job';
-      const catLbl = isFlow ? 'Flow' : 'System Job';
+      const isWorkflowOp = r.operationtype === 10;
+      const isFlowOp = r.operationtype === 29;
 
-      const flowId = isFlow ? (r._regardingobjectid_value || null) : null;
-      const flowName = isFlow ? (r.name || (flowId ? cloudFlowsMap[flowId.toLowerCase()] : null) || 'Cloud Flow') : null;
+      // Extract workflow ID from lookup fields
+      const wfActId = (r._workflowactivationid_value || '').toLowerCase();
+      const wfRegId = (r._regardingobjectid_value || '').toLowerCase();
+      const wfMeta = (wfActId && workflowsMap[wfActId]) || (wfRegId && workflowsMap[wfRegId]) || null;
+      const flowId = wfActId || (wfMeta ? wfRegId : null) || (isFlowOp || isWorkflowOp ? wfRegId : null);
+
+      let category = 'job';
+      let categoryLabel = 'System Job';
+      let entity = ASYNC_OP_TYPES[r.operationtype] || (r.operationtype ? `Type ${r.operationtype}` : 'System Job');
+      let title = r.name || entity;
+
+      const categoryCode = wfMeta ? wfMeta.category : (isFlowOp ? 5 : null);
+
+      if (categoryCode === 3) {
+        // Custom Process Action
+        category = 'action';
+        categoryLabel = 'Action';
+        entity = 'Action';
+        title = wfMeta.name || r.name || 'Action Process';
+      } else if (categoryCode === 5 || isFlowOp) {
+        // Modern Power Automate Cloud Flow
+        category = 'flow';
+        categoryLabel = 'Cloud Flow';
+        entity = 'Cloud Flow';
+        title = (wfMeta ? wfMeta.name : (flowId ? cloudFlowsMap[flowId] : null)) || r.name || 'Cloud Flow';
+      } else if (categoryCode === 4) {
+        // Business Process Flow
+        category = 'workflow';
+        categoryLabel = 'BPF';
+        entity = 'Business Process Flow';
+        title = wfMeta.name || r.name || 'Business Process Flow';
+      } else if (categoryCode === 0 || isWorkflowOp) {
+        // Classic Workflow (Background / Real-time)
+        category = 'workflow';
+        categoryLabel = 'Classic Workflow';
+        entity = 'Classic Workflow';
+        title = (wfMeta ? wfMeta.name : (flowId ? cloudFlowsMap[flowId] : null)) || r.name || 'Classic Workflow';
+      }
 
       return {
         id: r.asyncoperationid,
-        category: catKey,
-        categoryLabel: catLbl,
+        category,
+        categoryLabel,
         time: new Date(r.startedon || r.createdon),
         severity,
         severityLabel: sevLabel,
-        title: isFlow ? flowName : (r.name || (ASYNC_OP_TYPES[r.operationtype] || 'System Job')),
-        entity: ASYNC_OP_TYPES[r.operationtype] || `Type ${r.operationtype || ''}`,
+        title,
+        entity,
         user: r._ownerid_value ? r._ownerid_value.slice(0, 8) + '…' : 'SYSTEM',
         duration: formatTimeDiff(r.startedon || r.createdon, r.completedon),
         error: r.message || null,
@@ -2029,7 +2123,9 @@
       else if (s.includes('cancel')) { severity = 'warn'; sevLabel = 'Cancelled'; }
 
       const flowId = r.workflowid || r._workflowid_value || null;
-      const flowName = (flowId ? cloudFlowsMap[flowId.toLowerCase()] : null) ||
+      const wfMeta = flowId ? workflowsMap[flowId.toLowerCase()] : null;
+      const flowName = (wfMeta ? wfMeta.name : null) ||
+                       (flowId ? cloudFlowsMap[flowId.toLowerCase()] : null) ||
                        r['workflowid@OData.Community.Display.V1.FormattedValue'] ||
                        r['_workflowid_value@OData.Community.Display.V1.FormattedValue'] ||
                        'Cloud Flow';
@@ -2038,12 +2134,12 @@
       return {
         id: r.flowrunid || uid(),
         category: 'flow',
-        categoryLabel: 'Flow',
+        categoryLabel: 'Cloud Flow',
         time: new Date(r.starttime),
         severity,
         severityLabel: sevLabel,
         title: flowName,
-        entity: 'flowrun',
+        entity: 'Cloud Flow',
         user: 'Automated',
         duration: formatTimeDiff(r.starttime, r.endtime),
         error: r.errormessage ? (r.errorcode ? `[${r.errorcode}] ${r.errormessage}` : r.errormessage) : null,
@@ -2150,10 +2246,10 @@
           raw: { plugin: 'AccountHandler', stage: 40, durationMs: 142 }
         },
         {
-          id: 's2', category: 'flow', categoryLabel: 'Flow', time: minsAgo(24),
+          id: 's2', category: 'flow', categoryLabel: 'Cloud Flow', time: minsAgo(24),
           severity: 'success', severityLabel: 'Succeeded',
           title: 'Sync Invoice to ERP Webhook',
-          entity: 'cr_invoice', user: 'Automated', duration: '2.4s',
+          entity: 'Cloud Flow', user: 'Automated', duration: '2.4s',
           flowId: '7f3a9921-1234-4567-89ab-cdef01234567',
           runId: '08584857291038475628491028374',
           error: null, traces: null,
@@ -2219,7 +2315,7 @@
           id: 's6', category: 'job', categoryLabel: 'System Job', time: minsAgo(150),
           severity: 'error', severityLabel: 'Failed',
           title: 'Bulk Delete Job "Purge Audit Logs older than 90d"',
-          entity: 'Type 22', user: 'SYSTEM', duration: '12m 4s',
+          entity: 'Bulk Delete', user: 'SYSTEM', duration: '12m 4s',
           error: 'SqlException: Execution Timeout Expired. The timeout period elapsed prior to completion of the operation or the server is not responding.',
           traces: null,
           raw: { operationType: 22, recordsProcessed: 48200, error: 'SQL Timeout' }
@@ -2270,12 +2366,32 @@
           error: null, traces: null,
           auditDetail: null,
           raw: { action: 3, operation: 3, entity: 'opportunity', recordId: '11223344-5566-7788-9900-aabbccddeeff' }
+        },
+        {
+          id: 's11', category: 'action', categoryLabel: 'Action', time: minsAgo(95),
+          severity: 'success', severityLabel: 'Succeeded',
+          title: 'Contoso_CalculateCustomerCreditScore',
+          entity: 'Action', user: 'Ashish V.', duration: '280ms',
+          flowId: 'e1000000-0000-0000-0000-000000000001',
+          runId: null,
+          error: null, traces: null,
+          raw: { name: 'Contoso_CalculateCustomerCreditScore', operationtype: 10, category: 3, statuscode: 30 }
+        },
+        {
+          id: 's12', category: 'workflow', categoryLabel: 'Classic Workflow', time: minsAgo(180),
+          severity: 'success', severityLabel: 'Succeeded',
+          title: 'Account On-boarding Notifications',
+          entity: 'Classic Workflow', user: 'SYSTEM', duration: '1.2s',
+          flowId: 'e2000000-0000-0000-0000-000000000002',
+          runId: null,
+          error: null, traces: null,
+          raw: { name: 'Account On-boarding Notifications', operationtype: 10, category: 0, statuscode: 30 }
         }
       ];
 
       updateAuditOpOptions();
       updateAuditTableOptions();
-      notify('Loaded 10 realistic sample events across all Dataverse log categories.', 'info');
+      notify('Loaded 12 realistic sample events across all Dataverse log categories.', 'info');
       renderTimeline();
     }
 
@@ -2330,7 +2446,7 @@
       });
 
       // Update Category Chip Counts
-      const catCounts = { audit: 0, plugin: 0, flow: 0, job: 0, solution: 0, sync: 0 };
+      const catCounts = { audit: 0, plugin: 0, flow: 0, workflow: 0, action: 0, job: 0, solution: 0, sync: 0 };
       let errCount = 0;
       let warnCount = 0;
       const usersSet = new Set();
@@ -2351,6 +2467,8 @@
       document.getElementById('cnt-audit').textContent    = catCounts.audit;
       document.getElementById('cnt-plugin').textContent   = catCounts.plugin;
       document.getElementById('cnt-flow').textContent     = catCounts.flow;
+      document.getElementById('cnt-workflow').textContent = catCounts.workflow;
+      document.getElementById('cnt-action').textContent   = catCounts.action;
       document.getElementById('cnt-job').textContent      = catCounts.job;
       document.getElementById('cnt-solution').textContent = catCounts.solution;
       document.getElementById('cnt-sync').textContent     = catCounts.sync;
@@ -2400,14 +2518,21 @@
         <button class="btn icon-only" style="padding:2px 6px;font-size:11px;" title="View event details">🔍</button>
       `;
 
-      if (ev.category === 'flow') {
-        const flowUrl = getFlowRunUrl(ev);
-        if (flowUrl) {
-          actionHtml = `
-            <a href="${esc(flowUrl)}" target="_blank" rel="noopener noreferrer" class="btn icon-only" style="padding:2px 6px;font-size:11px;text-decoration:none;color:var(--primary);margin-right:2px;" title="Open Flow Run in Power Automate (new tab)" onclick="event.stopPropagation();">🚀↗</a>
-            <button class="btn icon-only" style="padding:2px 6px;font-size:11px;" title="View event details">🔍</button>
-          `;
+      const procUrl = getProcessUrl(ev);
+      if (procUrl) {
+        let icon = '🚀↗';
+        let tooltip = 'Open Flow Run in Power Automate (new tab)';
+        if (ev.category === 'action') {
+          icon = '🎯↗';
+          tooltip = 'Open Action Process in Dataverse (new tab)';
+        } else if (ev.category === 'workflow') {
+          icon = '⚙️↗';
+          tooltip = 'Open Workflow in Dataverse (new tab)';
         }
+        actionHtml = `
+          <a href="${esc(procUrl)}" target="_blank" rel="noopener noreferrer" class="btn icon-only" style="padding:2px 6px;font-size:11px;text-decoration:none;color:var(--primary);margin-right:2px;" title="${tooltip}" onclick="event.stopPropagation();">${icon}</a>
+          <button class="btn icon-only" style="padding:2px 6px;font-size:11px;" title="View event details">🔍</button>
+        `;
       }
 
       tr.innerHTML = `
@@ -2495,46 +2620,80 @@
         diffContent.innerHTML = '';
       }
 
-      // Cloud Flow Run Navigation Section
+      // Process & Flow Navigation Section
       const flowSec = document.getElementById('md-flow-nav-sec');
-      if (ev.category === 'flow') {
+      const isProcessCategory = ev.category === 'flow' || ev.category === 'workflow' || ev.category === 'action';
+      if (isProcessCategory) {
         flowSec.style.display = 'block';
-        const flowId = ev.flowId || ev.raw?.workflowid || ev.raw?._workflowid_value || ev.raw?._regardingobjectid_value;
+        const flowId = ev.flowId || ev.raw?.workflowid || ev.raw?._workflowid_value || ev.raw?._workflowactivationid_value || ev.raw?._regardingobjectid_value;
         const runId  = ev.runId || (ev.entity === 'flowrun' ? ev.raw?.name : null);
-        const flowRunUrl = getFlowRunUrl(ev);
+        const procUrl = getProcessUrl(ev);
+
+        const headingEl = document.getElementById('md-flow-nav-heading');
+        const subEl     = document.getElementById('md-flow-nav-sub');
+        const idLabelEl = document.getElementById('md-flow-id-label');
+        const runIdBox  = document.getElementById('md-flow-runid-box');
+        const histBox   = document.getElementById('md-flow-history-box');
+        const openBtn   = document.getElementById('md-flow-open-btn');
+        const copyBtn   = document.getElementById('md-flow-copy-url');
 
         document.getElementById('md-flow-id-val').textContent = flowId || '—';
         document.getElementById('md-flow-runid-val').textContent = runId || '—';
 
-        const openBtn = document.getElementById('md-flow-open-btn');
-        if (flowRunUrl) {
-          openBtn.href = flowRunUrl;
+        if (ev.category === 'flow') {
+          if (headingEl) headingEl.innerHTML = '<span>⚡</span> Cloud Flow Execution Navigation';
+          if (subEl) subEl.textContent = 'Direct deep-link to this specific run instance diagram in Microsoft Power Automate maker portal.';
+          if (idLabelEl) idLabelEl.textContent = 'Flow ID:';
+          if (runIdBox) runIdBox.style.display = 'block';
+          if (copyBtn) copyBtn.textContent = '📋 Copy Run URL';
+          if (openBtn) openBtn.textContent = runId ? '🚀 Open Flow Run Instance ↗' : '🚀 Open Flow Run History ↗';
+
+          const envId = getEnvironmentId();
+          const histLink = document.getElementById('md-flow-history-link');
+          if (flowId && histLink) {
+            histLink.href = `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows/${encodeURIComponent(flowId)}/runs`;
+            if (histBox) histBox.style.display = 'block';
+          } else if (histBox) {
+            histBox.style.display = 'none';
+          }
+        } else if (ev.category === 'action') {
+          if (headingEl) headingEl.innerHTML = '<span>🎯</span> Action Process Navigation';
+          if (subEl) subEl.textContent = 'Direct link to this Custom Process Action definition in Microsoft Dataverse.';
+          if (idLabelEl) idLabelEl.textContent = 'Action ID:';
+          if (runIdBox) runIdBox.style.display = 'none';
+          if (histBox) histBox.style.display = 'none';
+          if (copyBtn) copyBtn.textContent = '📋 Copy Action URL';
+          if (openBtn) openBtn.textContent = '🎯 Open Action Process ↗';
+        } else {
+          // Classic workflow
+          if (headingEl) headingEl.innerHTML = '<span>⚙️</span> Classic Workflow Navigation';
+          if (subEl) subEl.textContent = 'Direct link to this Workflow process record in Microsoft Dataverse.';
+          if (idLabelEl) idLabelEl.textContent = 'Workflow ID:';
+          if (runIdBox) runIdBox.style.display = 'none';
+          if (histBox) histBox.style.display = 'none';
+          if (copyBtn) copyBtn.textContent = '📋 Copy Workflow URL';
+          if (openBtn) openBtn.textContent = '⚙️ Open Classic Workflow ↗';
+        }
+
+        if (procUrl && openBtn) {
+          openBtn.href = procUrl;
           openBtn.style.pointerEvents = 'auto';
           openBtn.style.opacity = '1';
-          openBtn.textContent = runId ? '🚀 Open Flow Run Instance ↗' : '🚀 Open Flow Run History ↗';
-        } else {
+        } else if (openBtn) {
           openBtn.href = '#';
           openBtn.style.pointerEvents = 'none';
           openBtn.style.opacity = '0.5';
         }
 
-        const histLink = document.getElementById('md-flow-history-link');
-        const envId = getEnvironmentId();
-        if (flowId) {
-          histLink.href = `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows/${encodeURIComponent(flowId)}/runs`;
-          histLink.style.display = 'inline';
-        } else {
-          histLink.style.display = 'none';
+        if (copyBtn) {
+          copyBtn.onclick = () => {
+            if (procUrl) {
+              navigator.clipboard?.writeText(procUrl).then(() => {
+                notify(`Copied ${ev.categoryLabel} URL to clipboard`, 'success');
+              });
+            }
+          };
         }
-
-        const copyBtn = document.getElementById('md-flow-copy-url');
-        copyBtn.onclick = () => {
-          if (flowRunUrl) {
-            navigator.clipboard?.writeText(flowRunUrl).then(() => {
-              notify('Copied Cloud Flow Run URL to clipboard', 'success');
-            });
-          }
-        };
       } else {
         flowSec.style.display = 'none';
       }
@@ -2822,14 +2981,16 @@
     });
 
     // Category chips
-    ['audit', 'plugin', 'flow', 'job', 'solution', 'sync'].forEach(cat => {
+    ['audit', 'plugin', 'flow', 'workflow', 'action', 'job', 'solution', 'sync'].forEach(cat => {
       const chk = document.getElementById(`chk-${cat}`);
       const chip = document.getElementById(`chip-${cat}`);
-      chk.addEventListener('change', () => {
-        catFilters[cat] = chk.checked;
-        chip.classList.toggle('muted', !chk.checked);
-        renderTimeline();
-      });
+      if (chk && chip) {
+        chk.addEventListener('change', () => {
+          catFilters[cat] = chk.checked;
+          chip.classList.toggle('muted', !chk.checked);
+          renderTimeline();
+        });
+      }
     });
 
     // Modal

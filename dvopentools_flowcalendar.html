@@ -1277,11 +1277,18 @@
       spin.style.animation = 'spin .7s linear infinite';
 
       try {
-        // Query workflows (Cloud Flows: category eq 5 and type eq 1)
-        const wfData = await dvFetchWithHeaders(
-          `/workflows?$filter=category eq 5 and type eq 1&$select=workflowid,name,statecode,statuscode,modifiedon&$orderby=name asc&$top=150`
-        );
-        flowsList = wfData.value || [];
+        // Query workflows (Cloud Flows: category eq 5, Actions: category eq 3, Classic Workflows: category eq 0)
+        let wfData = null;
+        try {
+          wfData = await dvFetchWithHeaders(
+            `/workflows?$filter=(category eq 5 or category eq 3 or category eq 0) and type eq 1&$select=workflowid,name,category,statecode,statuscode,modifiedon&$orderby=name asc&$top=200`
+          );
+        } catch {
+          wfData = await dvFetchWithHeaders(
+            `/workflows?$filter=category eq 5 and type eq 1&$select=workflowid,name,statecode,statuscode,modifiedon&$orderby=name asc&$top=150`
+          );
+        }
+        flowsList = wfData?.value || [];
         populateFlowSelect();
 
         // Query flow run history
@@ -1323,8 +1330,10 @@
       if (!loadedViaApi) {
         try {
           const opsData = await dvFetchWithHeaders(
+            `/asyncoperations?$filter=(operationtype eq 29 or operationtype eq 10) and createdon ge ${startIso} and createdon le ${endIso}&$select=asyncoperationid,name,startedon,completedon,createdon,statuscode,statecode,message,_regardingobjectid_value,_workflowactivationid_value&$orderby=createdon desc&$top=200`
+          ).catch(() => dvFetchWithHeaders(
             `/asyncoperations?$filter=(operationtype eq 29 or operationtype eq 10) and createdon ge ${startIso} and createdon le ${endIso}&$select=asyncoperationid,name,startedon,completedon,createdon,statuscode,statecode,message,_regardingobjectid_value&$orderby=createdon desc&$top=200`
-          );
+          ));
           if (opsData?.value && opsData.value.length > 0) {
             flowRuns = opsData.value.map(r => normalizeRunRecord(r, 'asyncoperation'));
             loadedViaApi = true;
@@ -1380,10 +1389,17 @@
       else if (sc === 20 || sc === 21) status = 'Running';
       else if (sc === 30) status = 'Succeeded';
 
-      // Match flow name from regarding object if available
-      const flowId = r._regardingobjectid_value || null;
+      // Match flow name from regarding object or workflow activation if available
+      const flowId = r._workflowactivationid_value || r._regardingobjectid_value || null;
       const flowMatch = flowId ? flowsList.find(f => f.workflowid && f.workflowid.toLowerCase() === flowId.toLowerCase()) : null;
-      const flowName = flowMatch?.name || r.name || 'Cloud Flow';
+      let flowName = flowMatch?.name || r.name || 'Cloud Flow';
+      if (flowMatch) {
+        let prefix = '';
+        if (flowMatch.category === 3) prefix = '[Action] ';
+        else if (flowMatch.category === 0) prefix = '[Workflow] ';
+        else if (flowMatch.category === 5) prefix = '[Cloud Flow] ';
+        flowName = `${prefix}${flowMatch.name}`;
+      }
 
       return {
         id: r.asyncoperationid || uid(),
@@ -1466,11 +1482,15 @@
     /* ─── 8. Flow Dropdown Population ───────────────────────── */
     function populateFlowSelect() {
       const select = document.getElementById('flow-filter-select');
-      select.innerHTML = '<option value="ALL">All Flows (' + flowsList.length + ')</option>';
+      select.innerHTML = '<option value="ALL">All Flows &amp; Processes (' + flowsList.length + ')</option>';
       for (const f of flowsList) {
         const opt = document.createElement('option');
         opt.value = f.workflowid;
-        opt.textContent = f.name;
+        let prefix = '';
+        if (f.category === 3) prefix = '[Action] ';
+        else if (f.category === 0) prefix = '[Workflow] ';
+        else if (f.category === 5) prefix = '[Cloud Flow] ';
+        opt.textContent = `${prefix}${f.name}`;
         select.appendChild(opt);
       }
     }
