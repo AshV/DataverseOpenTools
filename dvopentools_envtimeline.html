@@ -1467,8 +1467,8 @@
             (data.value || []).forEach(r => events.push(normalizeJobEvent(r)));
           }).catch(e => console.warn('[EnvTimeline] AsyncOps query:', e.message)),
 
-        // 4. Cloud Flow Runs (Modern elastic table flowruns)
-        dvFetchWithHeaders(`/flowruns?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage,_workflowid_value&$orderby=starttime desc&$top=100`)
+        // 4. Cloud Flow Runs (Modern elastic table flowruns: workflowid is the direct attribute on elastic table)
+        dvFetchWithHeaders(`/flowruns?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage,workflowid&$orderby=starttime desc&$top=100`)
           .then(data => {
             (data.value || []).forEach(r => events.push(normalizeFlowEvent(r)));
           }).catch(e => {
@@ -1924,7 +1924,7 @@
     function getFlowRunUrl(ev) {
       if (!ev || ev.category !== 'flow') return null;
       const envId = getEnvironmentId();
-      const flowId = ev.flowId || ev.raw?._workflowid_value || ev.raw?._regardingobjectid_value || ev.raw?.workflowid;
+      const flowId = ev.flowId || ev.raw?.workflowid || ev.raw?._workflowid_value || ev.raw?._regardingobjectid_value;
       let runId = ev.runId;
 
       // Prevent using flow display name or job title as runId (which causes Power Automate 404 / redirection)
@@ -2028,9 +2028,10 @@
       else if (s.includes('run')) { severity = 'info'; sevLabel = 'Running'; }
       else if (s.includes('cancel')) { severity = 'warn'; sevLabel = 'Cancelled'; }
 
-      const flowId = r._workflowid_value || r.workflowid || null;
-      const flowName = r['_workflowid_value@OData.Community.Display.V1.FormattedValue'] ||
-                       (flowId ? cloudFlowsMap[flowId.toLowerCase()] : null) ||
+      const flowId = r.workflowid || r._workflowid_value || null;
+      const flowName = (flowId ? cloudFlowsMap[flowId.toLowerCase()] : null) ||
+                       r['workflowid@OData.Community.Display.V1.FormattedValue'] ||
+                       r['_workflowid_value@OData.Community.Display.V1.FormattedValue'] ||
                        'Cloud Flow';
       const runId = r.name || r.flowrunid || null;
 
@@ -2498,7 +2499,7 @@
       const flowSec = document.getElementById('md-flow-nav-sec');
       if (ev.category === 'flow') {
         flowSec.style.display = 'block';
-        const flowId = ev.flowId || ev.raw?._workflowid_value || ev.raw?._regardingobjectid_value || ev.raw?.workflowid;
+        const flowId = ev.flowId || ev.raw?.workflowid || ev.raw?._workflowid_value || ev.raw?._regardingobjectid_value;
         const runId  = ev.runId || (ev.entity === 'flowrun' ? ev.raw?.name : null);
         const flowRunUrl = getFlowRunUrl(ev);
 

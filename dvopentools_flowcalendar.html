@@ -1109,7 +1109,7 @@
     function getFlowRunUrl(run) {
       if (!run) return null;
       const envId = getEnvironmentId();
-      const flowId = run.flowId || run.raw?._workflowid_value || run.raw?._regardingobjectid_value || run.raw?.workflowid;
+      const flowId = run.flowId || run.raw?.workflowid || run.raw?._workflowid_value || run.raw?._regardingobjectid_value;
       let runId = run.runId;
 
       // Prevent using flow name as runId (which causes Power Automate redirection to flow root)
@@ -1309,7 +1309,7 @@
       // Strategy 1: Attempt standard flowruns table (if enabled in modern environment)
       try {
         const runsData = await dvFetchWithHeaders(
-          `/flowruns?$filter=starttime ge ${startIso} and starttime le ${endIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage,_workflowid_value&$orderby=starttime desc&$top=200`
+          `/flowruns?$filter=starttime ge ${startIso} and starttime le ${endIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage,workflowid&$orderby=starttime desc&$top=200`
         );
         if (runsData?.value) {
           flowRuns = runsData.value.map(r => normalizeRunRecord(r, 'flowrun'));
@@ -1353,9 +1353,9 @@
         else if (s.includes('cancel')) status = 'Cancelled';
         else if (s.includes('time')) status = 'TimedOut';
 
-        const flowId = r._workflowid_value || r.workflowid || null;
+        const flowId = r.workflowid || r._workflowid_value || null;
         const flowMatch = flowId ? flowsList.find(f => f.workflowid && f.workflowid.toLowerCase() === flowId.toLowerCase()) : null;
-        const flowName = r['_workflowid_value@OData.Community.Display.V1.FormattedValue'] || flowMatch?.name || 'Cloud Flow';
+        const flowName = flowMatch?.name || r['workflowid@OData.Community.Display.V1.FormattedValue'] || r['_workflowid_value@OData.Community.Display.V1.FormattedValue'] || 'Cloud Flow';
         const runId = r.name || r.flowrunid || null;
 
         return {
@@ -1504,7 +1504,7 @@
 
       const filteredRuns = flowRuns.filter(r => {
         if (!statusFilters[r.status]) return false;
-        const itemFlowId = r.flowId || r.raw?._workflowid_value || r.raw?._regardingobjectid_value;
+        const itemFlowId = r.flowId || r.raw?.workflowid || r.raw?._workflowid_value || r.raw?._regardingobjectid_value;
         if (selectedFlow !== 'ALL' && (!itemFlowId || itemFlowId.toLowerCase() !== selectedFlow.toLowerCase())) return false;
         if (searchTxt && !r.name.toLowerCase().includes(searchTxt)) return false;
         return true;
