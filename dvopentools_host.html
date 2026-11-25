@@ -970,6 +970,7 @@
       networkLogs: [],
       pendingApprovals: [],
       alwaysAllowedTabs: new Set(),
+      pendingLaunchToolId: new URLSearchParams(location.search).get('tool') || '',
     };
 
     function getApiBaseUrl() {
@@ -2215,6 +2216,11 @@
         setStatus(true);
         await discoverTools(forceRefresh);
         toast(`Connected to proxy (${S.proxyTargetHost || getApiBaseUrl()}).`, 'success');
+        if (S.pendingLaunchToolId) {
+          const targetTool = S.pendingLaunchToolId;
+          S.pendingLaunchToolId = '';
+          await openTool(targetTool);
+        }
       } catch (err) {
         console.error('[dvopentools] Proxy connection failed:', err);
         S.proxyTargetHost = '';
@@ -2642,6 +2648,11 @@
         activate(toActivate.tabId);
       } else {
         renderTabs();
+      }
+      if (S.pendingLaunchToolId) {
+        const targetTool = S.pendingLaunchToolId;
+        S.pendingLaunchToolId = '';
+        await openTool(targetTool);
       }
       renderNetworkLogs();
     }

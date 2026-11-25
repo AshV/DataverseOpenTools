@@ -43,7 +43,7 @@ A **tool** is a single, self-contained `.html` file that:
 ## 2. Three-Step Quick Start
 
 ```
-1. Copy dvopentools_template.html
+1. Copy tools/dvopentools_template.html
 2. Fill in the manifest block (name, id, icon, category)
 3. Build your UI + logic using context.environmentUrl for API calls
 ```
@@ -1149,7 +1149,7 @@ Add `class="dv-app"` on `<body>` to activate the host's full design system:
 | `DV.esc(str)` | HTML-escapes strings safely. |
 | `DV.ui.empty / error / badge` | Ready-to-render HTML fragments for empty states, error banners, and badges. |
 
-*(See `dvopentools_template.html` for the minimal `<body class="dv-app">` starter.)*
+*(See `tools/dvopentools_template.html` for the minimal `<body class="dv-app">` starter.)*
 
 ---
 
@@ -1166,7 +1166,7 @@ Then either:
 - **External / `file://` Host Mode:** Open `dvopentools_host.html` directly from disk (`file:///.../dvopentools_host.html`) or an external static domain. The host automatically detects that it is running outside Power Platform (`*.dynamics.com`) and asks **only for your local Proxy URL** (e.g. `http://127.0.0.1:8787`).
 
 How it works:
-- Serves all local `dvopentools_*.html` files straight from disk (`/WebResources/*`) with no upload step and no browser caching.
+- Serves `index.html` at `/` (and `dvopentools_host.html` at `/dvopentools_host.html`) plus all `tools/dvopentools_*.html` files straight from disk (`/WebResources/*`) with no upload step and no browser caching.
 - Merges un-uploaded local tools into `/api/data/*/webresourceset` discovery automatically.
 - Acquires and caches OAuth Bearer tokens **strictly server-side** via `pac auth token` or `az account get-access-token` (`DV_TOKEN` env var optional) — Environment URL and Bearer tokens never touch browser JS or storage.
 - Enables CORS + Chrome Private Network Access headers (`Access-Control-Allow-Origin: *`, `Access-Control-Allow-Private-Network: true`) and exposes `GET /_proxy/status` (metadata only) so external/local-file hosts connect cleanly.

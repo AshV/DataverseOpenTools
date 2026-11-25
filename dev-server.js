@@ -23,6 +23,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const ROOT_DIR = path.resolve(__dirname);
+const TOOLS_DIR = path.join(ROOT_DIR, 'tools');
 const TOKEN_TTL_MS = 40 * 60 * 1000;
 
 /* ─── CLI Argument Parsing ─────────────────────────────────── */
@@ -119,22 +120,28 @@ function getBearerToken(opts, forceRefresh = false) {
 }
 
 /* ─── Local File Helpers ───────────────────────────────────── */
-function resolveSafeLocalFile(relName) {
+function resolveSafeLocalFile(relName, baseDir = ROOT_DIR) {
   const clean = decodeURIComponent(relName.split('?')[0]).replace(/^\/+/, '');
-  const resolved = path.resolve(ROOT_DIR, clean);
-  if (resolved !== ROOT_DIR && !resolved.startsWith(ROOT_DIR + path.sep)) return null;
+  const resolved = path.resolve(baseDir, clean);
+  if (resolved !== baseDir && !resolved.startsWith(baseDir + path.sep)) return null;
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) return null;
   return resolved;
 }
 
 function listLocalToolWebResources(prefix = 'dvopentools_') {
-  return fs.readdirSync(ROOT_DIR)
-    .filter(f => f.startsWith(prefix) && f.endsWith('.html') && f !== `${prefix}host.html` && f !== `${prefix}template.html`)
-    .sort()
-    .map(name => ({
-      name,
-      displayname: name.replace(prefix, '').replace(/\.html$/i, '')
-    }));
+  const dirs = [TOOLS_DIR, ROOT_DIR].filter(d => fs.existsSync(d) && fs.statSync(d).isDirectory());
+  const seen = new Set();
+  for (const dir of dirs) {
+    for (const f of fs.readdirSync(dir)) {
+      if (f.startsWith(prefix) && f.endsWith('.html') && f !== `${prefix}host.html` && f !== `${prefix}template.html`) {
+        seen.add(f);
+      }
+    }
+  }
+  return [...seen].sort().map(name => ({
+    name,
+    displayname: name.replace(prefix, '').replace(/\.html$/i, '')
+  }));
 }
 
 function mimeTypeFor(filePath) {
@@ -275,16 +282,20 @@ function createDevServer(opts) {
       return;
     }
 
-    // 1. Root -> Host HTML
-    if (reqUrl === '/' || reqUrl === '/dvopentools_host.html') {
+    // 1. Home page & Host HTML
+    if (reqUrl === '/' || reqUrl === '/index.html') {
+      const homeFile = resolveSafeLocalFile('index.html') || resolveSafeLocalFile('dvopentools_host.html');
+      if (homeFile) { serveFile(res, homeFile); return; }
+    }
+    if (reqUrl === '/dvopentools_host.html') {
       const hostFile = resolveSafeLocalFile('dvopentools_host.html');
       if (hostFile) { serveFile(res, hostFile); return; }
     }
 
-    // 2. /WebResources/* -> Local workspace file first (instant reload), else Dataverse proxy
+    // 2. /WebResources/* -> Local tools/ (or root) file first (instant reload), else Dataverse proxy
     if (reqUrl.startsWith('/WebResources/')) {
       const wrName = reqUrl.slice('/WebResources/'.length);
-      const localFile = resolveSafeLocalFile(wrName);
+      const localFile = resolveSafeLocalFile(wrName, TOOLS_DIR) || resolveSafeLocalFile(wrName, ROOT_DIR);
       if (localFile) {
         serveFile(res, localFile);
         return;
