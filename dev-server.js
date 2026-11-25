@@ -147,6 +147,14 @@ function mimeTypeFor(filePath) {
   return 'application/octet-stream';
 }
 
+function applyCorsHeaders(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] || 'Content-Type, Accept, OData-MaxVersion, OData-Version, Prefer, If-Match, If-None-Match');
+  res.setHeader('Access-Control-Expose-Headers', '*');
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
+}
+
 function serveFile(res, filePath) {
   const body = fs.readFileSync(filePath);
   res.writeHead(200, {
@@ -233,6 +241,7 @@ function sanitizeResponseHeaders(hdrs) {
   for (const [k, v] of Object.entries(hdrs)) {
     const lk = k.toLowerCase();
     if (['connection', 'keep-alive', 'transfer-encoding', 'content-length', 'set-cookie'].includes(lk)) continue;
+    if (lk.startsWith('access-control-')) continue;
     out[k] = v;
   }
   return out;
@@ -241,7 +250,30 @@ function sanitizeResponseHeaders(hdrs) {
 /* ─── HTTP Server Factory ──────────────────────────────────── */
 function createDevServer(opts) {
   return http.createServer((req, res) => {
+    applyCorsHeaders(req, res);
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
     const reqUrl = (req.url || '/').split('?')[0];
+
+    // 0. Proxy metadata status (non-secret; never exposes tokens)
+    if (reqUrl === '/_proxy/status') {
+      let targetHost = '';
+      try { if (opts.envUrl) targetHost = new URL(opts.envUrl).hostname; } catch {}
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({
+        ok: true,
+        localOnly: !!opts.localOnly,
+        targetUrl: opts.envUrl || '',
+        targetHost,
+        localToolsCount: listLocalToolWebResources().length
+      }));
+      return;
+    }
 
     // 1. Root -> Host HTML
     if (reqUrl === '/' || reqUrl === '/dvopentools_host.html') {

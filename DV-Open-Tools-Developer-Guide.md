@@ -1155,14 +1155,18 @@ Add `class="dv-app"` on `<body>` to activate the host's full design system:
 
 ## 16. Local Development Server (`dev-server.js`)
 
-To develop and test tools locally against a live Dataverse environment **without** pasting Bearer tokens into the browser or hitting CORS errors, run the zero-dependency local Node.js proxy:
+To develop and test tools locally (or run `dvopentools_host.html` directly from `file://` or an external domain) against a live Dataverse environment **without** putting Environment URLs or Bearer tokens into the browser, run the zero-dependency local Node.js proxy:
 
 ```bash
 node dev-server.js --env https://yourorg.crm.dynamics.com
 ```
 
-Then open **http://127.0.0.1:8787/dvopentools_host.html**:
+Then either:
+- **Recommended:** Open **http://127.0.0.1:8787/dvopentools_host.html** directly (same-origin, zero CORS, zero Mixed Content — Proxy URL auto-defaults to `http://127.0.0.1:8787`), **OR**
+- **External / `file://` Host Mode:** Open `dvopentools_host.html` directly from disk (`file:///.../dvopentools_host.html`) or an external static domain. The host automatically detects that it is running outside Power Platform (`*.dynamics.com`) and asks **only for your local Proxy URL** (e.g. `http://127.0.0.1:8787`).
+
+How it works:
 - Serves all local `dvopentools_*.html` files straight from disk (`/WebResources/*`) with no upload step and no browser caching.
 - Merges un-uploaded local tools into `/api/data/*/webresourceset` discovery automatically.
-- Acquires and caches OAuth Bearer tokens **strictly server-side** via `pac auth token` or `az account get-access-token` (`DV_TOKEN` env var optional) — tokens never touch browser JS or storage.
-- Uses same-origin `http://127.0.0.1:8787` requests in the browser (zero CORS, zero Mixed Content).
+- Acquires and caches OAuth Bearer tokens **strictly server-side** via `pac auth token` or `az account get-access-token` (`DV_TOKEN` env var optional) — Environment URL and Bearer tokens never touch browser JS or storage.
+- Enables CORS + Chrome Private Network Access headers (`Access-Control-Allow-Origin: *`, `Access-Control-Allow-Private-Network: true`) and exposes `GET /_proxy/status` (metadata only) so external/local-file hosts connect cleanly.

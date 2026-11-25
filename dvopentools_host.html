@@ -484,6 +484,7 @@
     <button class="hdr-btn" id="sidebar-toggle" title="Toggle Sidebar  Ctrl+B">☰</button>
     <div class="header-logo">⚡ DV <em>Open</em> Tools</div>
     <button class="hdr-pill-btn" id="cmd-palette-btn" title="Quick Open Tools &amp; Commands  Ctrl+K">🔍 Quick Open <kbd>Ctrl+K</kbd></button>
+    <button class="hdr-pill-btn" id="proxy-btn" style="display:none;background:rgba(255,165,0,0.22);border-color:rgba(255,165,0,0.5);" title="Configure Local Proxy URL">🔌 Proxy URL</button>
     <div class="hdr-sep"></div>
     <div class="header-meta">
       <span class="env" id="hdr-env">Connecting…</span>
@@ -524,7 +525,10 @@
           <div class="e-icon">⚡</div>
           <h2>DV Open Tools</h2>
           <p>Select a tool from the sidebar, or load a local <strong>.html</strong> tool file.</p>
-          <button class="btn btn-secondary e-btn" id="empty-load-btn">📂 Load from File</button>
+          <div style="display:flex;gap:10px;pointer-events:auto;">
+            <button class="btn btn-primary e-btn" id="empty-proxy-btn" style="display:none;">🔌 Set Local Proxy URL</button>
+            <button class="btn btn-secondary e-btn" id="empty-load-btn">📂 Load from File</button>
+          </div>
         </div>
       </div>
     </main>
@@ -533,13 +537,15 @@
 
   <!-- ══════════════ STATUS BAR ══════════════ -->
   <footer class="status-bar">
-    <span>⚡ DV Open Tools v2025.11.0</span>
+    <span>⚡ DV Open Tools v2025.11.1</span>
+    <span class="s-sep">│</span>
+    <span id="st-mode" title="Detected runtime environment">—</span>
     <span class="s-sep">│</span>
     <span id="st-api">API v9.2</span>
     <span class="s-sep">│</span>
     <span id="st-env" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="Dataverse Host">—</span>
     <span class="s-sep">│</span>
-    <span id="st-conn">🟡 Connecting</span>
+    <span id="st-conn" style="cursor:pointer;" title="Connection Status">🟡 Connecting</span>
     <span class="s-sep">│</span>
     <span id="st-store" title="Storage backend">💾 —</span>
     <span class="s-sep">│</span>
@@ -684,9 +690,39 @@
           <option value="dark">Dark</option>
         </select>
       </div>
+      <div class="form-row" id="ext-settings-row" style="display:none;border-top:1px solid var(--border);padding-top:12px;">
+        <label>Local Proxy Server</label>
+        <div class="form-hint" id="ext-settings-summary" style="margin-bottom:8px;">No Proxy URL configured.</div>
+        <button class="btn btn-secondary" type="button" id="cfg-open-proxy-btn">🔌 Configure Proxy URL…</button>
+      </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="settings-cancel">Cancel</button>
         <button class="btn btn-primary" id="settings-save">Save &amp; Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ LOCAL PROXY URL MODAL ══════════════ -->
+  <div class="overlay" id="proxy-modal">
+    <div class="modal" style="width:480px;">
+      <h2>🔌 Local Proxy Server</h2>
+      <div class="warn-box" id="proxy-mode-banner" style="margin-bottom:14px;">
+        Running outside Power Platform. Point the host to your running local <code>dev-server.js</code> proxy.
+      </div>
+      <div class="form-row">
+        <label>Local Proxy URL</label>
+        <input type="url" id="proxy-url-input" placeholder="http://127.0.0.1:8787">
+        <div class="form-hint">
+          Your Dataverse Environment URL and Bearer token stay strictly inside your local server:<br>
+          <code>node dev-server.js --env https://yourorg.crm.dynamics.com</code>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content:space-between;">
+        <button class="btn btn-secondary" id="proxy-clear" style="color:#d13438;">Clear URL</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary" id="proxy-cancel">Cancel</button>
+          <button class="btn btn-primary" id="proxy-save">Test &amp; Connect</button>
+        </div>
       </div>
     </div>
   </div>
@@ -889,9 +925,39 @@
       }
     `;
 
+    /* ─── Environment / Runtime Detection ────────────────────── */
+    function detectHostRuntime() {
+      if (location.protocol === 'file:') return 'local_file';
+      const h = (location.hostname || '').toLowerCase();
+      const isPpDomain = /\.(dynamics\.com|dynamics\.cn|microsoftdynamics\.de|microsoftdynamics\.us|appsplatform\.us|powerapps\.com|powerplatform\.com)$/i.test(h);
+      if (location.protocol === 'https:' && isPpDomain) return 'powerplatform';
+      try { if (window.parent?.Xrm?.Utility?.getGlobalContext) return 'powerplatform'; } catch {}
+      return 'external_domain';
+    }
+
+    const HOST_RUNTIME = detectHostRuntime();
+    const IS_EXTERNAL_MODE = HOST_RUNTIME !== 'powerplatform';
+    const SAFE_POST_ORIGIN = (location.origin && location.origin !== 'null') ? location.origin : '*';
+
+    function normalizeProxyUrl(raw) {
+      let s = (raw || '').trim();
+      if (!s) return '';
+      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = 'http://' + s;
+      try {
+        const u = new URL(s);
+        return (u.protocol === 'http:' || u.protocol === 'https:') ? u.origin : '';
+      } catch {
+        return '';
+      }
+    }
+
     /* ─── State ──────────────────────────────────────────────── */
     const S = {
-      cfg: { prefix: 'dvopentools_', apiVersion: '9.2', tabLimit: 5, theme: 'light', securityPolicy: 'AUDIT' },
+      cfg: { prefix: 'dvopentools_', apiVersion: '9.2', tabLimit: 5, theme: 'light', securityPolicy: 'AUDIT', proxyUrl: '' },
+      runtimeMode: HOST_RUNTIME,
+      isExternalMode: IS_EXTERNAL_MODE,
+      proxyTargetHost: '',
+      externalHtmlCache: new Map(),
       tabs: [],         // [{tabId, toolId, name, icon, type:'wr'|'file', wrName?}]
       activeTabId: null,
       tools: [],        // discovered [{id, name, icon, category, description, version, wrName}]
@@ -905,6 +971,11 @@
       pendingApprovals: [],
       alwaysAllowedTabs: new Set(),
     };
+
+    function getApiBaseUrl() {
+      if (!S.isExternalMode) return location.origin;
+      return normalizeProxyUrl(S.cfg.proxyUrl);
+    }
 
     /* ─── Tiered storage ─────────────────────────────────────────
        Priority: localStorage → sessionStorage → in-memory
@@ -957,19 +1028,38 @@
     }
 
     /* ─── Dataverse API fetch ────────────────────────────────── */
-    function dvUrl(path) { return `${location.origin}/api/data/v${S.cfg.apiVersion}${path}`; }
+    function dvUrl(path) {
+      const base = getApiBaseUrl();
+      if (!base) throw new Error('Local Proxy URL is not configured.');
+      return `${base}/api/data/v${S.cfg.apiVersion}${path}`;
+    }
     async function dv(path, opts = {}) {
       const r = await fetch(dvUrl(path), {
         ...opts,
         headers: { 'OData-MaxVersion': '4.0', 'OData-Version': '4.0',
                    'Accept': 'application/json', 'Content-Type': 'application/json', ...opts.headers }
       });
-      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      if (!r.ok) {
+        const errJson = await r.json().catch(() => ({}));
+        throw new Error(errJson?.error?.message || `${r.status} ${r.statusText}`);
+      }
       return r.json();
     }
 
     /* ─── Context init ───────────────────────────────────────── */
     async function buildContext() {
+      const base = getApiBaseUrl();
+      if (S.isExternalMode) {
+        if (!base) throw new Error('Local Proxy URL is not configured.');
+        try {
+          const stRes = await fetch(`${base}/_proxy/status`, { cache: 'no-store' });
+          if (stRes.ok) {
+            const st = await stRes.json();
+            S.proxyTargetHost = st.targetHost || '';
+          }
+        } catch {}
+      }
+
       const who = await dv('/WhoAmI');
       let name = '', email = '', environmentId = '';
       try {
@@ -993,7 +1083,7 @@
       }
 
       return {
-        environmentUrl: location.origin,
+        environmentUrl: base,
         apiVersion: S.cfg.apiVersion,
         userId: who.UserId,
         userName: name,
@@ -1001,18 +1091,45 @@
         organizationId: who.OrganizationId || '',
         environmentId: environmentId || who.OrganizationId || '',
         hostVersion: HOST_VERSION,
-        theme: S.cfg.theme
+        theme: S.cfg.theme,
+        runtimeMode: S.runtimeMode
       };
     }
 
     /* ─── Status bar + header ────────────────────────────────── */
     function setStatus(ok) {
-      const host = ok ? new URL(S.ctx.environmentUrl).hostname : '—';
-      document.getElementById('hdr-env').textContent   = ok ? host : 'Connection failed';
+      let host = '—';
+      try {
+        if (S.proxyTargetHost) host = S.proxyTargetHost;
+        else if (S.ctx?.environmentUrl && S.ctx.environmentUrl !== 'null') host = new URL(S.ctx.environmentUrl).hostname;
+      } catch {}
+
+      const modeEl = document.getElementById('st-mode');
+      if (modeEl) {
+        const modeMap = {
+          powerplatform: '☁️ Power Platform',
+          external_domain: `🌐 External (${location.hostname || 'domain'})`,
+          local_file: '📁 Local File'
+        };
+        modeEl.textContent = modeMap[S.runtimeMode] || '—';
+      }
+
+      const proxyBtn = document.getElementById('proxy-btn');
+      const emptyProxyBtn = document.getElementById('empty-proxy-btn');
+      if (S.isExternalMode) {
+        const pUrl = getApiBaseUrl();
+        proxyBtn.style.display = 'inline-flex';
+        proxyBtn.textContent = ok && pUrl ? `🟢 Proxy: ${new URL(pUrl).host}` : '🔌 Proxy URL';
+        proxyBtn.style.background = ok ? 'rgba(16,124,16,0.3)' : 'rgba(255,165,0,0.22)';
+        proxyBtn.style.borderColor = ok ? 'rgba(87,179,94,0.6)' : 'rgba(255,165,0,0.5)';
+        if (emptyProxyBtn) emptyProxyBtn.style.display = ok ? 'none' : 'inline-flex';
+      }
+
+      document.getElementById('hdr-env').textContent   = ok ? host : (S.isExternalMode ? 'Proxy Not Connected' : 'Connection failed');
       document.getElementById('hdr-user').textContent  = S.ctx?.userName || '—';
       document.getElementById('st-api').textContent    = `API v${S.cfg.apiVersion}`;
       document.getElementById('st-env').textContent    = host;
-      document.getElementById('st-conn').textContent   = ok ? '🟢 Connected' : '🔴 Error';
+      document.getElementById('st-conn').textContent   = ok ? '🟢 Connected' : (S.isExternalMode && !getApiBaseUrl() ? '🟡 Needs Proxy URL' : '🔴 Error');
       // Show storage backend in status bar
       const storeLabels = { localStorage: '💾 Persistent', sessionStorage: '💾 Session', memory: '⚠️ No Storage' };
       document.getElementById('st-store').textContent = storeLabels[ls.type] || '—';
@@ -1026,8 +1143,14 @@
 
     /* ─── Tool discovery ─────────────────────────────────────── */
     async function discoverTools(force = false) {
+      if (S.isExternalMode && !getApiBaseUrl()) {
+        S.tools = [];
+        renderSidebar();
+        return;
+      }
+
       setSidebarLoading();
-      const cacheKey = `cache::${S.cfg.prefix}`;
+      const cacheKey = `cache::${getApiBaseUrl()}::${S.cfg.prefix}`;
       const hit = ls.get(cacheKey);
       if (!force && hit && Date.now() - hit.ts < CACHE_TTL) { S.tools = hit.tools; renderSidebar(); return; }
 
@@ -1061,19 +1184,28 @@
         ls.set(cacheKey, { ts: Date.now(), tools });
       } catch (e) {
         console.error('[dvopentools] Discovery failed:', e);
-        toast('Failed to discover tools — check console.', 'error');
+        toast(`Failed to discover tools: ${e.message}`, 'error');
         S.tools = [];
       }
       renderSidebar();
     }
 
-    async function fetchManifest(wrName) {
-      const r = await fetch(`/WebResources/${wrName}`, { credentials: 'same-origin' });
+    async function fetchToolHtml(wrName) {
+      const base = getApiBaseUrl();
+      const r = await fetch(`${base}/WebResources/${wrName}`, {
+        credentials: S.isExternalMode ? 'omit' : 'same-origin',
+        cache: 'no-store'
+      });
       if (!r.ok) return null;
       const html = await r.text();
-      const doc  = new DOMParser().parseFromString(html, 'text/html');
-      const el   = doc.getElementById('dvopentools-manifest');
-      return el ? JSON.parse(el.textContent.trim()) : null;
+      if (S.isExternalMode) S.externalHtmlCache.set(wrName, html);
+      return html;
+    }
+
+    async function fetchManifest(wrName) {
+      const html = await fetchToolHtml(wrName);
+      if (!html) return null;
+      return parseManifest(html);
     }
 
     function wrToId(name) { return name.replace(S.cfg.prefix, '').replace('.html', '').toLowerCase(); }
@@ -1101,7 +1233,13 @@
     function renderSidebar() {
       const el = document.getElementById('sidebar-list');
       if (!S.tools.length) {
-        el.innerHTML = `<div class="sb-empty">No tools found.<br>Upload web resources named<br><code>${esc(S.cfg.prefix)}*.html</code></div>`;
+        if (S.isExternalMode && !getApiBaseUrl()) {
+          el.innerHTML = `<div class="sb-empty">Local proxy not configured.<br>Set your <code>dev-server.js</code> Proxy URL to load tools.</div>`;
+        } else if (S.isExternalMode) {
+          el.innerHTML = `<div class="sb-empty">No tools found from proxy.<br>Ensure <code>dev-server.js</code> is running at<br><code>${esc(getApiBaseUrl())}</code></div>`;
+        } else {
+          el.innerHTML = `<div class="sb-empty">No tools found.<br>Upload web resources named<br><code>${esc(S.cfg.prefix)}*.html</code></div>`;
+        }
         return;
       }
 
@@ -1149,7 +1287,7 @@
     }
 
     /* ─── Tab management ─────────────────────────────────────── */
-    function openTool(toolId, launchData = null) {
+    async function openTool(toolId, launchData = null) {
       if (launchData) S.launchPayloads[toolId] = launchData;
       const existing = S.tabs.find(t => t.toolId === toolId);
       if (existing) {
@@ -1164,8 +1302,24 @@
       const tool  = S.tools.find(t => t.id === toolId);
       if (!tool) { toast(`Tool "${toolId}" not found in environment.`, 'warning'); return; }
       const tabId = uid();
-      S.tabs.push({ tabId, toolId, name: tool.name, icon: tool.icon, type: 'wr', wrName: tool.wrName });
-      createFrame(tabId, { type: 'wr', src: `/WebResources/${tool.wrName}` });
+      const apiBase = getApiBaseUrl();
+      if (S.isExternalMode && apiBase && apiBase !== location.origin) {
+        let html = S.externalHtmlCache.get(tool.wrName);
+        if (!html) {
+          try {
+            html = await fetchToolHtml(tool.wrName);
+            S.externalHtmlCache.set(tool.wrName, html);
+          } catch (e) {
+            toast(`Failed to load "${tool.name}" from proxy: ${e.message}`, 'error');
+            return;
+          }
+        }
+        S.tabs.push({ tabId, toolId, name: tool.name, icon: tool.icon, type: 'wr', wrName: tool.wrName });
+        createFrame(tabId, { type: 'file', html });
+      } else {
+        S.tabs.push({ tabId, toolId, name: tool.name, icon: tool.icon, type: 'wr', wrName: tool.wrName });
+        createFrame(tabId, { type: 'wr', src: `/WebResources/${tool.wrName}` });
+      }
       renderTabs(); activate(tabId); persistTabs();
     }
 
@@ -1413,8 +1567,16 @@
       if (opts.type === 'wr') {
         frame.src = opts.src;
       } else {
-        // Blob URL keeps same-origin so postMessage works identically to WR frames
-        const blob = new Blob([opts.html], { type: 'text/html' });
+        // Blob URL keeps same-origin so postMessage works identically to WR frames.
+        // On file:// hosts, location.origin is 'null' which throws in postMessage(msg, 'null'); shim it inside blob frames.
+        let frameHtml = opts.html || '';
+        if (location.origin === 'null') {
+          const originShim = `<script>(function(){if(window.location.origin==='null'){var p=Window.prototype.postMessage;Window.prototype.postMessage=function(m,o,t){return p.call(this,m,o==='null'?'*':o,t);};}})();<\/script>`;
+          frameHtml = /<head[^>]*>/i.test(frameHtml)
+            ? frameHtml.replace(/<head[^>]*>/i, m => m + originShim)
+            : originShim + frameHtml;
+        }
+        const blob = new Blob([frameHtml], { type: 'text/html' });
         const url  = URL.createObjectURL(blob);
         frame.src  = url;
         frame.dataset.blob = url;
@@ -1449,13 +1611,13 @@
     function postToTool(frame, type, payload) {
       frame.contentWindow?.postMessage(
         { source: 'dvopentools-host', type, payload },
-        location.origin
+        SAFE_POST_ORIGIN
       );
     }
 
     /* ─── postMessage — receive from tools ───────────────────── */
     window.addEventListener('message', e => {
-      if (e.origin !== location.origin) return;
+      if (e.origin !== location.origin && !(location.origin === 'null' && e.origin === 'null')) return;
       const { source, type, payload } = e.data || {};
       if (source !== 'dvopentools-tool') return;
 
@@ -1583,9 +1745,24 @@
               }
             }
 
+            let fetchArgs = arguments;
+            const apiBase = getApiBaseUrl();
+            if (S.isExternalMode && apiBase && apiBase !== location.origin) {
+              if (typeof input === 'string' && input.startsWith('/api/data/v')) {
+                fetchArgs = [`${apiBase}${input}`, init];
+              } else if (typeof input === 'object' && input && typeof input.url === 'string') {
+                try {
+                  const u = new URL(input.url);
+                  if (u.pathname.startsWith('/api/data/v') && (u.origin === location.origin || u.origin === 'null')) {
+                    fetchArgs = [new (win.Request || Request)(`${apiBase}${u.pathname}${u.search}`, input), init];
+                  }
+                } catch {}
+              }
+            }
+
             const t0 = performance.now();
             try {
-              const res = await originalFetch.apply(win, arguments);
+              const res = await originalFetch.apply(win, fetchArgs);
               const latency = Math.round(performance.now() - t0);
               const capturedHeaders = {};
               if (res.headers && typeof res.headers.forEach === 'function') {
@@ -2013,6 +2190,86 @@
       } catch { return null; }
     }
 
+    /* ─── External Proxy Modal ───────────────────────────────── */
+    function openProxyModal() {
+      const banner = document.getElementById('proxy-mode-banner');
+      if (banner) {
+        banner.innerHTML = S.runtimeMode === 'local_file'
+          ? '<strong>Local File Mode (<code>file://</code>):</strong> Direct browser calls to Dataverse are blocked by CORS. Point this host to your running local <code>dev-server.js</code> Proxy URL. Environment URL and Bearer token stay strictly inside <code>dev-server.js</code>.'
+          : `<strong>External Domain Mode (<code>${esc(location.host || location.origin)}</code>):</strong> Dataverse blocks cross-origin calls from non-Power Platform domains. Point this host to your local <code>dev-server.js</code> Proxy URL (Environment URL and auth stay local on your machine).`;
+      }
+      const inp = document.getElementById('proxy-url-input');
+      if (inp) {
+        const fallback = (location.protocol !== 'file:' && (location.hostname === '127.0.0.1' || location.hostname === 'localhost'))
+          ? location.origin
+          : 'http://127.0.0.1:8787';
+        inp.value = S.cfg.proxyUrl || fallback;
+      }
+      document.getElementById('proxy-modal').classList.add('open');
+      setTimeout(() => inp?.focus(), 20);
+    }
+
+    async function reconnectViaProxy(forceRefresh = true) {
+      try {
+        S.ctx = await buildContext();
+        setStatus(true);
+        await discoverTools(forceRefresh);
+        toast(`Connected to proxy (${S.proxyTargetHost || getApiBaseUrl()}).`, 'success');
+      } catch (err) {
+        console.error('[dvopentools] Proxy connection failed:', err);
+        S.proxyTargetHost = '';
+        S.ctx = {
+          environmentUrl: getApiBaseUrl() || location.origin,
+          apiVersion: S.cfg.apiVersion,
+          userId: '', userName: '', userEmail: '',
+          hostVersion: HOST_VERSION,
+          theme: S.cfg.theme,
+          runtimeMode: S.runtimeMode
+        };
+        setStatus(false);
+        S.tools = [];
+        renderSidebar();
+        toast(`Could not reach proxy at ${getApiBaseUrl()}: ${err.message}`, 'error', 7000);
+      }
+    }
+
+    async function saveProxyUrl() {
+      const raw = document.getElementById('proxy-url-input').value;
+      const normalized = normalizeProxyUrl(raw);
+      if (!normalized) {
+        toast('Enter a valid http(s) Proxy URL (e.g. http://127.0.0.1:8787).', 'warning');
+        document.getElementById('proxy-url-input').focus();
+        return;
+      }
+      S.cfg.proxyUrl = normalized;
+      S.proxyTargetHost = '';
+      S.externalHtmlCache.clear();
+      ls.set('cfg', S.cfg);
+      document.getElementById('proxy-modal').classList.remove('open');
+      setStatus(false);
+      await reconnectViaProxy(true);
+    }
+
+    function clearProxyUrl() {
+      S.cfg.proxyUrl = '';
+      S.proxyTargetHost = '';
+      S.externalHtmlCache.clear();
+      S.tools = [];
+      S.ctx = {
+        environmentUrl: location.origin,
+        apiVersion: S.cfg.apiVersion,
+        userId: '', userName: '', userEmail: '',
+        hostVersion: HOST_VERSION,
+        theme: S.cfg.theme,
+        runtimeMode: S.runtimeMode
+      };
+      ls.set('cfg', S.cfg);
+      document.getElementById('proxy-modal').classList.remove('open');
+      setStatus(false);
+      renderSidebar();
+      toast('Proxy URL cleared.', 'info');
+    }
+
     /* ─── Settings ───────────────────────────────────────────── */
     function openSettings() {
       document.getElementById('cfg-prefix').value   = S.cfg.prefix;
@@ -2020,6 +2277,15 @@
       document.getElementById('cfg-tabs').value     = S.cfg.tabLimit;
       document.getElementById('cfg-theme').value    = S.cfg.theme;
       document.getElementById('cfg-security').value = S.cfg.securityPolicy || 'AUDIT';
+      const extRow = document.getElementById('ext-settings-row');
+      const extSum = document.getElementById('ext-settings-summary');
+      if (extRow) extRow.style.display = S.isExternalMode ? 'block' : 'none';
+      if (extSum) {
+        const pUrl = getApiBaseUrl();
+        extSum.textContent = pUrl
+          ? `${pUrl}${S.proxyTargetHost ? ' → ' + S.proxyTargetHost : ''}`
+          : 'Not configured';
+      }
       document.getElementById('settings-modal').classList.add('open');
     }
 
@@ -2061,10 +2327,10 @@
 
       ls.set('cfg', S.cfg);
       applyTheme(theme);
-      setStatus(true);
+      setStatus(Boolean(S.ctx && (S.proxyTargetHost || S.ctx.userId)));
       document.getElementById('settings-modal').classList.remove('open');
       toast('Settings saved.', 'success');
-      if (changed) { ls.set(`cache::${prefix}`, null); discoverTools(true); }
+      if (changed) { ls.set(`cache::${getApiBaseUrl()}::${prefix}`, null); discoverTools(true); }
     }
 
     /* ─── UI event bindings ──────────────────────────────────── */
@@ -2078,6 +2344,20 @@
     document.getElementById('load-file-btn').addEventListener('click', triggerFilePicker);
     document.getElementById('tab-add').addEventListener('click', triggerFilePicker);
     document.getElementById('empty-load-btn').addEventListener('click', triggerFilePicker);
+
+    document.getElementById('proxy-btn')?.addEventListener('click', openProxyModal);
+    document.getElementById('empty-proxy-btn')?.addEventListener('click', openProxyModal);
+    document.getElementById('st-conn')?.addEventListener('click', () => { if (S.isExternalMode) openProxyModal(); });
+    document.getElementById('cfg-open-proxy-btn')?.addEventListener('click', () => {
+      document.getElementById('settings-modal').classList.remove('open');
+      openProxyModal();
+    });
+    document.getElementById('proxy-cancel')?.addEventListener('click', () => document.getElementById('proxy-modal').classList.remove('open'));
+    document.getElementById('proxy-save')?.addEventListener('click', saveProxyUrl);
+    document.getElementById('proxy-clear')?.addEventListener('click', clearProxyUrl);
+    document.getElementById('proxy-url-input')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); saveProxyUrl(); }
+    });
 
     document.getElementById('settings-btn').addEventListener('click', openSettings);
     document.getElementById('settings-cancel').addEventListener('click', () => document.getElementById('settings-modal').classList.remove('open'));
@@ -2193,6 +2473,7 @@
       const all = [
         ...S.tabs.map(t => ({ icon: t.icon, label: `Switch to ${t.name}`, sub: 'Open Tab', run: () => activate(t.tabId) })),
         ...S.tools.map(t => ({ icon: t.icon, label: t.name, sub: t.category, run: () => openTool(t.id) })),
+        ...(S.isExternalMode ? [{ icon: '🔌', label: 'Configure Local Proxy URL', sub: 'External Mode', run: openProxyModal }] : []),
         { icon: '🌙', label: 'Toggle Light / Dark Theme', sub: 'Command', run: () => document.getElementById('theme-btn').click() },
         { icon: '📡', label: 'Toggle Network Activity Console', sub: 'Command', run: () => document.getElementById('network-drawer').classList.toggle('open') },
         { icon: '⚙️', label: 'Open Host Settings & Security Policy', sub: 'Command', run: openSettings },
@@ -2289,16 +2570,44 @@
         toast('Storage is unavailable — settings and open tabs cannot be saved this session.', 'warning', 8000);
       }
 
+      // If served directly from local dev server (localhost / 127.0.0.1), default Proxy URL to location.origin
+      if (S.isExternalMode && !getApiBaseUrl() && location.protocol !== 'file:' &&
+          (location.hostname === '127.0.0.1' || location.hostname === 'localhost')) {
+        S.cfg.proxyUrl = location.origin;
+        ls.set('cfg', S.cfg);
+      }
+
+      // Outside Power Platform without a Proxy URL configured: prompt for Proxy URL right away
+      if (S.isExternalMode && !getApiBaseUrl()) {
+        S.ctx = {
+          environmentUrl: location.origin, apiVersion: S.cfg.apiVersion,
+          userId: '', userName: '', userEmail: '', hostVersion: HOST_VERSION,
+          theme: S.cfg.theme, runtimeMode: S.runtimeMode
+        };
+        setStatus(false);
+        renderSidebar();
+        renderTabs();
+        renderNetworkLogs();
+        openProxyModal();
+        return;
+      }
+
       // Build Dataverse context
       try {
         S.ctx = await buildContext();
         setStatus(true);
       } catch (err) {
         console.error('[dvopentools] Context failed:', err);
-        S.ctx = { environmentUrl: location.origin, apiVersion: S.cfg.apiVersion,
-                  userId: '', userName: '', userEmail: '', hostVersion: HOST_VERSION, theme: S.cfg.theme };
+        S.ctx = { environmentUrl: getApiBaseUrl() || location.origin, apiVersion: S.cfg.apiVersion,
+                  userId: '', userName: '', userEmail: '', hostVersion: HOST_VERSION,
+                  theme: S.cfg.theme, runtimeMode: S.runtimeMode };
         setStatus(false);
-        toast('Could not connect to Dataverse API. Running in limited mode.', 'error', 7000);
+        toast(
+          S.isExternalMode
+            ? `Could not connect to local proxy at ${getApiBaseUrl()}. Make sure dev-server.js is running.`
+            : 'Could not connect to Dataverse API. Running in limited mode.',
+          'error', 7000
+        );
       }
 
       // Discover tools
@@ -2307,11 +2616,26 @@
       // Restore persisted WR tabs
       const saved_tabs    = ls.get('tabs', []);
       const saved_active  = ls.get('activeTab');
+      const apiBase       = getApiBaseUrl();
       for (const t of saved_tabs) {
         const tool = S.tools.find(x => x.id === t.toolId);
         if (!tool) continue;
-        S.tabs.push({ ...t });
-        createFrame(t.tabId, { type: 'wr', src: `/WebResources/${tool.wrName}` });
+        if (S.isExternalMode && apiBase && apiBase !== location.origin) {
+          try {
+            let html = S.externalHtmlCache.get(tool.wrName);
+            if (!html) {
+              html = await fetchToolHtml(tool.wrName);
+              S.externalHtmlCache.set(tool.wrName, html);
+            }
+            S.tabs.push({ ...t });
+            createFrame(t.tabId, { type: 'file', html });
+          } catch (e) {
+            console.warn(`[dvopentools] Failed restoring external tab ${tool.wrName}:`, e);
+          }
+        } else {
+          S.tabs.push({ ...t });
+          createFrame(t.tabId, { type: 'wr', src: `/WebResources/${tool.wrName}` });
+        }
       }
       if (S.tabs.length) {
         const toActivate = S.tabs.find(t => t.tabId === saved_active) || S.tabs[0];
