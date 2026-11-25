@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Record Inspector ("All Fields")</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "record-inspector",
+    "name":           "Record Inspector",
+    "version":        "1.0.0",
+    "description":    "Inspect all fields (including hidden attributes) on any Dataverse record by pasting a URL or GUID, edit updatable values, or jump to Access Diagnostics.",
+    "icon":           "🔎",
+    "category":       "Data",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <input type="text" id="url-input" placeholder="Paste Dynamics / Power Apps record URL (etn=account&id=...)…" style="flex:1;min-width:220px;">
+    <button class="dv-btn" id="btn-parse-url">Parse URL</button>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-access" disabled>🛡️ Check Access</button>
+    <button class="dv-btn" id="btn-copy-json" disabled>📋 Copy JSON</button>
+  </div>
+
+  <div class="dv-strip">
+    <select id="ent-select" style="min-width:210px;"><option value="">Loading tables…</option></select>
+    <input type="text" id="rec-guid" placeholder="Record GUID" style="width:270px;font-family:monospace;">
+    <button class="dv-btn" id="btn-recent">Pick Recent</button>
+    <select id="recent-select" style="display:none;max-width:220px;"></select>
+    <button class="dv-btn dv-btn-primary" id="btn-load" disabled>🔎 Inspect Record</button>
+    <div class="dv-spacer"></div>
+    <input type="text" id="field-filter" placeholder="Filter fields or values…" style="width:200px;">
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="chk-nonnull"> Hide Empty</label>
+  </div>
+
+  <div class="dv-scroll" id="body-area">
+    <div class="dv-empty">Paste a Dataverse record URL or select a <strong>Table + GUID</strong> to inspect every column on the record.</div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Record Inspector</span>
+    <div class="dv-spacer"></div>
+    <span id="field-count">0 fields</span>
+  </footer>
+
+  <div class="dv-overlay" id="edit-modal">
+    <div class="dv-modal">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <strong id="ed-title">Edit Field</strong>
+        <button class="dv-btn dv-btn-sm" id="ed-close">✕</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-sec);" id="ed-meta"></div>
+      <textarea id="ed-val" rows="4" style="width:100%;font-family:monospace;"></textarea>
+      <div style="font-size:11px;color:var(--text-sec);">Note: PATCH requests are guarded by Host Safe Mode / Zero Trust.</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="dv-btn" id="ed-cancel">Cancel</button>
+        <button class="dv-btn dv-btn-primary" id="ed-save">Update Field (PATCH)</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let entities = [], attrMeta = new Map(), currentRecord = null, currentEntity = null, currentId = '', editingAttr = null;
+
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') onContextReady();
+    });
+
+    async function onContextReady() {
+      try {
+        const res = await DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName,DisplayName,PrimaryIdAttribute,PrimaryNameAttribute&$filter=IsIntersect eq false');
+        entities = (res.value || []).filter(e => e.EntitySetName && e.PrimaryIdAttribute).map(e => ({
+          logicalName: e.LogicalName, entitySetName: e.EntitySetName,
+          displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+          primaryId: e.PrimaryIdAttribute, primaryName: e.PrimaryNameAttribute || ''
+        })).sort((a, b) => a.displayName.localeCompare(b.displayName));
+        document.getElementById('ent-select').innerHTML = entities.map(e => `<option value="${DV.esc(e.logicalName)}">${DV.esc(e.displayName)} (${DV.esc(e.logicalName)})</option>`).join('');
+        if (entities.some(e => e.logicalName === 'account')) document.getElementById('ent-select').value = 'account';
+        document.getElementById('btn-load').disabled = false;
+      } catch (err) { DV.notify(err.message, 'error'); }
+    }
+
+    function parseRecordUrl() {
+      const raw = document.getElementById('url-input').value.trim();
+      if (!raw) return;
+      try {
+        const u = new URL(raw);
+        const etn = u.searchParams.get('etn');
+        const id = (u.searchParams.get('id') || '').replace(/[{}]/g, '');
+        if (etn && entities.some(e => e.logicalName === etn)) document.getElementById('ent-select').value = etn;
+        if (id) document.getElementById('rec-guid').value = id;
+        if (etn && id) loadRecord();
+        else DV.notify('Could not extract both etn & id from URL', 'warning');
+      } catch { DV.notify('Invalid URL format', 'warning'); }
+    }
+
+    async function pickRecent() {
+      const ent = entities.find(e => e.logicalName === document.getElementById('ent-select').value); if (!ent) return;
+      try {
+        const rows = (await DV.fetch(`/${ent.entitySetName}?$select=${[ent.primaryId, ent.primaryName].filter(Boolean).join(',')}&$top=20`)).value || [];
+        const sel = document.getElementById('recent-select');
+        if (!rows.length) { DV.notify(`No records in ${ent.logicalName}`, 'warning'); return; }
+        sel.style.display = 'inline-block';
+        sel.innerHTML = '<option value="">Choose recent…</option>' + rows.map(r => `<option value="${DV.esc(r[ent.primaryId])}">${DV.esc(ent.primaryName ? (r[ent.primaryName] || r[ent.primaryId]) : r[ent.primaryId])}</option>`).join('');
+      } catch (err) { DV.notify(err.message, 'error'); }
+    }
+
+    async function loadRecord() {
+      currentEntity = entities.find(e => e.logicalName === document.getElementById('ent-select').value);
+      currentId = document.getElementById('rec-guid').value.trim().replace(/[{}]/g, '');
+      if (!currentEntity || !currentId) { DV.notify('Select table and enter record GUID', 'warning'); return; }
+
+      document.getElementById('body-area').innerHTML = DV.ui.empty('Loading record and column metadata…');
+      try {
+        const [rec, meta] = await Promise.all([
+          DV.fetch(`/${currentEntity.entitySetName}(${currentId})`),
+          DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(currentEntity.logicalName)}')/Attributes?$select=LogicalName,DisplayName,AttributeType,IsValidForUpdate`).catch(() => ({ value: [] }))
+        ]);
+        currentRecord = rec;
+        attrMeta = new Map((meta.value || []).map(a => [a.LogicalName, {
+          display: a.DisplayName?.UserLocalizedLabel?.Label || a.LogicalName,
+          type: a.AttributeType || '', canUpdate: !!a.IsValidForUpdate
+        }]));
+        document.getElementById('btn-access').disabled = false;
+        document.getElementById('btn-copy-json').disabled = false;
+        DV.setTitle(`Record — ${currentEntity.primaryName ? (rec[currentEntity.primaryName] || currentEntity.logicalName) : currentEntity.logicalName}`);
+        renderFields();
+      } catch (err) {
+        document.getElementById('body-area').innerHTML = DV.ui.error(err.message);
+        DV.notify(err.message, 'error');
+      }
+    }
+
+    function renderFields() {
+      if (!currentRecord) return;
+      const q = document.getElementById('field-filter').value.trim().toLowerCase();
+      const hideEmpty = document.getElementById('chk-nonnull').checked;
+      const keys = Object.keys(currentRecord).filter(k => !k.startsWith('@odata.') && !k.includes('@OData.Community.') && !k.includes('@Microsoft.Dynamics.CRM.')).sort();
+
+      const rows = keys.map(k => {
+        const raw = currentRecord[k];
+        const fmt = currentRecord[`${k}@OData.Community.Display.V1.FormattedValue`];
+        const lookupLogical = currentRecord[`${k}@Microsoft.Dynamics.CRM.lookuplogicalname`];
+        const m = attrMeta.get(k) || { display: k, type: lookupLogical ? `Lookup (${lookupLogical})` : typeof raw, canUpdate: false };
+        return { key: k, raw, fmt, lookupLogical, meta: m };
+      }).filter(r => {
+        if (hideEmpty && (r.raw === null || r.raw === undefined || r.raw === '')) return false;
+        if (!q) return true;
+        return `${r.key} ${r.meta.display} ${r.raw ?? ''} ${r.fmt ?? ''}`.toLowerCase().includes(q);
+      });
+
+      document.getElementById('field-count').textContent = `${rows.length} / ${keys.length} fields`;
+      document.getElementById('body-area').innerHTML = `<table class="dv-table"><thead><tr><th>Logical Name</th><th>Display Name</th><th>Type</th><th>Value (Formatted / Raw)</th><th style="width:75px;">Edit</th></tr></thead><tbody>
+        ${rows.map(r => {
+          const rawStr = r.raw === null || r.raw === undefined ? '' : typeof r.raw === 'object' ? JSON.stringify(r.raw) : String(r.raw);
+          const valHtml = r.raw === null || r.raw === undefined ? '<span style="color:var(--text-muted)">null</span>'
+            : (r.fmt !== undefined && String(r.fmt) !== rawStr) ? `<strong>${DV.esc(r.fmt)}</strong><br><code>${DV.esc(rawStr)}</code>` : `<code>${DV.esc(rawStr)}</code>`;
+          const editable = r.meta.canUpdate && !r.key.startsWith('_');
+          return `<tr>
+            <td><code>${DV.esc(r.key)}</code></td>
+            <td>${DV.esc(r.meta.display)}</td>
+            <td>${DV.ui.badge(r.lookupLogical ? `${r.meta.type}:${r.lookupLogical}` : r.meta.type, 'muted')}</td>
+            <td style="max-width:420px;word-break:break-word;">${valHtml}</td>
+            <td>${editable ? `<button class="dv-btn dv-btn-sm" data-ed="${DV.esc(r.key)}">✏️</button>` : '—'}</td>
+          </tr>`;
+        }).join('')}</tbody></table>`;
+
+      document.querySelectorAll('[data-ed]').forEach(btn => btn.addEventListener('click', () => {
+        editingAttr = btn.dataset.ed;
+        const m = attrMeta.get(editingAttr);
+        document.getElementById('ed-title').textContent = `Edit ${editingAttr}`;
+        document.getElementById('ed-meta').textContent = `${m?.display || ''} (${m?.type || ''})`;
+        document.getElementById('ed-val').value = currentRecord[editingAttr] ?? '';
+        document.getElementById('edit-modal').classList.add('open');
+      }));
+    }
+
+    async function saveField() {
+      if (!editingAttr || !currentEntity || !currentId) return;
+      const rawInput = document.getElementById('ed-val').value;
+      const m = attrMeta.get(editingAttr);
+      let val = rawInput === '' ? null : rawInput;
+      if (val !== null && ['Integer', 'BigInt', 'Picklist', 'State', 'Status'].includes(m?.type)) val = Number(rawInput);
+      else if (val !== null && ['Decimal', 'Double', 'Money'].includes(m?.type)) val = parseFloat(rawInput);
+      else if (val !== null && m?.type === 'Boolean') val = rawInput.toLowerCase() === 'true' || rawInput === '1';
+
+      try {
+        await DV.fetch(`/${currentEntity.entitySetName}(${currentId})`, { method: 'PATCH', body: JSON.stringify({ [editingAttr]: val }) });
+        document.getElementById('edit-modal').classList.remove('open');
+        DV.notify(`Updated ${editingAttr}`, 'success');
+        await loadRecord();
+      } catch (err) { DV.notify(err.message, 'error'); }
+    }
+
+    document.getElementById('btn-parse-url').addEventListener('click', parseRecordUrl);
+    document.getElementById('btn-recent').addEventListener('click', pickRecent);
+    document.getElementById('recent-select').addEventListener('change', e => { if (e.target.value) { document.getElementById('rec-guid').value = e.target.value; loadRecord(); } });
+    document.getElementById('btn-load').addEventListener('click', loadRecord);
+    document.getElementById('field-filter').addEventListener('input', renderFields);
+    document.getElementById('chk-nonnull').addEventListener('change', renderFields);
+    document.getElementById('btn-copy-json').addEventListener('click', () => currentRecord && DV.copyText(JSON.stringify(currentRecord, null, 2), 'Record JSON copied'));
+    document.getElementById('btn-access').addEventListener('click', () => currentEntity && currentId && DV.openTool('access-checker', { logicalName: currentEntity.logicalName, recordId: currentId }));
+    ['ed-close', 'ed-cancel'].forEach(id => document.getElementById(id).addEventListener('click', () => document.getElementById('edit-modal').classList.remove('open')));
+    document.getElementById('ed-save').addEventListener('click', saveField);
+  </script>
+</body>
+</html>

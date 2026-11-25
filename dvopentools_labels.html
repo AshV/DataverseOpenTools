@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Label &amp; Translation Explorer</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "label-explorer",
+    "name":           "Label Explorer",
+    "version":        "1.0.0",
+    "description":    "Inspect localized Display Labels across all provisioned Dataverse languages (RetrieveProvisionedLanguages) for Tables and Columns, and export translation CSVs.",
+    "icon":           "🌍",
+    "category":       "Metadata",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <strong>🌍 Label &amp; Translation Explorer</strong>
+    <div id="lang-pills" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-export" disabled>📥 Export Column Translations CSV</button>
+  </div>
+
+  <div class="dv-split">
+    <aside class="dv-pane-left" style="width:300px;">
+      <div class="dv-toolbar"><input type="text" id="ent-search" placeholder="Search tables…" style="width:100%;"></div>
+      <div class="dv-scroll" id="ent-list"><div class="dv-empty">Loading languages &amp; tables…</div></div>
+    </aside>
+
+    <main class="dv-pane-right">
+      <div class="dv-toolbar">
+        <strong id="sel-ent">Select a Table</strong>
+        <div class="dv-spacer"></div>
+        <input type="text" id="col-search" placeholder="Filter columns…" style="width:210px;">
+      </div>
+      <div class="dv-scroll" id="labels-body">
+        <div class="dv-empty">Select a table on the left to inspect all localized column labels across installed languages.</div>
+      </div>
+    </main>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Uses RetrieveProvisionedLanguages + LocalizedLabels</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    const LCID_NAMES = { 1033: 'English (1033)', 1031: 'German (1031)', 1036: 'French (1036)', 1034: 'Spanish (1034)', 1041: 'Japanese (1041)', 1043: 'Dutch (1043)', 1040: 'Italian (1040)', 1046: 'Portuguese (1046)', 2052: 'Chinese SC (2052)', 1081: 'Hindi (1081)' };
+    let lcids = [1033], entities = [], selectedEntity = null, currentAttrs = [];
+
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') initTool();
+    });
+
+    async function initTool() {
+      try {
+        const [langRes, entRes] = await Promise.all([
+          DV.fetch('/RetrieveProvisionedLanguages()'),
+          DV.fetch('/EntityDefinitions?$select=LogicalName,DisplayName')
+        ]);
+        lcids = (langRes.RetrieveProvisionedLanguages || [1033]).sort((a, b) => a - b);
+        document.getElementById('lang-pills').innerHTML = lcids.map(id => DV.ui.badge(LCID_NAMES[id] || `LCID ${id}`, 'info')).join(' ');
+        entities = (entRes.value || []).map(e => ({
+          logicalName: e.LogicalName,
+          display: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+          labels: e.DisplayName?.LocalizedLabels || []
+        })).sort((a, b) => a.display.localeCompare(b.display));
+        renderEntities();
+      } catch (err) { DV.notify(err.message, 'error'); }
+    }
+
+    function renderEntities() {
+      const q = document.getElementById('ent-search').value.trim().toLowerCase();
+      const list = entities.filter(e => !q || e.display.toLowerCase().includes(q) || e.logicalName.toLowerCase().includes(q));
+      const el = document.getElementById('ent-list');
+      el.innerHTML = list.map(e => `<div class="dv-list-item${selectedEntity?.logicalName === e.logicalName ? ' active' : ''}" data-ln="${DV.esc(e.logicalName)}">
+        <div style="font-weight:600;">${DV.esc(e.display)}</div>
+        <div style="font-size:11px;color:var(--text-sec);font-family:monospace;">${DV.esc(e.logicalName)}</div>
+      </div>`).join('');
+      el.querySelectorAll('.dv-list-item').forEach(n => n.addEventListener('click', () => loadAttributes(n.dataset.ln)));
+    }
+
+    async function loadAttributes(ln) {
+      selectedEntity = entities.find(e => e.logicalName === ln);
+      renderEntities();
+      document.getElementById('sel-ent').textContent = `${selectedEntity.display} (${ln})`;
+      document.getElementById('labels-body').innerHTML = DV.ui.empty('Loading localized labels…');
+      try {
+        const res = await DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(ln)}')/Attributes?$select=LogicalName,DisplayName`);
+        currentAttrs = (res.value || []).sort((a, b) => a.LogicalName.localeCompare(b.LogicalName));
+        document.getElementById('btn-export').disabled = false;
+        renderLabels();
+      } catch (err) {
+        document.getElementById('labels-body').innerHTML = DV.ui.error(err.message);
+      }
+    }
+
+    function getLabel(labelsArr, lcid) {
+      return (labelsArr || []).find(l => l.LanguageCode === lcid)?.Label || '';
+    }
+
+    function renderLabels() {
+      if (!selectedEntity) return;
+      const q = document.getElementById('col-search').value.trim().toLowerCase();
+      const filtered = currentAttrs.filter(a => !q || a.LogicalName.toLowerCase().includes(q) || (a.DisplayName?.LocalizedLabels || []).some(l => (l.Label || '').toLowerCase().includes(q)));
+      document.getElementById('labels-body').innerHTML = `<table class="dv-table"><thead><tr><th>Column Logical Name</th>${lcids.map(id => `<th>${DV.esc(LCID_NAMES[id] || `LCID ${id}`)}</th>`).join('')}</tr></thead><tbody>
+        ${filtered.map(a => `<tr><td><code>${DV.esc(a.LogicalName)}</code></td>${lcids.map(id => {
+          const val = getLabel(a.DisplayName?.LocalizedLabels, id);
+          return `<td>${val ? DV.esc(val) : '<span style="color:var(--err-color);font-size:11px;">(missing)</span>'}</td>`;
+        }).join('')}</tr>`).join('')}
+      </tbody></table>`;
+    }
+
+    document.getElementById('ent-search').addEventListener('input', renderEntities);
+    document.getElementById('col-search').addEventListener('input', renderLabels);
+    document.getElementById('btn-export').addEventListener('click', () => {
+      if (!selectedEntity) return;
+      DV.exportCsv(`${selectedEntity.logicalName}_labels.csv`, ['LogicalName', ...lcids.map(id => `LCID_${id}`)],
+        currentAttrs.map(a => [a.LogicalName, ...lcids.map(id => getLabel(a.DisplayName?.LocalizedLabels, id))]));
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plugin Assembly &amp; Step Manager</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "plugin-manager",
+    "name":           "Plugin Step Manager",
+    "version":        "1.0.0",
+    "description":    "Browse registered Plugin Assemblies, Types, SDK Message Processing Steps, and Pre/Post Images, with 1-click step Enable/Disable.",
+    "icon":           "🧩",
+    "category":       "Extensibility",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <input type="text" id="search-box" placeholder="Search assembly, class, step, entity, message…" style="width:300px;">
+    <select id="f-stage">
+      <option value="ALL">All Stages</option>
+      <option value="10">Stage 10 (Pre-Validation)</option>
+      <option value="20">Stage 20 (Pre-Operation)</option>
+      <option value="40">Stage 40 (Post-Operation)</option>
+    </select>
+    <select id="f-state">
+      <option value="ALL">Enabled &amp; Disabled</option>
+      <option value="0">Enabled Only</option>
+      <option value="1">Disabled Only</option>
+    </select>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn dv-btn-primary" id="btn-refresh">↻ Refresh</button>
+    <button class="dv-btn" id="btn-export">📥 Export CSV</button>
+  </div>
+
+  <div class="dv-split">
+    <aside class="dv-pane-left" style="width:300px;">
+      <div class="dv-strip" style="font-weight:700;">Assemblies (<span id="asm-cnt">0</span>)</div>
+      <div class="dv-scroll" id="asm-list"><div class="dv-empty">Loading assemblies…</div></div>
+    </aside>
+
+    <main class="dv-pane-right">
+      <div class="dv-strip">
+        <strong id="sel-asm-name">All Plugin Steps</strong>
+        <div class="dv-spacer"></div>
+        <button class="dv-btn dv-btn-sm" id="btn-show-all" style="display:none;">Show All Assemblies</button>
+        <span id="step-cnt" style="font-size:11px;color:var(--text-sec);">0 steps</span>
+      </div>
+      <div class="dv-scroll">
+        <table class="dv-table">
+          <thead><tr><th>Step / Type</th><th>Message</th><th>Entity</th><th>Stage / Mode / Rank</th><th>Filtering Attrs</th><th>Images</th><th>State</th><th>Action</th></tr></thead>
+          <tbody id="step-tbody"><tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">Loading steps…</td></tr></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Plugin Assembly &amp; Step Manager</span>
+    <div class="dv-spacer"></div>
+    <span>Enable/Disable actions guarded by Host Safe Mode / Zero Trust</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let assemblies = [], types = new Map(), steps = [], imagesByStep = new Map(), selectedAsmId = null;
+
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') loadAll();
+    });
+
+    async function loadAll() {
+      try {
+        const [aRes, tRes, sRes, iRes] = await Promise.all([
+          DV.fetch('/pluginassemblies?$select=pluginassemblyid,name,version,isolationmode,ismanaged&$orderby=name asc'),
+          DV.fetch('/plugintypes?$select=plugintypeid,typename,_pluginassemblyid_value'),
+          DV.fetch('/sdkmessageprocessingsteps?$select=sdkmessageprocessingstepid,name,stage,mode,rank,filteringattributes,statecode,_plugintypeid_value,_impersonatinguserid_value&$expand=sdkmessageid($select=name),sdkmessagefilterid($select=primaryobjecttypecode)&$orderby=rank asc'),
+          DV.fetch('/sdkmessageprocessingstepimages?$select=sdkmessageprocessingstepimageid,name,entityalias,imagetype,attributes,_sdkmessageprocessingstepid_value')
+        ]);
+        assemblies = aRes.value || [];
+        types = new Map((tRes.value || []).map(t => [t.plugintypeid, t]));
+        imagesByStep = new Map();
+        for (const img of (iRes.value || [])) {
+          const list = imagesByStep.get(img._sdkmessageprocessingstepid_value) || [];
+          list.push(img);
+          imagesByStep.set(img._sdkmessageprocessingstepid_value, list);
+        }
+        steps = (sRes.value || []).filter(s => s._plugintypeid_value).map(s => {
+          const t = types.get(s._plugintypeid_value);
+          return {
+            ...s,
+            typeName: t?.typename || 'Unknown Type',
+            assemblyId: t?._pluginassemblyid_value || '',
+            msgName: s.sdkmessageid?.name || '—',
+            entityName: s.sdkmessagefilterid?.primaryobjecttypecode || 'none',
+            images: imagesByStep.get(s.sdkmessageprocessingstepid) || []
+          };
+        });
+        renderAssemblies();
+        renderSteps();
+      } catch (err) { DV.notify(err.message, 'error'); }
+    }
+
+    function renderAssemblies() {
+      document.getElementById('asm-cnt').textContent = assemblies.length;
+      const el = document.getElementById('asm-list');
+      el.innerHTML = assemblies.map(a => {
+        const cnt = steps.filter(s => s.assemblyId === a.pluginassemblyid).length;
+        return `<div class="dv-list-item${selectedAsmId === a.pluginassemblyid ? ' active' : ''}" data-id="${DV.esc(a.pluginassemblyid)}">
+          <div style="font-weight:600;display:flex;justify-content:space-between;gap:6px;">
+            <span style="overflow:hidden;text-overflow:ellipsis;">${DV.esc(a.name)}</span>
+            ${DV.ui.badge(String(cnt), 'info')}
+          </div>
+          <div style="font-size:11px;color:var(--text-sec);">v${DV.esc(a.version || '—')} · ${a.ismanaged ? 'Managed' : 'Unmanaged'}</div>
+        </div>`;
+      }).join('') || DV.ui.empty('No plugin assemblies found.');
+      el.querySelectorAll('.dv-list-item').forEach(n => n.addEventListener('click', () => {
+        selectedAsmId = n.dataset.id;
+        renderAssemblies();
+        renderSteps();
+      }));
+    }
+
+    function getFilteredSteps() {
+      const q = document.getElementById('search-box').value.trim().toLowerCase();
+      const stage = document.getElementById('f-stage').value, st = document.getElementById('f-state').value;
+      return steps.filter(s => (!selectedAsmId || s.assemblyId === selectedAsmId) &&
+        (stage === 'ALL' || String(s.stage) === stage) && (st === 'ALL' || String(s.statecode) === st) &&
+        (!q || `${s.name} ${s.typeName} ${s.msgName} ${s.entityName} ${s.filteringattributes || ''}`.toLowerCase().includes(q)));
+    }
+
+    function renderSteps() {
+      const asm = assemblies.find(a => a.pluginassemblyid === selectedAsmId);
+      document.getElementById('sel-asm-name').textContent = asm ? asm.name : 'All Plugin Steps';
+      document.getElementById('btn-show-all').style.display = asm ? 'inline-flex' : 'none';
+      const rows = getFilteredSteps();
+      document.getElementById('step-cnt').textContent = `${rows.length} steps`;
+      DV.setTitle(`Plugins (${rows.length})`);
+
+      const stageLbl = { 10: 'Pre-Val (10)', 20: 'Pre-Op (20)', 40: 'Post-Op (40)' };
+      const imgLbl = { 0: 'Pre', 1: 'Post', 2: 'Both' };
+      document.getElementById('step-tbody').innerHTML = rows.map(s => {
+        const imgs = s.images.map(i => `${imgLbl[i.imagetype] || i.imagetype}:${i.entityalias}`).join(', ');
+        const enabled = s.statecode === 0;
+        return `<tr>
+          <td><strong>${DV.esc(s.name)}</strong><br><code>${DV.esc(s.typeName)}</code></td>
+          <td><code>${DV.esc(s.msgName)}</code></td>
+          <td><code>${DV.esc(s.entityName)}</code></td>
+          <td>${stageLbl[s.stage] || s.stage} · ${s.mode === 1 ? 'Async' : 'Sync'} · #${s.rank}</td>
+          <td style="max-width:180px;word-break:break-word;"><code>${DV.esc(s.filteringattributes || '(all)')}</code></td>
+          <td>${imgs ? DV.ui.badge(imgs, 'info') : '—'}</td>
+          <td>${DV.ui.badge(enabled ? 'Enabled' : 'Disabled', enabled ? 'ok' : 'warn')}</td>
+          <td><button class="dv-btn dv-btn-sm" data-toggle="${DV.esc(s.sdkmessageprocessingstepid)}" data-curr="${s.statecode}">${enabled ? '⏸ Disable' : '▶ Enable'}</button></td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">No matching steps.</td></tr>';
+
+      document.querySelectorAll('[data-toggle]').forEach(btn => btn.addEventListener('click', async () => {
+        const nextState = btn.dataset.curr === '0' ? 1 : 0;
+        const nextStatus = nextState === 0 ? 1 : 2;
+        try {
+          await DV.fetch(`/sdkmessageprocessingsteps(${btn.dataset.toggle})`, { method: 'PATCH', body: JSON.stringify({ statecode: nextState, statuscode: nextStatus }) });
+          DV.notify(`Step ${nextState === 0 ? 'enabled' : 'disabled'}`, 'success');
+          await loadAll();
+        } catch (err) { DV.notify(err.message, 'error'); }
+      }));
+    }
+
+    document.getElementById('btn-show-all').addEventListener('click', () => { selectedAsmId = null; renderAssemblies(); renderSteps(); });
+    ['search-box', 'f-stage', 'f-state'].forEach(id => { document.getElementById(id).addEventListener('input', renderSteps); document.getElementById(id).addEventListener('change', renderSteps); });
+    document.getElementById('btn-refresh').addEventListener('click', loadAll);
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const rows = getFilteredSteps();
+      DV.exportCsv(`plugin_steps_${new Date().toISOString().slice(0, 10)}.csv`, ['StepName', 'PluginType', 'Message', 'Entity', 'Stage', 'Mode', 'Rank', 'FilteringAttributes', 'State'],
+        rows.map(s => [s.name, s.typeName, s.msgName, s.entityName, s.stage, s.mode === 1 ? 'Async' : 'Sync', s.rank, s.filteringattributes || '', s.statecode === 0 ? 'Enabled' : 'Disabled']));
+    });
+  </script>
+</body>
+</html>

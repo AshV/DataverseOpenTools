@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attachment &amp; Storage Bloat Analyzer</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "storage-analyzer",
+    "name":           "Storage Analyzer",
+    "version":        "1.0.0",
+    "description":    "Identify Dataverse log and file storage bloat across AsyncOperations, Plugin Traces, Audits, Notes/Attachments, and Bulk Delete jobs.",
+    "icon":           "💾",
+    "category":       "Data",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <strong>💾 Dataverse Storage &amp; Bloat Analyzer</strong>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn dv-btn-primary" id="btn-refresh">↻ Scan Environment</button>
+    <button class="dv-btn" id="btn-export" disabled>📥 Export CSV</button>
+  </div>
+
+  <div class="dv-scroll dv-pad" id="body-area">
+    <div class="dv-empty">Scanning capacity-heavy system tables…</div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Attachment &amp; Storage Bloat Analyzer</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    const WATCH_TABLES = ['asyncoperation', 'plugintracelog', 'audit', 'annotation', 'activitymimeattachment', 'mailboxtrackingfolder', 'bulkdeleteoperation'];
+    let lastAttachments = [];
+
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') scanStorage();
+    });
+
+    function fmtBytes(b) {
+      const n = Number(b) || 0;
+      if (n >= 1048576) return `${(n / 1048576).toFixed(2)} MB`;
+      if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
+      return `${n} B`;
+    }
+
+    async function scanStorage() {
+      const area = document.getElementById('body-area');
+      area.innerHTML = DV.ui.empty('Scanning table snapshots, largest attachments, and bulk delete jobs…');
+
+      const [countsRes, notesRes, emailAttRes, jobsRes] = await Promise.allSettled([
+        DV.fetch(`/RetrieveTotalRecordCount(EntityNames=@e)?@e=${encodeURIComponent(JSON.stringify(WATCH_TABLES))}`),
+        DV.fetch('/annotations?$select=annotationid,subject,filename,filesize,mimetype,objecttypecode,createdon&$filter=isdocument eq true&$orderby=filesize desc&$top=40'),
+        DV.fetch('/activitymimeattachments?$select=activitymimeattachmentid,filename,filesize,mimetype&$orderby=filesize desc&$top=25'),
+        DV.fetch('/bulkdeleteoperations?$select=bulkdeleteoperationid,name,statuscode,successcount,failurecount,createdon&$orderby=createdon desc&$top=25')
+      ]);
+
+      const counts = new Map();
+      const coll = countsRes.status === 'fulfilled' ? countsRes.value?.EntityRecordCountCollection : null;
+      if (coll?.Keys && coll?.Values) coll.Keys.forEach((k, i) => counts.set(k.toLowerCase(), coll.Values[i]));
+
+      const notes = (notesRes.status === 'fulfilled' ? notesRes.value.value : []) || [];
+      const emails = (emailAttRes.status === 'fulfilled' ? emailAttRes.value.value : []) || [];
+      const jobs = (jobsRes.status === 'fulfilled' ? jobsRes.value.value : []) || [];
+
+      lastAttachments = [
+        ...notes.map(n => ({ source: 'Note (annotation)', file: n.filename || n.subject || '—', size: n.filesize || 0, mime: n.mimetype || '—', parent: n.objecttypecode || '—', created: n.createdon })),
+        ...emails.map(e => ({ source: 'Email Attachment', file: e.filename || '—', size: e.filesize || 0, mime: e.mimetype || '—', parent: 'email', created: '' }))
+      ].sort((a, b) => b.size - a.size);
+
+      document.getElementById('btn-export').disabled = !lastAttachments.length;
+
+      area.innerHTML = `
+        <div class="dv-kv-grid">
+          ${WATCH_TABLES.map(t => `<div class="dv-kv-card"><div class="dv-kv-label">${DV.esc(t)}</div><div class="dv-kv-val">${counts.has(t) ? Number(counts.get(t)).toLocaleString() : '—'} rows</div></div>`).join('')}
+        </div>
+
+        <div class="dv-card">
+          <div class="dv-card-hdr">📎 Top Largest File Attachments (${lastAttachments.length})</div>
+          <div class="dv-card-body" style="padding:0;">${lastAttachments.length ? `<table class="dv-table"><thead><tr><th>Source</th><th>File Name</th><th>Size</th><th>MIME Type</th><th>Parent Table</th></tr></thead><tbody>
+            ${lastAttachments.map(a => `<tr><td>${DV.ui.badge(a.source, 'info')}</td><td>${DV.esc(a.file)}</td><td><strong>${fmtBytes(a.size)}</strong></td><td><code>${DV.esc(a.mime)}</code></td><td><code>${DV.esc(a.parent)}</code></td></tr>`).join('')}
+          </tbody></table>` : '<div style="padding:12px;color:var(--text-sec);">No large note or email attachments found.</div>'}</div>
+        </div>
+
+        <div class="dv-card">
+          <div class="dv-card-hdr">🗑️ Recent Bulk Delete Operations (${jobs.length})</div>
+          <div class="dv-card-body" style="padding:0;">${jobs.length ? `<table class="dv-table"><thead><tr><th>Created</th><th>Job Name</th><th>Status</th><th>Deleted</th><th>Failures</th></tr></thead><tbody>
+            ${jobs.map(j => `<tr><td>${j.createdon ? new Date(j.createdon).toLocaleString() : '—'}</td><td><strong>${DV.esc(j.name || 'Bulk Delete')}</strong></td><td>${DV.ui.badge(j['statuscode@OData.Community.Display.V1.FormattedValue'] || j.statuscode, j.failurecount > 0 ? 'warn' : 'ok')}</td><td>${j.successcount ?? 0}</td><td>${j.failurecount ?? 0}</td></tr>`).join('')}
+          </tbody></table>` : '<div style="padding:12px;color:var(--text-sec);">No bulk delete jobs recorded.</div>'}</div>
+        </div>
+      `;
+    }
+
+    document.getElementById('btn-refresh').addEventListener('click', scanStorage);
+    document.getElementById('btn-export').addEventListener('click', () => {
+      DV.exportCsv(`storage_attachments_${new Date().toISOString().slice(0, 10)}.csv`, ['Source', 'FileName', 'SizeBytes', 'MimeType', 'ParentTable'],
+        lastAttachments.map(a => [a.source, a.file, a.size, a.mime, a.parent]));
+    });
+  </script>
+</body>
+</html>

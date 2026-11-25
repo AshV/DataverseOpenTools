@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connection Reference &amp; Flow Auditor</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "conn-refs",
+    "name":           "Connection Audit",
+    "version":        "1.0.0",
+    "description":    "Audit Connection References, map which Cloud Flows depend on each connection, and flag disconnected references or turned-off flows.",
+    "icon":           "🔗",
+    "category":       "Flow",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <input type="text" id="f-search" placeholder="Filter connection reference, connector, owner, flow…" style="width:290px;">
+    <select id="f-health">
+      <option value="ALL">All Connection Refs</option>
+      <option value="DISCONNECTED">Disconnected (No Connection ID)</option>
+      <option value="UNUSED">Unused by Any Flow</option>
+      <option value="CONNECTED">Healthy (Connected)</option>
+    </select>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn dv-btn-primary" id="btn-refresh">↻ Refresh</button>
+    <button class="dv-btn" id="btn-export">📥 Export CSV</button>
+  </div>
+
+  <div class="dv-strip">
+    <span>Connection Refs: <strong id="st-total">0</strong></span>
+    <span>Disconnected: <strong id="st-disc" style="color:var(--err-color);">0</strong></span>
+    <span>Unused: <strong id="st-unused" style="color:var(--warn-color);">0</strong></span>
+    <span>Cloud Flows Scanned: <strong id="st-flows">0</strong></span>
+  </div>
+
+  <div class="dv-scroll">
+    <table class="dv-table">
+      <thead><tr><th>Connection Reference</th><th>Connector</th><th>Status</th><th>Connection ID</th><th>Owner</th><th>Dependent Cloud Flows</th></tr></thead>
+      <tbody id="cr-tbody"><tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-sec);">Connecting to Dataverse…</td></tr></tbody>
+    </table>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Connection Reference &amp; Flow Auditor</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let refs = [], flowsCount = 0;
+
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') loadAudit();
+    });
+
+    async function fetchAllPages(path) {
+      let all = [], next = path;
+      while (next && all.length < 3000) {
+        const res = await DV.fetch(next);
+        all.push(...(res.value || []));
+        next = res['@odata.nextLink'] || '';
+      }
+      return all;
+    }
+
+    async function loadAudit() {
+      try {
+        const [crList, flowList] = await Promise.all([
+          fetchAllPages('/connectionreferences?$select=connectionreferenceid,connectionreferencedisplayname,connectionreferencelogicalname,connectorid,connectionid,statecode,_ownerid_value,ismanaged&$orderby=connectionreferencedisplayname asc'),
+          fetchAllPages('/workflows?$select=workflowid,name,statecode,_ownerid_value,clientdata&$filter=category eq 5 and type eq 1')
+        ]);
+        flowsCount = flowList.length;
+
+        const usageMap = new Map();
+        for (const f of flowList) {
+          if (!f.clientdata) continue;
+          try {
+            const cd = JSON.parse(f.clientdata);
+            const connRefs = cd?.properties?.connectionReferences || {};
+            for (const val of Object.values(connRefs)) {
+              const logical = val?.connection?.connectionReferenceLogicalName || '';
+              if (!logical) continue;
+              const arr = usageMap.get(logical.toLowerCase()) || [];
+              arr.push({ id: f.workflowid, name: f.name, state: f.statecode, owner: f['_ownerid_value@OData.Community.Display.V1.FormattedValue'] || '' });
+              usageMap.set(logical.toLowerCase(), arr);
+            }
+          } catch {}
+        }
+
+        refs = crList.map(r => {
+          const flows = usageMap.get((r.connectionreferencelogicalname || '').toLowerCase()) || [];
+          const connectorShort = (r.connectorid || '').split('/').pop() || '—';
+          return {
+            id: r.connectionreferenceid,
+            displayName: r.connectionreferencedisplayname || r.connectionreferencelogicalname,
+            logicalName: r.connectionreferencelogicalname || '',
+            connector: connectorShort,
+            connectionId: r.connectionid || '',
+            owner: r['_ownerid_value@OData.Community.Display.V1.FormattedValue'] || r._ownerid_value || '—',
+            isDisconnected: !r.connectionid,
+            flows
+          };
+        });
+        renderTable();
+      } catch (err) {
+        document.getElementById('cr-tbody').innerHTML = `<tr><td colspan="6" style="color:var(--err-color);padding:20px;">❌ ${DV.esc(err.message)}</td></tr>`;
+        DV.notify(err.message, 'error');
+      }
+    }
+
+    function getFiltered() {
+      const q = document.getElementById('f-search').value.trim().toLowerCase(), h = document.getElementById('f-health').value;
+      return refs.filter(r => {
+        if (h === 'DISCONNECTED' && !r.isDisconnected) return false;
+        if (h === 'UNUSED' && r.flows.length > 0) return false;
+        if (h === 'CONNECTED' && r.isDisconnected) return false;
+        if (!q) return true;
+        return `${r.displayName} ${r.logicalName} ${r.connector} ${r.owner} ${r.flows.map(f => f.name).join(' ')}`.toLowerCase().includes(q);
+      });
+    }
+
+    function renderTable() {
+      document.getElementById('st-total').textContent = refs.length;
+      document.getElementById('st-disc').textContent = refs.filter(r => r.isDisconnected).length;
+      document.getElementById('st-unused').textContent = refs.filter(r => !r.flows.length).length;
+      document.getElementById('st-flows').textContent = flowsCount;
+      DV.setTitle(`Conn Refs (${refs.length})`);
+
+      const rows = getFiltered();
+      document.getElementById('cr-tbody').innerHTML = rows.map(r => {
+        const stBadge = r.isDisconnected ? DV.ui.badge('Disconnected', 'err')
+          : r.flows.length === 0 ? DV.ui.badge('Unused', 'warn') : DV.ui.badge('Connected', 'ok');
+        const flowHtml = r.flows.length
+          ? r.flows.map(f => `<div style="margin-bottom:2px;">${DV.ui.badge(f.state === 1 ? 'On' : 'Off', f.state === 1 ? 'ok' : 'warn')} ${DV.esc(f.name)}</div>`).join('')
+          : '<span style="color:var(--text-muted)">No referencing Cloud Flows</span>';
+        return `<tr>
+          <td><strong>${DV.esc(r.displayName)}</strong><br><code>${DV.esc(r.logicalName)}</code></td>
+          <td><code>${DV.esc(r.connector)}</code></td>
+          <td>${stBadge}</td>
+          <td><code>${DV.esc(r.connectionId || '—')}</code></td>
+          <td>${DV.esc(r.owner)}</td>
+          <td style="max-width:340px;">${flowHtml}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-sec);">No matching connection references.</td></tr>';
+    }
+
+    document.getElementById('f-search').addEventListener('input', renderTable);
+    document.getElementById('f-health').addEventListener('change', renderTable);
+    document.getElementById('btn-refresh').addEventListener('click', loadAudit);
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const rows = getFiltered();
+      DV.exportCsv(`connection_references_${new Date().toISOString().slice(0, 10)}.csv`,
+        ['DisplayName', 'LogicalName', 'Connector', 'Status', 'ConnectionId', 'Owner', 'Flows'],
+        rows.map(r => [r.displayName, r.logicalName, r.connector, r.isDisconnected ? 'Disconnected' : 'Connected', r.connectionId, r.owner, r.flows.map(f => f.name).join('; ')]));
+    });
+  </script>
+</body>
+</html>

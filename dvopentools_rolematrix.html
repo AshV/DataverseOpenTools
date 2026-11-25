@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Role Privilege Matrix</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "role-matrix",
+    "name":           "Role Matrix",
+    "version":        "1.0.0",
+    "description":    "Compare Dataverse Security Role table privileges side-by-side (Create, Read, Write, Delete, Append, Assign, Share) and export security audit CSVs.",
+    "icon":           "🎭",
+    "category":       "Security",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <select id="role-a" style="min-width:210px;"><option value="">Select Primary Role…</option></select>
+    <select id="role-b" style="min-width:210px;"><option value="">Compare Against Role (Optional)…</option></select>
+    <button class="dv-btn dv-btn-primary" id="btn-compare" disabled>🎭 Analyze Matrix</button>
+    <div class="dv-spacer"></div>
+    <input type="text" id="tbl-filter" placeholder="Filter table name…" style="width:180px;">
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="chk-diff"> Diffs Only</label>
+    <button class="dv-btn" id="btn-export" disabled>📥 CSV</button>
+  </div>
+
+  <div class="dv-strip">
+    <span>Depth Legend:</span>
+    <span><span class="dv-badge dv-b-muted">None</span> No Access</span>
+    <span><span class="dv-badge dv-b-warn">User (1)</span> Basic</span>
+    <span><span class="dv-badge dv-b-info">BU (2)</span> Business Unit</span>
+    <span><span class="dv-badge dv-b-info">Deep (4)</span> Parent:Child BU</span>
+    <span><span class="dv-badge dv-b-ok">Org (8)</span> Global</span>
+  </div>
+
+  <div class="dv-scroll" id="matrix-body">
+    <div class="dv-empty">Select a Security Role (and optionally a second role to compare) then click <strong>Analyze Matrix</strong>.</div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Security Role Privilege Matrix</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    const RIGHTS = [
+      { flag: 'Create', mask: 32 }, { flag: 'Read', mask: 1 }, { flag: 'Write', mask: 2 },
+      { flag: 'Delete', mask: 65536 }, { flag: 'Append', mask: 4 }, { flag: 'AppendTo', mask: 16 },
+      { flag: 'Assign', mask: 524288 }, { flag: 'Share', mask: 262144 }
+    ];
+    let roles = [], entitiesWithPrivs = [], privLookup = new Map(), roleA = null, roleB = null, matrixRows = [];
+
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') initData();
+    });
+
+    async function initData() {
+      try {
+        const [rRes, eRes] = await Promise.all([
+          DV.fetch('/roles?$select=roleid,name,_businessunitid_value&$filter=_parentroleid_value eq null&$orderby=name asc'),
+          DV.fetch('/EntityDefinitions?$select=LogicalName,DisplayName,ObjectTypeCode&$expand=Privileges($select=PrivilegeId,Name,AccessRight)')
+        ]);
+        roles = rRes.value || [];
+        const optHtml = roles.map(r => `<option value="${DV.esc(r.roleid)}">${DV.esc(r.name)}</option>`).join('');
+        document.getElementById('role-a').innerHTML = '<option value="">Select Primary Role…</option>' + optHtml;
+        document.getElementById('role-b').innerHTML = '<option value="">Compare Against Role (Optional)…</option>' + optHtml;
+
+        entitiesWithPrivs = (eRes.value || []).filter(e => (e.Privileges || []).length > 0).map(e => {
+          const map = {};
+          for (const p of e.Privileges) {
+            privLookup.set(p.PrivilegeId, { logicalName: e.LogicalName, accessRight: p.AccessRight });
+            map[p.AccessRight] = p.PrivilegeId;
+          }
+          return { logicalName: e.LogicalName, displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName, privs: map };
+        }).sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+        document.getElementById('btn-compare').disabled = false;
+      } catch (err) { DV.notify(err.message, 'error'); }
+    }
+
+    async function fetchRolePrivileges(roleId) {
+      if (!roleId) return null;
+      const xml = `<fetch><entity name="roleprivileges"><attribute name="privilegeid" /><attribute name="privilegedepthmask" /><filter><condition attribute="roleid" operator="eq" value="${roleId}" /></filter></entity></fetch>`;
+      const res = await DV.fetch(`/roleprivilegescollection?fetchXml=${encodeURIComponent(xml)}`);
+      const map = new Map();
+      for (const row of (res.value || [])) {
+        map.set(row.privilegeid, Number(row.privilegedepthmask) || 0);
+      }
+      return map;
+    }
+
+    async function analyze() {
+      const idA = document.getElementById('role-a').value, idB = document.getElementById('role-b').value;
+      if (!idA) { DV.notify('Select Primary Role first.', 'warning'); return; }
+      document.getElementById('matrix-body').innerHTML = DV.ui.empty('Querying role privileges…');
+      try {
+        [roleA, roleB] = await Promise.all([fetchRolePrivileges(idA), fetchRolePrivileges(idB)]);
+        buildMatrix();
+        document.getElementById('btn-export').disabled = false;
+      } catch (err) {
+        document.getElementById('matrix-body').innerHTML = DV.ui.error(err.message);
+        DV.notify(err.message, 'error');
+      }
+    }
+
+    function depthBadge(d) {
+      if (!d) return DV.ui.badge('—', 'muted');
+      if (d & 8) return DV.ui.badge('Org', 'ok');
+      if (d & 4) return DV.ui.badge('Deep', 'info');
+      if (d & 2) return DV.ui.badge('BU', 'info');
+      if (d & 1) return DV.ui.badge('User', 'warn');
+      return DV.ui.badge(String(d), 'muted');
+    }
+    function depthName(d) {
+      if (!d) return 'None';
+      if (d & 8) return 'Org';
+      if (d & 4) return 'Deep';
+      if (d & 2) return 'BU';
+      if (d & 1) return 'User';
+      return String(d);
+    }
+
+    function buildMatrix() {
+      if (!roleA) return;
+      const q = document.getElementById('tbl-filter').value.trim().toLowerCase();
+      const diffsOnly = document.getElementById('chk-diff').checked && !!roleB;
+
+      matrixRows = [];
+      for (const ent of entitiesWithPrivs) {
+        if (q && !`${ent.displayName} ${ent.logicalName}`.toLowerCase().includes(q)) continue;
+        const cells = RIGHTS.map(r => {
+          const pId = ent.privs[r.flag];
+          const a = pId ? (roleA.get(pId) || 0) : 0;
+          const b = (roleB && pId) ? (roleB.get(pId) || 0) : null;
+          return { flag: r.flag, a, b, diff: b !== null && a !== b };
+        });
+        const anyAccess = cells.some(c => c.a > 0 || (c.b !== null && c.b > 0));
+        if (!anyAccess && !q) continue;
+        if (diffsOnly && !cells.some(c => c.diff)) continue;
+        matrixRows.push({ ent, cells });
+      }
+
+      document.getElementById('matrix-body').innerHTML = `<table class="dv-table"><thead><tr><th>Table</th>${RIGHTS.map(r => `<th>${r.flag}</th>`).join('')}</tr></thead><tbody>
+        ${matrixRows.map(row => `<tr>
+          <td><strong>${DV.esc(row.ent.displayName)}</strong><br><code>${DV.esc(row.ent.logicalName)}</code></td>
+          ${row.cells.map(c => `<td style="${c.diff ? 'background:var(--warn-bg);' : ''}">${depthBadge(c.a)}${c.b !== null ? ` / ${depthBadge(c.b)}` : ''}</td>`).join('')}
+        </tr>`).join('') || '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-sec);">No matching rows.</td></tr>'}
+      </tbody></table>`;
+    }
+
+    document.getElementById('btn-compare').addEventListener('click', analyze);
+    document.getElementById('tbl-filter').addEventListener('input', buildMatrix);
+    document.getElementById('chk-diff').addEventListener('change', buildMatrix);
+    document.getElementById('btn-export').addEventListener('click', () => {
+      DV.exportCsv(`role_matrix_${new Date().toISOString().slice(0, 10)}.csv`, ['Table', 'LogicalName', ...RIGHTS.map(r => r.flag)],
+        matrixRows.map(row => [row.ent.displayName, row.ent.logicalName, ...row.cells.map(c => c.b !== null ? `${depthName(c.a)} / ${depthName(c.b)}` : depthName(c.a))]));
+    });
+  </script>
+</body>
+</html>

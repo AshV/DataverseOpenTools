@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Form &amp; View XML Inspector</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "form-view",
+    "name":           "Form & View XML",
+    "version":        "1.0.0",
+    "description":    "Audit FormXML JavaScript libraries, OnLoad/OnSave/OnChange handlers, tabs & fields, plus SavedQuery view layouts and FetchXML.",
+    "icon":           "📋",
+    "category":       "Metadata",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <input type="text" id="ent-filter" placeholder="Filter table…" style="width:170px;">
+    <select id="ent-select" style="min-width:230px;"><option value="">Loading tables…</option></select>
+    <div class="dv-seg-group">
+      <button class="dv-seg-btn active" data-kind="forms">Forms (systemforms)</button>
+      <button class="dv-seg-btn" data-kind="views">Views (savedqueries)</button>
+    </div>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-reload">↻ Reload</button>
+  </div>
+
+  <div class="dv-split">
+    <aside class="dv-pane-left" style="width:300px;">
+      <div class="dv-strip" style="font-weight:700;" id="left-title">Forms (0)</div>
+      <div class="dv-scroll" id="item-list"><div class="dv-empty">Select a table above.</div></div>
+    </aside>
+
+    <main class="dv-pane-right">
+      <div class="dv-toolbar">
+        <div>
+          <strong id="sel-title">Select a Form or View</strong>
+          <div id="sel-sub" style="font-size:11px;color:var(--text-sec);">Inspect JavaScript libraries, event handlers, layout fields, or FetchXML</div>
+        </div>
+        <div class="dv-spacer"></div>
+        <button class="dv-btn dv-btn-primary" id="btn-open-fetchxml" style="display:none;">🔍 Run View in FetchXML</button>
+      </div>
+      <div class="dv-scroll dv-pad" id="detail-body">
+        <div class="dv-empty">Choose a table and select a form or view from the left pane.</div>
+      </div>
+    </main>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Form &amp; View XML Inspector</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let entities = [], kind = 'forms', items = [], selected = null;
+    const FORM_TYPES = { 2: 'Main', 5: 'Mobile Express', 6: 'Quick View', 7: 'Quick Create', 11: 'Card' };
+
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') initTool();
+    });
+
+    async function initTool() {
+      try {
+        const res = await DV.fetch('/EntityDefinitions?$select=LogicalName,DisplayName&$filter=IsIntersect eq false');
+        entities = (res.value || []).map(e => ({
+          logicalName: e.LogicalName, displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName
+        })).sort((a, b) => a.displayName.localeCompare(b.displayName));
+        renderEntities();
+        await loadItems();
+      } catch (err) { DV.notify(err.message, 'error'); }
+    }
+
+    function renderEntities() {
+      const q = document.getElementById('ent-filter').value.trim().toLowerCase();
+      const sel = document.getElementById('ent-select');
+      const list = entities.filter(e => !q || e.displayName.toLowerCase().includes(q) || e.logicalName.toLowerCase().includes(q));
+      sel.innerHTML = list.map(e => `<option value="${DV.esc(e.logicalName)}">${DV.esc(e.displayName)} (${DV.esc(e.logicalName)})</option>`).join('');
+      if (list.some(e => e.logicalName === 'account') && !q) sel.value = 'account';
+    }
+
+    async function loadItems() {
+      const ln = document.getElementById('ent-select').value;
+      if (!ln) return;
+      selected = null;
+      document.getElementById('btn-open-fetchxml').style.display = 'none';
+      document.getElementById('item-list').innerHTML = DV.ui.empty('Loading…');
+
+      try {
+        if (kind === 'forms') {
+          const res = await DV.fetch(`/systemforms?$select=formid,name,type,formactivationstate,formxml&$filter=${encodeURIComponent(`objecttypecode eq '${ln}'`)}&$orderby=name asc`);
+          items = res.value || [];
+          document.getElementById('left-title').textContent = `Forms (${items.length})`;
+        } else {
+          const res = await DV.fetch(`/savedqueries?$select=savedqueryid,name,querytype,isdefault,fetchxml,layoutxml&$filter=${encodeURIComponent(`returnedtypecode eq '${ln}'`)}&$orderby=name asc`);
+          items = res.value || [];
+          document.getElementById('left-title').textContent = `Views (${items.length})`;
+        }
+        renderList();
+      } catch (err) {
+        document.getElementById('item-list').innerHTML = DV.ui.error(err.message);
+      }
+    }
+
+    function renderList() {
+      const el = document.getElementById('item-list');
+      el.innerHTML = items.map(it => {
+        const id = kind === 'forms' ? it.formid : it.savedqueryid;
+        const active = (kind === 'forms' ? selected?.formid : selected?.savedqueryid) === id;
+        const badgeTxt = kind === 'forms' ? (FORM_TYPES[it.type] || `Type ${it.type}`) : (it.isdefault ? 'Default View' : 'View');
+        return `<div class="dv-list-item${active ? ' active' : ''}" data-id="${DV.esc(id)}">
+          <div style="font-weight:600;">${DV.esc(it.name)}</div>
+          <div style="margin-top:2px;">${DV.ui.badge(badgeTxt, 'info')}</div>
+        </div>`;
+      }).join('') || DV.ui.empty(`No ${kind} found.`);
+      el.querySelectorAll('.dv-list-item').forEach(n => n.addEventListener('click', () => selectItem(n.dataset.id)));
+    }
+
+    function selectItem(id) {
+      selected = items.find(it => (kind === 'forms' ? it.formid : it.savedqueryid) === id);
+      if (!selected) return;
+      renderList();
+      document.getElementById('sel-title').textContent = selected.name;
+      const body = document.getElementById('detail-body');
+
+      if (kind === 'forms') {
+        document.getElementById('btn-open-fetchxml').style.display = 'none';
+        document.getElementById('sel-sub').textContent = `Form ID: ${selected.formid} | ${FORM_TYPES[selected.type] || selected.type}`;
+        const doc = new DOMParser().parseFromString(selected.formxml || '<form/>', 'text/xml');
+        const libs = [...doc.querySelectorAll('formLibraries > Library')].map(n => n.getAttribute('name'));
+        const handlers = [...doc.querySelectorAll('events > event')].flatMap(ev => {
+          const evName = ev.getAttribute('name'), attr = ev.getAttribute('attribute') || '(form)';
+          return [...ev.querySelectorAll('Handler')].map(h => ({
+            event: evName, attribute: attr, library: h.getAttribute('libraryName'), fn: h.getAttribute('functionName'),
+            enabled: h.getAttribute('enabled') !== 'false', params: h.getAttribute('parameters') || ''
+          }));
+        });
+        const controls = [...doc.querySelectorAll('control')].map(c => ({
+          id: c.getAttribute('id'), field: c.getAttribute('datafieldname') || '—', disabled: c.getAttribute('disabled') === 'true'
+        }));
+
+        body.innerHTML = `
+          <div class="dv-card"><div class="dv-card-hdr">📜 Form JavaScript Libraries (${libs.length})</div><div class="dv-card-body">
+            ${libs.length ? libs.map(l => `<div style="margin-bottom:4px;"><code>${DV.esc(l)}</code></div>`).join('') : '<span style="color:var(--text-sec);">No JS web resources attached.</span>'}
+          </div></div>
+          <div class="dv-card"><div class="dv-card-hdr">⚡ Event Handlers (${handlers.length})</div><div class="dv-card-body" style="padding:0;">
+            ${handlers.length ? `<table class="dv-table"><thead><tr><th>Event</th><th>Target Field</th><th>Library</th><th>Function</th><th>Enabled</th></tr></thead><tbody>
+              ${handlers.map(h => `<tr><td><code>${DV.esc(h.event)}</code></td><td><code>${DV.esc(h.attribute)}</code></td><td><code>${DV.esc(h.library)}</code></td><td><code>${DV.esc(h.fn)}(${DV.esc(h.params)})</code></td><td>${DV.ui.badge(h.enabled ? 'Yes' : 'Disabled', h.enabled ? 'ok' : 'warn')}</td></tr>`).join('')}
+            </tbody></table>` : '<div style="padding:12px;color:var(--text-sec);">No form event handlers registered.</div>'}
+          </div></div>
+          <div class="dv-card"><div class="dv-card-hdr">🧩 Controls / Bound Fields (${controls.length})</div><div class="dv-card-body" style="padding:0;">
+            <table class="dv-table"><thead><tr><th>Control ID</th><th>Data Field</th><th>Read-Only</th></tr></thead><tbody>
+              ${controls.map(c => `<tr><td><code>${DV.esc(c.id)}</code></td><td><code>${DV.esc(c.field)}</code></td><td>${c.disabled ? '🔒 Yes' : 'No'}</td></tr>`).join('')}
+            </tbody></table>
+          </div></div>
+          <div class="dv-card"><div class="dv-card-hdr">Raw FormXML</div><div class="dv-card-body"><pre class="dv-code" style="max-height:240px;">${DV.esc(selected.formxml || '')}</pre></div></div>`;
+      } else {
+        document.getElementById('sel-sub').textContent = `SavedQuery ID: ${selected.savedqueryid}`;
+        document.getElementById('btn-open-fetchxml').style.display = selected.fetchxml ? 'inline-flex' : 'none';
+        const lDoc = new DOMParser().parseFromString(selected.layoutxml || '<grid/>', 'text/xml');
+        const cols = [...lDoc.querySelectorAll('cell')].map(c => ({ name: c.getAttribute('name'), width: c.getAttribute('width') || 'auto' }));
+        body.innerHTML = `
+          <div class="dv-card"><div class="dv-card-hdr">View Layout Columns (${cols.length})</div><div class="dv-card-body" style="padding:0;">
+            <table class="dv-table"><thead><tr><th>#</th><th>Column Logical Name</th><th>Width (px)</th></tr></thead><tbody>
+              ${cols.map((c, i) => `<tr><td>${i + 1}</td><td><code>${DV.esc(c.name)}</code></td><td>${DV.esc(c.width)}</td></tr>`).join('')}
+            </tbody></table>
+          </div></div>
+          <div class="dv-card"><div class="dv-card-hdr">View FetchXML</div><div class="dv-card-body"><pre class="dv-code" style="max-height:240px;">${DV.esc(selected.fetchxml || '(none)')}</pre></div></div>`;
+      }
+    }
+
+    document.querySelectorAll('[data-kind]').forEach(btn => btn.addEventListener('click', () => {
+      kind = btn.dataset.kind;
+      document.querySelectorAll('[data-kind]').forEach(b => b.classList.toggle('active', b === btn));
+      loadItems();
+    }));
+    document.getElementById('ent-filter').addEventListener('input', renderEntities);
+    document.getElementById('ent-select').addEventListener('change', loadItems);
+    document.getElementById('btn-reload').addEventListener('click', loadItems);
+    document.getElementById('btn-open-fetchxml').addEventListener('click', () => selected?.fetchxml && DV.openTool('fetchxml-playground', { fetchXml: selected.fetchxml }));
+  </script>
+</body>
+</html>

@@ -75,7 +75,13 @@
     window.addEventListener('message', e => {
       if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
       if (e.data.type === 'CONTEXT_INIT') { context = e.data.payload; onContextReady(); }
+      if (e.data.type === 'TOOL_LAUNCH' && e.data.payload) applyLaunch(e.data.payload);
     });
+
+    function applyLaunch(p) {
+      if (p.logicalName && entities.some(e => e.logicalName === p.logicalName)) document.getElementById('entity-select').value = p.logicalName;
+      if (p.recordId) document.getElementById('record-guid').value = p.recordId;
+    }
 
     async function onContextReady() {
       document.getElementById('tel-user').textContent = context.userName || '';
@@ -96,6 +102,7 @@
       }
       renderPrincipalSelect();
       renderEntitySelect();
+      if (context.launchData) applyLaunch(context.launchData);
       document.getElementById('btn-check').disabled = false;
     }
 

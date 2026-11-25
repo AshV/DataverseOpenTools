@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Table Automation &amp; Execution Order Map</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "table-map",
+    "name":           "Table Automation Map",
+    "version":        "1.0.0",
+    "description":    "Unified view of every Plugin Step, Business Rule, Classic Workflow, Business Process Flow, Cloud Flow trigger, and Bound Custom API on any Dataverse table.",
+    "icon":           "⚡",
+    "category":       "Diagnostics",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <input type="text" id="ent-filter" placeholder="Filter table…" style="width:180px;">
+    <select id="ent-select" style="min-width:240px;"><option value="">Loading tables…</option></select>
+    <button class="dv-btn dv-btn-primary" id="btn-inspect" disabled>⚡ Map Automation</button>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-refresh">↻ Reload Cache</button>
+  </div>
+
+  <div class="dv-strip" id="summary-strip">
+    <span>Select a table to inspect its complete automation pipeline.</span>
+  </div>
+
+  <div class="dv-scroll dv-pad" id="map-body">
+    <div class="dv-empty">Choose any Dataverse table (e.g., <code>account</code>, <code>contact</code>, <code>opportunity</code>) to map every automation firing on it.</div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Table Automation &amp; Execution Order Map</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let entities = [], allSteps = [], allWorkflows = [], allCustomApis = [], loaded = false;
+
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') initData();
+    });
+
+    async function initData() {
+      document.getElementById('map-body').innerHTML = DV.ui.empty('Loading environment automation metadata…');
+      const [eRes, sRes, wRes, cRes] = await Promise.allSettled([
+        DV.fetch('/EntityDefinitions?$select=LogicalName,DisplayName&$filter=IsIntersect eq false'),
+        DV.fetch('/sdkmessageprocessingsteps?$select=sdkmessageprocessingstepid,name,stage,mode,rank,filteringattributes,statecode&$expand=sdkmessageid($select=name),sdkmessagefilterid($select=primaryobjecttypecode)&$orderby=stage asc,rank asc'),
+        DV.fetch('/workflows?$select=workflowid,name,category,type,statecode,primaryentity,triggeroncreate,triggerondelete,triggeronupdateattributelist,clientdata&$filter=type eq 1'),
+        DV.fetch('/customapis?$select=customapiid,uniquename,displayname,bindingtype,boundentitylogicalname,isfunction')
+      ]);
+
+      if (eRes.status === 'fulfilled') {
+        entities = (eRes.value.value || []).map(e => ({
+          logicalName: e.LogicalName, displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName
+        })).sort((a, b) => a.displayName.localeCompare(b.displayName));
+        renderEntitySelect();
+      }
+      allSteps = sRes.status === 'fulfilled' ? (sRes.value.value || []) : [];
+      allWorkflows = wRes.status === 'fulfilled' ? (wRes.value.value || []) : [];
+      allCustomApis = cRes.status === 'fulfilled' ? (cRes.value.value || []) : [];
+      loaded = true;
+      document.getElementById('btn-inspect').disabled = false;
+      renderTableMap();
+    }
+
+    function renderEntitySelect() {
+      const q = document.getElementById('ent-filter').value.trim().toLowerCase();
+      const sel = document.getElementById('ent-select');
+      const list = entities.filter(e => !q || e.displayName.toLowerCase().includes(q) || e.logicalName.toLowerCase().includes(q));
+      sel.innerHTML = list.map(e => `<option value="${DV.esc(e.logicalName)}">${DV.esc(e.displayName)} (${DV.esc(e.logicalName)})</option>`).join('');
+      if (list.some(e => e.logicalName === 'account') && !q) sel.value = 'account';
+    }
+
+    function renderTableMap() {
+      if (!loaded) return;
+      const ln = document.getElementById('ent-select').value;
+      if (!ln) return;
+      DV.setTitle(`Map — ${ln}`);
+
+      const steps = allSteps.filter(s => (s.sdkmessagefilterid?.primaryobjecttypecode || '').toLowerCase() === ln.toLowerCase());
+      const rules = allWorkflows.filter(w => w.category === 2 && (w.primaryentity || '').toLowerCase() === ln.toLowerCase());
+      const classic = allWorkflows.filter(w => w.category === 0 && (w.primaryentity || '').toLowerCase() === ln.toLowerCase());
+      const bpfs = allWorkflows.filter(w => w.category === 4 && (w.primaryentity || '').toLowerCase() === ln.toLowerCase());
+      const apis = allCustomApis.filter(a => (a.boundentitylogicalname || '').toLowerCase() === ln.toLowerCase());
+
+      // Cloud flows whose Dataverse trigger references this entity in clientdata
+      const flows = allWorkflows.filter(w => {
+        if (w.category !== 5 || !w.clientdata) return false;
+        return w.clientdata.toLowerCase().includes(`"entityname":"${ln.toLowerCase()}"`) ||
+               w.clientdata.toLowerCase().includes(`"entityname": "${ln.toLowerCase()}"`);
+      });
+
+      document.getElementById('summary-strip').innerHTML = `
+        <span>Table: <code>${DV.esc(ln)}</code></span>
+        <span>Plugin/Webhook Steps: <strong>${steps.length}</strong></span>
+        <span>Cloud Flows: <strong>${flows.length}</strong></span>
+        <span>Business Rules: <strong>${rules.length}</strong></span>
+        <span>Classic Workflows: <strong>${classic.length}</strong></span>
+        <span>BPFs: <strong>${bpfs.length}</strong></span>
+        <span>Bound Custom APIs: <strong>${apis.length}</strong></span>
+      `;
+
+      const stageName = { 10: '10 · Pre-Validation', 20: '20 · Pre-Operation', 40: '40 · Post-Operation' };
+      const stateBadge = s => DV.ui.badge(s === 0 || s === 1 ? (s === 0 ? 'Active/Draft' : 'Activated') : 'Inactive', 'info');
+
+      document.getElementById('map-body').innerHTML = `
+        <div class="dv-card">
+          <div class="dv-card-hdr">🧩 SDK Message Processing Steps (Execution Pipeline Order: ${steps.length})</div>
+          <div class="dv-card-body" style="padding:0;">${steps.length ? `<table class="dv-table"><thead><tr><th>Stage</th><th>Rank</th><th>Mode</th><th>Message</th><th>Step Name</th><th>Filtering Attrs</th><th>State</th></tr></thead><tbody>
+            ${steps.map(s => `<tr><td>${DV.esc(stageName[s.stage] || s.stage)}</td><td>#${s.rank}</td><td>${s.mode === 1 ? 'Async' : 'Sync'}</td><td><code>${DV.esc(s.sdkmessageid?.name || '—')}</code></td><td><strong>${DV.esc(s.name)}</strong></td><td><code>${DV.esc(s.filteringattributes || '(all)')}</code></td><td>${DV.ui.badge(s.statecode === 0 ? 'Enabled' : 'Disabled', s.statecode === 0 ? 'ok' : 'warn')}</td></tr>`).join('')}
+          </tbody></table>` : '<div style="padding:12px;color:var(--text-sec);">No plugin or webhook steps registered on this table.</div>'}</div>
+        </div>
+
+        <div class="dv-card">
+          <div class="dv-card-hdr">⚡ Power Automate Cloud Flow Triggers (${flows.length})</div>
+          <div class="dv-card-body" style="padding:0;">${flows.length ? `<table class="dv-table"><thead><tr><th>Flow Name</th><th>State</th></tr></thead><tbody>
+            ${flows.map(f => `<tr><td><strong>${DV.esc(f.name)}</strong></td><td>${DV.ui.badge(f.statecode === 1 ? 'On' : 'Off', f.statecode === 1 ? 'ok' : 'warn')}</td></tr>`).join('')}
+          </tbody></table>` : '<div style="padding:12px;color:var(--text-sec);">No Dataverse-triggered Cloud Flows detected for this table.</div>'}</div>
+        </div>
+
+        <div class="dv-card">
+          <div class="dv-card-hdr">📏 Business Rules (${rules.length}) · ⚙️ Classic Workflows (${classic.length}) · 🔀 BPFs (${bpfs.length})</div>
+          <div class="dv-card-body" style="padding:0;">${(rules.length + classic.length + bpfs.length) ? `<table class="dv-table"><thead><tr><th>Category</th><th>Name</th><th>Triggers / Filter</th><th>State</th></tr></thead><tbody>
+            ${[...rules, ...classic, ...bpfs].map(w => `<tr>
+              <td>${DV.ui.badge(w.category === 2 ? 'Business Rule' : w.category === 4 ? 'BPF' : 'Classic Workflow', 'info')}</td>
+              <td><strong>${DV.esc(w.name)}</strong></td>
+              <td><code>${w.triggeroncreate ? 'Create ' : ''}${w.triggerondelete ? 'Delete ' : ''}${DV.esc(w.triggeronupdateattributelist || '')}</code></td>
+              <td>${DV.ui.badge(w.statecode === 1 ? 'Activated' : 'Draft', w.statecode === 1 ? 'ok' : 'warn')}</td>
+            </tr>`).join('')}
+          </tbody></table>` : '<div style="padding:12px;color:var(--text-sec);">No Business Rules, Classic Workflows, or BPFs bound to this table.</div>'}</div>
+        </div>
+
+        <div class="dv-card">
+          <div class="dv-card-hdr">🎯 Bound Custom APIs (${apis.length})</div>
+          <div class="dv-card-body" style="padding:0;">${apis.length ? `<table class="dv-table"><thead><tr><th>Unique Name</th><th>Display Name</th><th>Kind</th><th>Binding</th></tr></thead><tbody>
+            ${apis.map(a => `<tr><td><code>${DV.esc(a.uniquename)}</code></td><td>${DV.esc(a.displayname || '—')}</td><td>${a.isfunction ? 'Function (GET)' : 'Action (POST)'}</td><td>${a.bindingtype === 1 ? 'Entity' : 'Entity Collection'}</td></tr>`).join('')}
+          </tbody></table>` : '<div style="padding:12px;color:var(--text-sec);">No Custom APIs bound to this table.</div>'}</div>
+        </div>
+      `;
+    }
+
+    document.getElementById('ent-filter').addEventListener('input', renderEntitySelect);
+    document.getElementById('ent-select').addEventListener('change', renderTableMap);
+    document.getElementById('btn-inspect').addEventListener('click', renderTableMap);
+    document.getElementById('btn-refresh').addEventListener('click', initData);
+  </script>
+</body>
+</html>

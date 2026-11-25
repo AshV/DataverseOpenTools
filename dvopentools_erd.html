@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ERD &amp; Relationship Visualizer</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "erd-visualizer",
+    "name":           "ERD Visualizer",
+    "version":        "1.0.0",
+    "description":    "Select Dataverse tables to render an interactive pure-SVG Entity-Relationship diagram (1:N, N:1, N:N), export SVG, or copy Mermaid erDiagram.",
+    "icon":           "📐",
+    "category":       "Metadata",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+
+  <style>
+    .erd-canvas { flex: 1; background: var(--bg); overflow: auto; position: relative; }
+    .erd-node { cursor: move; }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <strong>📐 ERD Visualizer</strong>
+    <span style="font-size:11px;color:var(--text-sec);">Check 2–12 tables on the left, then drag nodes on the SVG canvas</span>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn dv-btn-primary" id="btn-render" disabled>📐 Draw Diagram</button>
+    <button class="dv-btn" id="btn-copy-mermaid" disabled>📋 Copy Mermaid</button>
+    <button class="dv-btn" id="btn-export-svg" disabled>📥 Export SVG</button>
+  </div>
+
+  <div class="dv-split">
+    <aside class="dv-pane-left" style="width:280px;">
+      <div class="dv-toolbar" style="flex-direction:column;align-items:stretch;gap:6px;">
+        <input type="text" id="tbl-search" placeholder="Filter tables…">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-sec);">
+          <span id="sel-cnt">0 selected (max 12)</span>
+          <button class="dv-btn dv-btn-sm" id="btn-clear">Clear</button>
+        </div>
+      </div>
+      <div class="dv-scroll" id="tbl-list"><div class="dv-empty">Loading tables…</div></div>
+    </aside>
+
+    <main class="dv-pane-right">
+      <div class="erd-canvas" id="canvas-wrap">
+        <div class="dv-empty">Select 2 or more tables (e.g., <code>account</code>, <code>contact</code>, <code>opportunity</code>) and click <strong>Draw Diagram</strong>.</div>
+      </div>
+    </main>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Pure-SVG Entity Relationship Visualizer</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let entities = [], selectedSet = new Set(['account', 'contact']), nodeBoxes = [], edges = [], mermaidText = '';
+
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') initTool();
+    });
+
+    async function initTool() {
+      try {
+        const res = await DV.fetch('/EntityDefinitions?$select=LogicalName,DisplayName,PrimaryIdAttribute,PrimaryNameAttribute,IsCustomEntity&$filter=IsIntersect eq false');
+        entities = (res.value || []).map(e => ({
+          logicalName: e.LogicalName, displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+          pk: e.PrimaryIdAttribute || '', pn: e.PrimaryNameAttribute || '', isCustom: !!e.IsCustomEntity
+        })).sort((a, b) => a.displayName.localeCompare(b.displayName));
+        if (!entities.some(e => e.logicalName === 'account')) selectedSet.clear();
+        renderTableList();
+        document.getElementById('btn-render').disabled = false;
+      } catch (err) { DV.notify(err.message, 'error'); }
+    }
+
+    function renderTableList() {
+      const q = document.getElementById('tbl-search').value.trim().toLowerCase();
+      document.getElementById('sel-cnt').textContent = `${selectedSet.size} selected (max 12)`;
+      const list = entities.filter(e => !q || e.displayName.toLowerCase().includes(q) || e.logicalName.toLowerCase().includes(q));
+      const el = document.getElementById('tbl-list');
+      el.innerHTML = list.map(e => `
+        <label class="dv-list-item" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" class="t-chk" value="${DV.esc(e.logicalName)}" ${selectedSet.has(e.logicalName) ? 'checked' : ''}>
+          <div><div style="font-weight:600;">${DV.esc(e.displayName)}</div><div style="font-size:11px;color:var(--text-sec);font-family:monospace;">${DV.esc(e.logicalName)}</div></div>
+        </label>
+      `).join('');
+      el.querySelectorAll('.t-chk').forEach(chk => chk.addEventListener('change', e => {
+        if (e.target.checked) {
+          if (selectedSet.size >= 12) { e.target.checked = false; DV.notify('Max 12 tables in diagram', 'warning'); return; }
+          selectedSet.add(e.target.value);
+        } else selectedSet.delete(e.target.value);
+        document.getElementById('sel-cnt').textContent = `${selectedSet.size} selected (max 12)`;
+      }));
+    }
+
+    async function drawDiagram() {
+      const chosen = [...selectedSet];
+      if (!chosen.length) { DV.notify('Select at least 1 table', 'warning'); return; }
+      document.getElementById('canvas-wrap').innerHTML = DV.ui.empty('Loading relationships…');
+
+      const relResults = await Promise.allSettled(chosen.map(ln =>
+        Promise.all([
+          DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(ln)}')/OneToManyRelationships?$select=SchemaName,ReferencedEntity,ReferencingEntity,ReferencingAttribute`),
+          DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(ln)}')/ManyToManyRelationships?$select=SchemaName,Entity1LogicalName,Entity2LogicalName`)
+        ])
+      ));
+
+      const edgeSet = new Map();
+      chosen.forEach((ln, idx) => {
+        const res = relResults[idx];
+        if (res.status !== 'fulfilled') return;
+        for (const r of (res.value[0].value || [])) {
+          if (selectedSet.has(r.ReferencedEntity) && selectedSet.has(r.ReferencingEntity)) {
+            edgeSet.set(`1N:${r.SchemaName}`, { kind: '1:N', from: r.ReferencedEntity, to: r.ReferencingEntity, label: r.ReferencingAttribute });
+          }
+        }
+        for (const r of (res.value[1].value || [])) {
+          if (selectedSet.has(r.Entity1LogicalName) && selectedSet.has(r.Entity2LogicalName)) {
+            edgeSet.set(`NN:${r.SchemaName}`, { kind: 'N:N', from: r.Entity1LogicalName, to: r.Entity2LogicalName, label: r.SchemaName });
+          }
+        }
+      });
+
+      edges = [...edgeSet.values()];
+      const cols = Math.min(3, Math.ceil(Math.sqrt(chosen.length)));
+      nodeBoxes = chosen.map((ln, idx) => {
+        const meta = entities.find(e => e.logicalName === ln) || { displayName: ln, pk: '', pn: '' };
+        return {
+          ln, display: meta.displayName, pk: meta.pk, pn: meta.pn,
+          x: 40 + (idx % cols) * 300, y: 40 + Math.floor(idx / cols) * 175, w: 220, h: 96
+        };
+      });
+
+      mermaidText = 'erDiagram\n' +
+        chosen.map(ln => {
+          const m = entities.find(e => e.logicalName === ln);
+          return `  ${ln} {\n    guid ${m?.pk || ln + 'id'} PK\n    string ${m?.pn || 'name'}\n  }`;
+        }).join('\n') + '\n' +
+        edges.map(e => `  ${e.from} ${e.kind === 'N:N' ? '}o--o{' : '||--o{'} ${e.to} : "${e.label}"`).join('\n');
+
+      document.getElementById('btn-copy-mermaid').disabled = false;
+      document.getElementById('btn-export-svg').disabled = false;
+      paintSvg();
+    }
+
+    function paintSvg() {
+      const wrap = document.getElementById('canvas-wrap');
+      const maxX = Math.max(960, ...nodeBoxes.map(b => b.x + b.w + 60));
+      const maxY = Math.max(580, ...nodeBoxes.map(b => b.y + b.h + 60));
+
+      const edgeSvg = edges.map(e => {
+        const a = nodeBoxes.find(b => b.ln === e.from), b = nodeBoxes.find(b => b.ln === e.to);
+        if (!a || !b) return '';
+        const x1 = a.x + a.w / 2, y1 = a.y + a.h / 2, x2 = b.x + b.w / 2, y2 = b.y + b.h / 2;
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - 12;
+        return `<g>
+          <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--primary)" stroke-width="1.6" stroke-dasharray="${e.kind === 'N:N' ? '5,4' : ''}" opacity="0.7" />
+          <rect x="${mx - 42}" y="${my - 9}" width="84" height="16" rx="3" fill="var(--bg)" stroke="var(--border)" />
+          <text x="${mx}" y="${my + 2}" font-size="10" text-anchor="middle" fill="var(--text-sec)" font-family="monospace">${DV.esc(e.kind)} ${DV.esc(e.label.slice(0, 12))}</text>
+        </g>`;
+      }).join('');
+
+      const nodeSvg = nodeBoxes.map((b, i) => `
+        <g class="erd-node" data-idx="${i}" transform="translate(${b.x},${b.y})">
+          <rect width="${b.w}" height="${b.h}" rx="6" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="1.5" />
+          <rect width="${b.w}" height="28" rx="6" fill="var(--primary)" />
+          <text x="10" y="18" font-size="12" font-weight="700" fill="#fff">${DV.esc(b.display.slice(0, 26))}</text>
+          <text x="10" y="46" font-size="11" fill="var(--text-sec)" font-family="monospace">${DV.esc(b.ln)}</text>
+          <text x="10" y="66" font-size="10" fill="var(--text-muted)" font-family="monospace">PK: ${DV.esc(b.pk)}</text>
+          <text x="10" y="82" font-size="10" fill="var(--text-muted)" font-family="monospace">Name: ${DV.esc(b.pn || '—')}</text>
+        </g>
+      `).join('');
+
+      wrap.innerHTML = `<svg id="erd-svg" width="${maxX}" height="${maxY}" xmlns="http://www.w3.org/2000/svg">${edgeSvg}${nodeSvg}</svg>`;
+
+      let dragIdx = null, ox = 0, oy = 0;
+      wrap.querySelectorAll('.erd-node').forEach(g => g.addEventListener('mousedown', e => {
+        dragIdx = Number(g.dataset.idx);
+        ox = e.clientX - nodeBoxes[dragIdx].x;
+        oy = e.clientY - nodeBoxes[dragIdx].y;
+      }));
+      wrap.onmousemove = e => {
+        if (dragIdx === null) return;
+        nodeBoxes[dragIdx].x = Math.max(10, e.clientX - ox);
+        nodeBoxes[dragIdx].y = Math.max(10, e.clientY - oy);
+        paintSvg();
+      };
+      window.onmouseup = () => { dragIdx = null; };
+    }
+
+    document.getElementById('tbl-search').addEventListener('input', renderTableList);
+    document.getElementById('btn-clear').addEventListener('click', () => { selectedSet.clear(); renderTableList(); });
+    document.getElementById('btn-render').addEventListener('click', drawDiagram);
+    document.getElementById('btn-copy-mermaid').addEventListener('click', () => DV.copyText(mermaidText, 'Mermaid erDiagram copied'));
+    document.getElementById('btn-export-svg').addEventListener('click', () => {
+      const svg = document.getElementById('erd-svg')?.outerHTML; if (!svg) return;
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'dataverse_erd.svg'; a.click(); URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>

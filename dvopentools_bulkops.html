@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bulk Record Updater &amp; Cleaner</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "bulk-ops",
+    "name":           "Bulk Operations",
+    "version":        "1.0.0",
+    "description":    "Preview records with FetchXML and execute throttled bulk PATCH, state activation/deactivation, or DELETE operations safely under Host Security Gateway.",
+    "icon":           "♻️",
+    "category":       "Data",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+
+  <style>
+    .bo-grid { display: grid; grid-template-columns: 1fr 380px; border-bottom: 1px solid var(--border); min-height: 205px; max-height: 45%; flex-shrink: 0; }
+    .bo-col { display: flex; flex-direction: column; border-right: 1px solid var(--border); min-height: 0; }
+    .bo-col:last-child { border-right: none; padding: 10px 14px; gap: 8px; background: var(--bg-alt); overflow-y: auto; }
+    .bo-prog { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .bo-prog-fill { height: 100%; background: var(--primary); width: 0%; transition: width .15s; }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <strong>♻️ Bulk Operations (Dry-Run First)</strong>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-preview" disabled>🔍 1. Dry-Run Preview</button>
+    <button class="dv-btn dv-btn-primary" id="btn-run" disabled>⚡ 2. Execute Selected</button>
+    <button class="dv-btn" id="btn-stop" style="display:none;color:var(--err-color);">⏹ Stop</button>
+  </div>
+
+  <div class="bo-grid">
+    <div class="bo-col">
+      <div class="dv-strip" style="font-weight:700;">FetchXML Target Query (Max 250 per batch)</div>
+      <textarea id="fetch-input" style="flex:1;border:none;border-radius:0;resize:none;background:var(--code-bg);font-family:monospace;padding:10px 14px;" spellcheck="false"><fetch top="25">
+  <entity name="account">
+    <attribute name="accountid" />
+    <attribute name="name" />
+    <attribute name="statecode" />
+    <filter>
+      <condition attribute="name" operator="like" value="%TEST%" />
+    </filter>
+  </entity>
+</fetch></textarea>
+    </div>
+
+    <div class="bo-col">
+      <div class="dv-field">
+        <label>Bulk Action</label>
+        <select id="op-type" style="width:100%;">
+          <option value="PATCH">Bulk Update Fields (PATCH JSON)</option>
+          <option value="STATE_INACTIVE">Deactivate Records (statecode = 1)</option>
+          <option value="STATE_ACTIVE">Activate Records (statecode = 0)</option>
+          <option value="DELETE">Delete Records Permanently (DELETE)</option>
+        </select>
+      </div>
+      <div class="dv-field" id="patch-wrap">
+        <label>PATCH Payload (JSON)</label>
+        <textarea id="patch-body" rows="4" style="width:100%;font-family:monospace;" spellcheck="false">{
+  "description": "Updated by DV Open Tools"
+}</textarea>
+      </div>
+      <div id="del-warn" style="display:none;padding:8px;border-radius:4px;background:var(--err-bg);color:var(--err-color);font-size:11px;">
+        ⚠ Permanent deletion! Protected by Safe Mode / Zero Trust gateway approval.
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px;">
+          <span id="prog-text">Ready — run Preview first</span>
+          <span id="prog-pct">0%</span>
+        </div>
+        <div class="bo-prog"><div class="bo-prog-fill" id="prog-fill"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dv-strip">
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="chk-all" checked> Select All (<span id="sel-cnt">0</span>)</label>
+    <div class="dv-spacer"></div>
+    <span id="exec-stats" style="font-size:11px;color:var(--text-sec);">—</span>
+  </div>
+
+  <div class="dv-scroll" id="preview-wrap">
+    <div class="dv-empty">Click <strong>Dry-Run Preview</strong> to inspect matched records before executing any bulk change.</div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Bulk Operations</span>
+    <div class="dv-spacer"></div>
+    <span>Tip: Enable "Always allow for this tool" in Safe Mode when processing a batch</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let entityMap = new Map(), rows = [], targetEntity = null, stopFlag = false;
+
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') initTool();
+    });
+
+    async function initTool() {
+      try {
+        const res = await DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName,PrimaryIdAttribute,PrimaryNameAttribute');
+        for (const e of (res.value || [])) {
+          if (e.LogicalName && e.EntitySetName) entityMap.set(e.LogicalName.toLowerCase(), e);
+        }
+        document.getElementById('btn-preview').disabled = false;
+      } catch (err) { DV.notify(err.message, 'error'); }
+    }
+
+    async function previewQuery() {
+      const xml = document.getElementById('fetch-input').value.trim();
+      const doc = new DOMParser().parseFromString(xml, 'text/xml');
+      if (doc.querySelector('parsererror')) { DV.notify('Invalid FetchXML', 'error'); return; }
+      const ln = doc.querySelector('fetch > entity')?.getAttribute('name')?.toLowerCase();
+      targetEntity = entityMap.get(ln);
+      if (!targetEntity) { DV.notify(`Could not resolve metadata for "${ln}"`, 'error'); return; }
+
+      try {
+        const res = await DV.fetch(`/${targetEntity.EntitySetName}?fetchXml=${encodeURIComponent(xml)}`);
+        rows = (res.value || []).map(r => ({
+          id: r[targetEntity.PrimaryIdAttribute],
+          name: targetEntity.PrimaryNameAttribute ? (r[targetEntity.PrimaryNameAttribute] || r[targetEntity.PrimaryIdAttribute]) : r[targetEntity.PrimaryIdAttribute],
+          checked: !!r[targetEntity.PrimaryIdAttribute],
+          status: 'Pending',
+          raw: r
+        }));
+        renderPreview();
+        document.getElementById('btn-run').disabled = rows.length === 0;
+        document.getElementById('prog-text').textContent = `Previewed ${rows.length} record(s)`;
+      } catch (err) {
+        document.getElementById('preview-wrap').innerHTML = DV.ui.error(err.message);
+        DV.notify(err.message, 'error');
+      }
+    }
+
+    function renderPreview() {
+      const selected = rows.filter(r => r.checked).length;
+      document.getElementById('sel-cnt').textContent = `${selected} / ${rows.length}`;
+      if (!rows.length) { document.getElementById('preview-wrap').innerHTML = DV.ui.empty('0 matching records found.'); return; }
+
+      document.getElementById('preview-wrap').innerHTML = `<table class="dv-table"><thead><tr><th style="width:34px;">Pick</th><th>Primary Name</th><th>Record ID</th><th>Status</th></tr></thead><tbody>
+        ${rows.map((r, i) => `<tr>
+          <td><input type="checkbox" class="row-chk" data-idx="${i}" ${r.checked ? 'checked' : ''} ${!r.id ? 'disabled' : ''}></td>
+          <td>${DV.esc(r.name || '—')}</td>
+          <td><code>${DV.esc(r.id || 'Missing PK in FetchXML')}</code></td>
+          <td>${DV.ui.badge(r.status, r.status === 'Success' ? 'ok' : r.status.startsWith('Err') ? 'err' : 'muted')}</td>
+        </tr>`).join('')}
+      </tbody></table>`;
+
+      document.querySelectorAll('.row-chk').forEach(chk => chk.addEventListener('change', e => {
+        rows[Number(e.target.dataset.idx)].checked = e.target.checked;
+        document.getElementById('sel-cnt').textContent = `${rows.filter(r => r.checked).length} / ${rows.length}`;
+      }));
+    }
+
+    async function executeBulk() {
+      const targets = rows.filter(r => r.checked && r.id);
+      if (!targets.length || !targetEntity) return;
+      const op = document.getElementById('op-type').value;
+      let bodyJson = null;
+      if (op === 'PATCH') {
+        try { bodyJson = JSON.stringify(JSON.parse(document.getElementById('patch-body').value)); }
+        catch { DV.notify('PATCH Payload must be valid JSON.', 'warning'); return; }
+      } else if (op === 'STATE_INACTIVE') {
+        bodyJson = JSON.stringify({ statecode: 1 });
+      } else if (op === 'STATE_ACTIVE') {
+        bodyJson = JSON.stringify({ statecode: 0 });
+      }
+
+      stopFlag = false;
+      document.getElementById('btn-run').disabled = true;
+      document.getElementById('btn-preview').disabled = true;
+      document.getElementById('btn-stop').style.display = 'inline-flex';
+
+      let ok = 0, fail = 0;
+      for (let i = 0; i < targets.length; i++) {
+        if (stopFlag) break;
+        const item = targets[i];
+        try {
+          if (op === 'DELETE') {
+            await DV.fetch(`/${targetEntity.EntitySetName}(${item.id})`, { method: 'DELETE' });
+          } else {
+            await DV.fetch(`/${targetEntity.EntitySetName}(${item.id})`, { method: 'PATCH', body: bodyJson });
+          }
+          item.status = 'Success';
+          ok++;
+        } catch (err) {
+          item.status = `Err: ${err.message.slice(0, 80)}`;
+          fail++;
+        }
+        const pct = Math.round(((i + 1) / targets.length) * 100);
+        document.getElementById('prog-fill').style.width = `${pct}%`;
+        document.getElementById('prog-pct').textContent = `${pct}%`;
+        document.getElementById('prog-text').textContent = `${i + 1} / ${targets.length} processed`;
+        document.getElementById('exec-stats').textContent = `Succeeded: ${ok} | Failed: ${fail}`;
+        renderPreview();
+      }
+
+      document.getElementById('btn-stop').style.display = 'none';
+      document.getElementById('btn-run').disabled = false;
+      document.getElementById('btn-preview').disabled = false;
+      DV.notify(`Bulk finished: ${ok} succeeded, ${fail} failed`, fail ? 'warning' : 'success');
+    }
+
+    document.getElementById('op-type').addEventListener('change', e => {
+      document.getElementById('patch-wrap').style.display = e.target.value === 'PATCH' ? 'block' : 'none';
+      document.getElementById('del-warn').style.display = e.target.value === 'DELETE' ? 'block' : 'none';
+    });
+    document.getElementById('chk-all').addEventListener('change', e => {
+      rows.forEach(r => { if (r.id) r.checked = e.target.checked; });
+      renderPreview();
+    });
+    document.getElementById('btn-preview').addEventListener('click', previewQuery);
+    document.getElementById('btn-run').addEventListener('click', executeBulk);
+    document.getElementById('btn-stop').addEventListener('click', () => { stopFlag = true; });
+  </script>
+</body>
+</html>
