@@ -1126,11 +1126,11 @@
         if (emptyProxyBtn) emptyProxyBtn.style.display = ok ? 'none' : 'inline-flex';
       }
 
-      document.getElementById('hdr-env').textContent   = ok ? host : (S.isExternalMode ? 'Proxy Not Connected' : 'Connection failed');
+      document.getElementById('hdr-env').textContent   = ok ? host : (S.isExternalMode ? (S.tools.length ? 'Preview Mode (./tools)' : 'Proxy Not Connected') : 'Connection failed');
       document.getElementById('hdr-user').textContent  = S.ctx?.userName || '—';
       document.getElementById('st-api').textContent    = `API v${S.cfg.apiVersion}`;
       document.getElementById('st-env').textContent    = host;
-      document.getElementById('st-conn').textContent   = ok ? '🟢 Connected' : (S.isExternalMode && !getApiBaseUrl() ? '🟡 Needs Proxy URL' : '🔴 Error');
+      document.getElementById('st-conn').textContent   = ok ? '🟢 Connected' : (S.isExternalMode && !getApiBaseUrl() ? (S.tools.length ? '🟡 Preview (No Proxy)' : '🟡 Needs Proxy URL') : '🔴 Error');
       // Show storage backend in status bar
       const storeLabels = { localStorage: '💾 Persistent', sessionStorage: '💾 Session', memory: '⚠️ No Storage' };
       document.getElementById('st-store').textContent = storeLabels[ls.type] || '—';
@@ -1143,10 +1143,38 @@
     }
 
     /* ─── Tool discovery ─────────────────────────────────────── */
+    async function discoverStaticFolderTools() {
+      if (location.protocol === 'file:') return [];
+      try {
+        const res = await fetch('tools/manifest.json', { cache: 'no-store' });
+        if (!res.ok) return [];
+        const list = await res.json();
+        if (!Array.isArray(list)) return [];
+        return list
+          .filter(m => m && m.wrName)
+          .map(m => ({
+            wrName:      m.wrName,
+            id:          m.id || wrToId(m.wrName),
+            name:        m.name || wrToId(m.wrName),
+            icon:        m.icon || '🔧',
+            category:    m.category || 'General',
+            description: m.description || '',
+            version:     m.version || '—',
+            minHostVer:  m.minHostVersion || null,
+            source:      'static_folder',
+          }))
+          .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+      } catch {
+        return [];
+      }
+    }
+
     async function discoverTools(force = false) {
       if (S.isExternalMode && !getApiBaseUrl()) {
-        S.tools = [];
+        setSidebarLoading();
+        S.tools = await discoverStaticFolderTools();
         renderSidebar();
+        setStatus(false);
         return;
       }
 
@@ -1185,19 +1213,44 @@
         ls.set(cacheKey, { ts: Date.now(), tools });
       } catch (e) {
         console.error('[dvopentools] Discovery failed:', e);
-        toast(`Failed to discover tools: ${e.message}`, 'error');
-        S.tools = [];
+        const staticFallback = S.isExternalMode ? await discoverStaticFolderTools() : [];
+        if (staticFallback.length) {
+          S.tools = staticFallback;
+          toast(`Proxy unavailable (${e.message}). Loaded ${staticFallback.length} tools from ./tools/ in preview mode.`, 'warning', 6000);
+        } else {
+          toast(`Failed to discover tools: ${e.message}`, 'error');
+          S.tools = [];
+        }
       }
       renderSidebar();
     }
 
-    async function fetchToolHtml(wrName) {
+    async function fetchToolHtml(wrName, source = '') {
       const base = getApiBaseUrl();
+      if (source === 'static_folder' || (S.isExternalMode && !base)) {
+        if (location.protocol === 'file:') return null;
+        const sr = await fetch(`tools/${wrName}`, { cache: 'no-store' });
+        if (!sr.ok) return null;
+        const html = await sr.text();
+        S.externalHtmlCache.set(wrName, html);
+        return html;
+      }
+
       const r = await fetch(`${base}/WebResources/${wrName}`, {
         credentials: S.isExternalMode ? 'omit' : 'same-origin',
         cache: 'no-store'
       });
-      if (!r.ok) return null;
+      if (!r.ok) {
+        if (S.isExternalMode && location.protocol !== 'file:') {
+          const sr = await fetch(`tools/${wrName}`, { cache: 'no-store' });
+          if (sr.ok) {
+            const html = await sr.text();
+            S.externalHtmlCache.set(wrName, html);
+            return html;
+          }
+        }
+        return null;
+      }
       const html = await r.text();
       if (S.isExternalMode) S.externalHtmlCache.set(wrName, html);
       return html;
@@ -1304,14 +1357,16 @@
       if (!tool) { toast(`Tool "${toolId}" not found in environment.`, 'warning'); return; }
       const tabId = uid();
       const apiBase = getApiBaseUrl();
-      if (S.isExternalMode && apiBase && apiBase !== location.origin) {
+      const useBlobFrame = S.isExternalMode && ((apiBase && apiBase !== location.origin) || tool.source === 'static_folder' || !apiBase);
+      if (useBlobFrame) {
         let html = S.externalHtmlCache.get(tool.wrName);
         if (!html) {
           try {
-            html = await fetchToolHtml(tool.wrName);
+            html = await fetchToolHtml(tool.wrName, tool.source);
+            if (!html) throw new Error('Tool HTML returned empty or 404');
             S.externalHtmlCache.set(tool.wrName, html);
           } catch (e) {
-            toast(`Failed to load "${tool.name}" from proxy: ${e.message}`, 'error');
+            toast(`Failed to load "${tool.name}": ${e.message}`, 'error');
             return;
           }
         }
@@ -1748,6 +1803,21 @@
 
             let fetchArgs = arguments;
             const apiBase = getApiBaseUrl();
+            if (S.isExternalMode && !apiBase) {
+              const errMsg = 'Local dev-server.js Proxy URL is not configured. Click "🔌 Proxy URL" in the header to connect to Dataverse.';
+              recordNetworkLog({
+                id: uid(), tabId, toolName, toolIcon,
+                method: methUpper, path: displayPath, url: urlStr,
+                status: 503, statusText: 'Proxy URL Not Configured',
+                latency: 0, headers: {}, body: init?.body || null,
+                policy: S.cfg.securityPolicy, timestamp: new Date()
+              });
+              const ResponseClass = win.Response || Response;
+              return new ResponseClass(JSON.stringify({ error: { code: 'PROXY_REQUIRED', message: errMsg } }), {
+                status: 503, statusText: 'Proxy URL Not Configured',
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
             if (S.isExternalMode && apiBase && apiBase !== location.origin) {
               if (typeof input === 'string' && input.startsWith('/api/data/v')) {
                 fetchArgs = [`${apiBase}${input}`, init];
@@ -1878,6 +1948,13 @@
       }
 
       // Execute request
+      if (S.isExternalMode && !getApiBaseUrl()) {
+        postToTool(frame, 'API_RESPONSE', {
+          reqId, ok: false, status: 503, statusText: 'Proxy URL Not Configured',
+          error: 'Local dev-server.js Proxy URL is not configured. Click "🔌 Proxy URL" in the header to connect.'
+        });
+        return;
+      }
       const t0 = performance.now();
       const url = dvUrl(path);
 
@@ -2583,18 +2660,45 @@
         ls.set('cfg', S.cfg);
       }
 
-      // Outside Power Platform without a Proxy URL configured: prompt for Proxy URL right away
+      // Outside Power Platform without a Proxy URL configured:
+      // Load ./tools/manifest.json preview on HTTP(S), restore/launch requested tool, and let user connect Proxy URL.
       if (S.isExternalMode && !getApiBaseUrl()) {
         S.ctx = {
           environmentUrl: location.origin, apiVersion: S.cfg.apiVersion,
           userId: '', userName: '', userEmail: '', hostVersion: HOST_VERSION,
           theme: S.cfg.theme, runtimeMode: S.runtimeMode
         };
+        await discoverTools();
         setStatus(false);
-        renderSidebar();
-        renderTabs();
+
+        const saved_tabs   = ls.get('tabs', []);
+        const saved_active = ls.get('activeTab');
+        for (const t of saved_tabs) {
+          const tool = S.tools.find(x => x.id === t.toolId);
+          if (!tool) continue;
+          try {
+            const html = S.externalHtmlCache.get(tool.wrName) || await fetchToolHtml(tool.wrName, tool.source);
+            if (!html) continue;
+            S.externalHtmlCache.set(tool.wrName, html);
+            S.tabs.push({ ...t });
+            createFrame(t.tabId, { type: 'file', html });
+          } catch {}
+        }
+        if (S.tabs.length) {
+          const toActivate = S.tabs.find(t => t.tabId === saved_active) || S.tabs[0];
+          activate(toActivate.tabId);
+        } else {
+          renderTabs();
+        }
+        if (S.pendingLaunchToolId) {
+          const targetTool = S.pendingLaunchToolId;
+          S.pendingLaunchToolId = '';
+          await openTool(targetTool);
+          toast('Previewing tool from ./tools/ — click "🔌 Proxy URL" in the header to connect dev-server.js.', 'info', 6000);
+        } else {
+          openProxyModal();
+        }
         renderNetworkLogs();
-        openProxyModal();
         return;
       }
 

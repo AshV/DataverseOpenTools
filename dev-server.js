@@ -33,6 +33,7 @@ function parseArgs(argv) {
     port: parseInt(process.env.PORT || '8787', 10) || 8787,
     auth: (process.env.DV_AUTH_MODE || 'auto').toLowerCase(),
     localOnly: false,
+    buildManifest: false,
     help: false
   };
 
@@ -40,6 +41,7 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') opts.help = true;
     else if (arg === '--local-only') opts.localOnly = true;
+    else if (arg === '--build-manifest') opts.buildManifest = true;
     else if (arg === '--env' && argv[i + 1]) opts.envUrl = normalizeEnvUrl(argv[++i]);
     else if (arg.startsWith('--env=')) opts.envUrl = normalizeEnvUrl(arg.slice(6));
     else if (arg === '--port' && argv[i + 1]) opts.port = parseInt(argv[++i], 10) || 8787;
@@ -142,6 +144,36 @@ function listLocalToolWebResources(prefix = 'dvopentools_') {
     name,
     displayname: name.replace(prefix, '').replace(/\.html$/i, '')
   }));
+}
+
+function buildToolsManifest(prefix = 'dvopentools_') {
+  const dir = fs.existsSync(TOOLS_DIR) && fs.statSync(TOOLS_DIR).isDirectory() ? TOOLS_DIR : ROOT_DIR;
+  const items = [];
+  for (const wrName of listLocalToolWebResources(prefix).map(x => x.name)) {
+    const fullPath = resolveSafeLocalFile(wrName, TOOLS_DIR) || resolveSafeLocalFile(wrName, ROOT_DIR);
+    if (!fullPath) continue;
+    const raw = fs.readFileSync(fullPath, 'utf8');
+    const m = raw.match(/<script[^>]+id=["']dvopentools-manifest["'][^>]*>([\s\S]*?)<\/script>/i);
+    let meta = {};
+    if (m) {
+      try { meta = JSON.parse(m[1]); } catch {}
+    }
+    items.push({
+      wrName,
+      id: meta.id || wrName.replace(prefix, '').replace(/\.html$/i, '').toLowerCase(),
+      name: meta.name || wrName.replace(prefix, '').replace(/\.html$/i, ''),
+      icon: meta.icon || '🔧',
+      category: meta.category || 'General',
+      version: meta.version || '1.0.0',
+      minHostVersion: meta.minHostVersion || null,
+      description: meta.description || ''
+    });
+  }
+  items.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+  if (fs.existsSync(TOOLS_DIR)) {
+    fs.writeFileSync(path.join(TOOLS_DIR, 'manifest.json'), JSON.stringify(items, null, 2) + '\n', 'utf8');
+  }
+  return items;
 }
 
 function mimeTypeFor(filePath) {
@@ -348,11 +380,18 @@ Usage:
   node dev-server.js [--env https://yourorg.crm.dynamics.com] [--port 8787] [--auth auto|pac|az|env] [--local-only]
 
 Options:
-  --env <url>     Target Dataverse org URL (auto-detected via \`pac org who\` if omitted)
-  --port <num>    Local HTTP port (default: 8787)
-  --auth <mode>   Token source: auto (default), pac (\`pac auth token\`), az (\`az account get-access-token\`), or env (DV_TOKEN)
-  --local-only    Serve local HTML tools without proxying Dataverse API calls
+  --env <url>       Target Dataverse org URL (auto-detected via \`pac org who\` if omitted)
+  --port <num>      Local HTTP port (default: 8787)
+  --auth <mode>     Token source: auto (default), pac (\`pac auth token\`), az (\`az account get-access-token\`), or env (DV_TOKEN)
+  --local-only      Serve local HTML tools without proxying Dataverse API calls
+  --build-manifest  Regenerate tools/manifest.json from tools/dvopentools_*.html and exit
 `);
+    process.exit(0);
+  }
+
+  if (opts.buildManifest) {
+    const items = buildToolsManifest();
+    console.log(`[dev-server] Wrote tools/manifest.json (${items.length} tools).`);
     process.exit(0);
   }
 
@@ -384,4 +423,4 @@ Options:
   });
 }
 
-module.exports = { parseArgs, createDevServer, listLocalToolWebResources, resolveSafeLocalFile };
+module.exports = { parseArgs, createDevServer, listLocalToolWebResources, resolveSafeLocalFile, buildToolsManifest };

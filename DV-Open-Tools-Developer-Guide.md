@@ -1167,6 +1167,7 @@ Then either:
 
 How it works:
 - Serves `index.html` at `/` (and `dvopentools_host.html` at `/dvopentools_host.html`) plus all `tools/dvopentools_*.html` files straight from disk (`/WebResources/*`) with no upload step and no browser caching.
+- Static hosts like GitHub Pages use `tools/manifest.json` so `dvopentools_host.html` discovers tools inside `./tools/` even before connecting `dev-server.js` (regenerate after adding a new tool with `node dev-server.js --build-manifest`).
 - Merges un-uploaded local tools into `/api/data/*/webresourceset` discovery automatically.
 - Acquires and caches OAuth Bearer tokens **strictly server-side** via `pac auth token` or `az account get-access-token` (`DV_TOKEN` env var optional) — Environment URL and Bearer tokens never touch browser JS or storage.
 - Enables CORS + Chrome Private Network Access headers (`Access-Control-Allow-Origin: *`, `Access-Control-Allow-Private-Network: true`) and exposes `GET /_proxy/status` (metadata only) so external/local-file hosts connect cleanly.

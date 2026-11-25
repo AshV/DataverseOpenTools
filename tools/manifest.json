@@ -1,0 +1,202 @@
+[
+  {
+    "wrName": "dvopentools_envvars.html",
+    "id": "env-vars",
+    "name": "Environment Variables",
+    "icon": "⚙️",
+    "category": "Configuration",
+    "version": "1.1.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Inspect Default vs Current Environment Variable values, validate JSON configs, spot missing values, and safely update overrides."
+  },
+  {
+    "wrName": "dvopentools_bulkops.html",
+    "id": "bulk-ops",
+    "name": "Bulk Operations",
+    "icon": "♻️",
+    "category": "Data",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Preview records with FetchXML and execute throttled bulk PATCH, state activation/deactivation, or DELETE operations safely under Host Security Gateway."
+  },
+  {
+    "wrName": "dvopentools_recordinspector.html",
+    "id": "record-inspector",
+    "name": "Record Inspector",
+    "icon": "🔎",
+    "category": "Data",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Inspect all fields (including hidden attributes) on any Dataverse record by pasting a URL or GUID, edit updatable values, or jump to Access Diagnostics."
+  },
+  {
+    "wrName": "dvopentools_rowcounter.html",
+    "id": "row-counter",
+    "name": "Row Counter",
+    "icon": "📊",
+    "category": "Data",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.0",
+    "description": "Count records across Dataverse tables (Total, Active, Inactive, Custom Filter) with HTTP headers inspection & CSV export."
+  },
+  {
+    "wrName": "dvopentools_storage.html",
+    "id": "storage-analyzer",
+    "name": "Storage Analyzer",
+    "icon": "💾",
+    "category": "Data",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Identify Dataverse log and file storage bloat across AsyncOperations, Plugin Traces, Audits, Notes/Attachments, and Bulk Delete jobs."
+  },
+  {
+    "wrName": "dvopentools_envtimeline.html",
+    "id": "env-timeline",
+    "name": "Environment Timeline",
+    "icon": "🕒",
+    "category": "Diagnostics",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.0",
+    "description": "Unified chronological activity and event timeline across Dataverse: Audits, Plugin Traces, Flow Runs, System Jobs, Solution Operations, and Sync Logs."
+  },
+  {
+    "wrName": "dvopentools_plugintraces.html",
+    "id": "plugin-traces",
+    "name": "Plugin Trace Logs",
+    "icon": "📜",
+    "category": "Diagnostics",
+    "version": "1.1.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Stream and filter Dataverse plugintracelog entries, trace full correlation cascades by depth, inspect stack traces, and spot slow plugins."
+  },
+  {
+    "wrName": "dvopentools_tablemap.html",
+    "id": "table-map",
+    "name": "Table Automation Map",
+    "icon": "⚡",
+    "category": "Diagnostics",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Unified view of every Plugin Step, Business Rule, Classic Workflow, Business Process Flow, Cloud Flow trigger, and Bound Custom API on any Dataverse table."
+  },
+  {
+    "wrName": "dvopentools_plugins.html",
+    "id": "plugin-manager",
+    "name": "Plugin Step Manager",
+    "icon": "🧩",
+    "category": "Extensibility",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Browse registered Plugin Assemblies, Types, SDK Message Processing Steps, and Pre/Post Images, with 1-click step Enable/Disable."
+  },
+  {
+    "wrName": "dvopentools_webhooks.html",
+    "id": "webhook-inspector",
+    "name": "Webhook Inspector",
+    "icon": "🪝",
+    "category": "Extensibility",
+    "version": "1.1.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Inspect Dataverse Service Endpoints and Webhooks, linked SDK Message Processing Steps, recent Async delivery failures, and build sample RemoteExecutionContext payloads."
+  },
+  {
+    "wrName": "dvopentools_connrefs.html",
+    "id": "conn-refs",
+    "name": "Connection Audit",
+    "icon": "🔗",
+    "category": "Flow",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Audit Connection References, map which Cloud Flows depend on each connection, and flag disconnected references or turned-off flows."
+  },
+  {
+    "wrName": "dvopentools_flowcalendar.html",
+    "id": "flow-calendar",
+    "name": "Flow Calendar",
+    "icon": "📅",
+    "category": "Flow",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.0",
+    "description": "Visualise Power Automate cloud flow run history across a 7-day hourly timeline with response headers inspection."
+  },
+  {
+    "wrName": "dvopentools_erd.html",
+    "id": "erd-visualizer",
+    "name": "ERD Visualizer",
+    "icon": "📐",
+    "category": "Metadata",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Select Dataverse tables to render an interactive pure-SVG Entity-Relationship diagram (1:N, N:1, N:N), export SVG, or copy Mermaid erDiagram."
+  },
+  {
+    "wrName": "dvopentools_formview.html",
+    "id": "form-view",
+    "name": "Form & View XML",
+    "icon": "📋",
+    "category": "Metadata",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Audit FormXML JavaScript libraries, OnLoad/OnSave/OnChange handlers, tabs & fields, plus SavedQuery view layouts and FetchXML."
+  },
+  {
+    "wrName": "dvopentools_labels.html",
+    "id": "label-explorer",
+    "name": "Label Explorer",
+    "icon": "🌍",
+    "category": "Metadata",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Inspect localized Display Labels across all provisioned Dataverse languages (RetrieveProvisionedLanguages) for Tables and Columns, and export translation CSVs."
+  },
+  {
+    "wrName": "dvopentools_schemabrowser.html",
+    "id": "schema-browser",
+    "name": "Schema Browser",
+    "icon": "📖",
+    "category": "Metadata",
+    "version": "1.1.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Explore Dataverse EntityDefinitions, columns, OptionSet integer mappings, relationships, keys, and Global Option Sets."
+  },
+  {
+    "wrName": "dvopentools_fetchxml.html",
+    "id": "fetchxml-playground",
+    "name": "FetchXML & Web API",
+    "icon": "🔍",
+    "category": "Query",
+    "version": "1.1.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Execute FetchXML queries (with paging & batch fallback) and OData Web API requests with table inspection, code generation, and CSV/JSON export."
+  },
+  {
+    "wrName": "dvopentools_accesschecker.html",
+    "id": "access-checker",
+    "name": "Access Diagnostics",
+    "icon": "🛡️",
+    "category": "Security",
+    "version": "1.1.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Diagnose effective record permissions via RetrievePrincipalAccess and inspect Security Roles, Team memberships, and record ownership."
+  },
+  {
+    "wrName": "dvopentools_rolematrix.html",
+    "id": "role-matrix",
+    "name": "Role Matrix",
+    "icon": "🎭",
+    "category": "Security",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Compare Dataverse Security Role table privileges side-by-side (Create, Read, Write, Delete, Append, Assign, Share) and export security audit CSVs."
+  },
+  {
+    "wrName": "dvopentools_solutionlayers.html",
+    "id": "solution-layers",
+    "name": "Solution Layers",
+    "icon": "📦",
+    "category": "Solutions",
+    "version": "1.1.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Inspect managed vs Active unmanaged solution component layers (msdyn_componentlayer) and diagnose delete blockers via RetrieveDependenciesForDelete."
+  }
+]
