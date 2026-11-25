@@ -7,19 +7,10 @@
 
   <!--
     ╔══════════════════════════════════════════════════════╗
-    ║   DV Open Tools — Tool Template                      ║
-    ║   Copy this file, fill in the manifest, and build.   ║
+    ║   DV Open Tools — Lightweight Tool Template          ║
+    ║   Consumes shared CSS (.dv-*) & window.DV from Host  ║
     ╚══════════════════════════════════════════════════════╝
-
-    Naming:   dvopentools_{your-tool-name}.html
-    Upload:   Power Platform → Web Resources (HTML type)
-    Protocol: See manifest block + script section below
   -->
-
-  <!-- ══ 1. MANIFEST ════════════════════════════════════════
-       Required. The host reads this to build the sidebar.
-       All fields with * are required.
-  ═══════════════════════════════════════════════════════════ -->
   <script type="application/json" id="dvopentools-manifest">
   {
     "id":             "my-tool",
@@ -29,251 +20,74 @@
     "icon":           "🛠️",
     "category":       "General",
     "author":         "Your Name",
-    "minHostVersion": "2025.11.0"
+    "minHostVersion": "2025.11.1"
   }
   </script>
-
-  <!-- ══ 2. STYLES ══════════════════════════════════════════
-       Self-contained. No external CSS links.
-       A shared CSS will be available from the host in a
-       future version — for now, style everything inline.
-  ═══════════════════════════════════════════════════════════ -->
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      font-size: 13px;
-      padding: 16px;
-      background: #fff;
-      color: #1a1a1a;
-      /* Match the host's dark theme when it notifies you */
-    }
-    body.dark { background: #1e1e1e; color: #d4d4d4; }
-
-    h1 { font-size: 16px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
-    .btn {
-      padding: 7px 16px; border-radius: 4px; border: none; cursor: pointer;
-      font-size: 13px; font-family: inherit;
-      background: #0078d4; color: #fff;
-      transition: background .15s;
-    }
-    .btn:hover { background: #106ebe; }
-    .btn:disabled { opacity: .5; cursor: not-allowed; }
-    .output {
-      margin-top: 14px; padding: 12px; border-radius: 4px;
-      background: #f4f4f4; border: 1px solid #e0e0e0;
-      white-space: pre-wrap; font-family: 'Cascadia Code', 'Consolas', monospace;
-      font-size: 12px; max-height: 400px; overflow-y: auto;
-    }
-    body.dark .output { background: #2d2d2d; border-color: #444; }
-  </style>
 </head>
-<body>
+<body class="dv-app">
 
-  <h1><span id="tool-icon">🛠️</span> My Tool</h1>
-
-  <div>
-    <button class="btn" id="run-btn" disabled>Fetching context…</button>
+  <div class="dv-toolbar">
+    <strong>🛠️ My Tool</strong>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn dv-btn-primary" id="run-btn" disabled>Waiting for host…</button>
   </div>
-  <pre class="output" id="output">Output will appear here.</pre>
 
-  <!-- ══ 3. SCRIPT ══════════════════════════════════════════
-       The host protocol is 3 steps:
-         a) Send TOOL_READY when page loads
-         b) Wait for CONTEXT_INIT from the host
-         c) Make API calls using context.environmentUrl
-  ═══════════════════════════════════════════════════════════ -->
+  <div class="dv-scroll dv-pad">
+    <pre class="dv-code" id="output">Output will appear here.</pre>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Click status pill after query to inspect HTTP headers</span>
+  </footer>
+
   <script>
     'use strict';
 
-    /* ─── Host communication setup ───────────────────────────── */
     const HOST_ORIGIN = window.location.origin;
     let context = null;
-    const _pendingApiRequests = new Map();
+    let store = null;
 
-    function uid() {
-      return 'R' + Math.random().toString(36).slice(2, 9);
-    }
-
-    /**
-     * Post a message to the host.
-     * Always use HOST_ORIGIN as the target — never '*'.
-     */
     function toHost(type, payload = {}) {
-      window.parent.postMessage(
-        { source: 'dvopentools-tool', type, payload },
-        HOST_ORIGIN
-      );
+      window.parent?.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
     }
 
-    /** Show a toast notification in the host UI. */
-    function notify(message, level = 'info', duration = 3500) {
-      toHost('NOTIFY', { message, level, duration });
-    }
-
-    /** Update this tool's tab title in the host. */
-    function setTitle(title) {
-      toHost('SET_TITLE', { title });
-    }
-
-    /** Ask the host to open another tool by its manifest id. */
-    function openTool(toolId) {
-      toHost('OPEN_TOOL', { toolId });
-    }
-
-    // ── a) Signal readiness ───────────────────────────────────
-    //   Send as soon as the script runs. The host will reply
-    //   with CONTEXT_INIT (or will time out and send it anyway).
     toHost('TOOL_READY');
 
-    // ── b) Receive messages from host ─────────────────────────
     window.addEventListener('message', e => {
-      if (e.origin !== HOST_ORIGIN) return;
-      const { source, type, payload } = e.data || {};
-      if (source !== 'dvopentools-host') return;
-
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      const { type, payload } = e.data;
       if (type === 'CONTEXT_INIT') {
         context = payload;
-        onContextReady();
+        store = window.DV?.store('my-tool');
+        document.getElementById('run-btn').textContent = 'Run Query';
+        document.getElementById('run-btn').disabled = false;
       }
-
-      if (type === 'THEME_CHANGE') {
-        document.body.classList.toggle('dark', payload.theme === 'dark');
-      }
-
-      // TOOL_FOCUS fires when the user switches to this tab.
-      // Use it to refresh data, re-focus an input, etc.
-      if (type === 'TOOL_FOCUS') {
-        // e.g. document.getElementById('search-input')?.focus();
-      }
-
-      // API_RESPONSE received from host Security Gateway
-      if (type === 'API_RESPONSE' && payload?.reqId) {
-        const handler = _pendingApiRequests.get(payload.reqId);
-        if (handler) {
-          _pendingApiRequests.delete(payload.reqId);
-          if (payload.ok) {
-            handler.resolve(payload.data);
-          } else {
-            handler.reject(new Error(payload.error || `HTTP ${payload.status} ${payload.statusText}`));
-          }
-        }
+      if (type === 'TOOL_LAUNCH' && payload) {
+        // Handle deep-link launch payload when opened via DV.openTool('my-tool', payload)
       }
     });
 
-    /* ─── Called once context is available ───────────────────── */
-    function onContextReady() {
-      // Apply initial theme
-      document.body.classList.toggle('dark', context.theme === 'dark');
-      // Unlock the UI
-      document.getElementById('run-btn').textContent = 'Run Query';
-      document.getElementById('run-btn').disabled = false;
-    }
-
-    /* ─── Tool logic ──────────────────────────────────────────── */
-
-    // ── c) Make Dataverse API calls via Host Security Gateway ───
-    //   Routes through host for audit logging and manual approval.
-    //   Falls back to direct fetch if running standalone.
-    async function dvFetch(path, opts = {}) {
-      if (window.parent && window.parent !== window) {
-        const reqId = uid();
-        return new Promise((resolve, reject) => {
-          _pendingApiRequests.set(reqId, { resolve, reject });
-          toHost('API_REQUEST', {
-            reqId,
-            method: opts.method || 'GET',
-            path,
-            headers: opts.headers || {},
-            body: opts.body || null
-          });
-
-          // Timeout: 90s to give developer time to review & approve
-          setTimeout(() => {
-            if (_pendingApiRequests.has(reqId)) {
-              _pendingApiRequests.delete(reqId);
-              reject(new Error('Dataverse API request timed out waiting for gateway approval'));
-            }
-          }, 90000);
-        });
-      }
-
-      // Standalone direct fetch fallback
-      const url = `${context.environmentUrl}/api/data/v${context.apiVersion}${path}`;
-      const res = await fetch(url, {
-        ...opts,
-        headers: {
-          'OData-MaxVersion': '4.0',
-          'OData-Version':    '4.0',
-          'Accept':           'application/json',
-          'Content-Type':     'application/json',
-          ...opts.headers,
-        },
-      });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      return res.json();
-    }
-
     document.getElementById('run-btn').addEventListener('click', async () => {
-      if (!context) return;
+      if (!context || !window.DV) return;
       const btn = document.getElementById('run-btn');
       const out = document.getElementById('output');
       btn.disabled = true; btn.textContent = 'Loading…';
-      out.textContent = '';
 
       try {
-        // ── Replace with your actual query ──────────────────────
-        const data = await dvFetch('/accounts?$select=name,createdon&$top=10');
-        // ───────────────────────────────────────────────────────
-
+        // Host Security Gateway intercepts all fetch() calls transparently under Safe Mode / Zero Trust
+        const data = await DV.fetch('/accounts?$select=name,createdon&$top=10');
         out.textContent = JSON.stringify(data.value, null, 2);
-        const count = data.value?.length ?? 0;
-
-        notify(`Loaded ${count} records`, 'success');
-        setTitle(`My Tool — ${count} rows`);
+        DV.notify(`Loaded ${data.value?.length ?? 0} records`, 'success');
+        DV.setTitle(`My Tool (${data.value?.length ?? 0})`);
+        store?.set('lastRun', new Date().toISOString());
       } catch (err) {
         out.textContent = `Error: ${err.message}`;
-        notify(err.message, 'error');
+        DV.notify(err.message, 'error');
       } finally {
         btn.disabled = false; btn.textContent = 'Run Query';
       }
     });
-
-    /* ─── Per-tool tiered storage ─────────────────────────────────
-       Falls back automatically: localStorage → sessionStorage → memory.
-       Your tool code uses toolStore() regardless of which is active.
-       Replace 'my-tool' with your manifest id.
-    ──────────────────────────────────────────────────────────── */
-    const TOOL_STORE = 'dvopentools::tool::my-tool::';
-
-    const _store = (() => {
-      function canUse(s) {
-        try { const k = '__dvot__'; s.setItem(k,'1'); s.removeItem(k); return true; } catch { return false; }
-      }
-      const _ls  = typeof localStorage  !== 'undefined' && canUse(localStorage)  ? localStorage  : null;
-      const _ss  = typeof sessionStorage !== 'undefined' && canUse(sessionStorage) ? sessionStorage : null;
-      const _mem = Object.create(null);
-      const _b   = _ls || _ss;
-      return {
-        /** 'localStorage' | 'sessionStorage' | 'memory' */
-        type: _ls ? 'localStorage' : _ss ? 'sessionStorage' : 'memory',
-        get(k)   { if (_b) try { return JSON.parse(_b.getItem(k)); } catch {} return _mem[k] ?? null; },
-        set(k,v) { if (_b) try { _b.setItem(k, JSON.stringify(v)); return; } catch {} _mem[k] = v; },
-        del(k)   { if (_b) try { _b.removeItem(k); } catch {} delete _mem[k]; },
-      };
-    })();
-
-    function toolStore(key, value) {
-      const k = TOOL_STORE + key;
-      if (value === undefined) return _store.get(k);
-      _store.set(k, value);
-    }
-    function toolStoreDel(key) { _store.del(TOOL_STORE + key); }
-
-    // Usage:
-    //   toolStore('lastQuery', 'select * from account');   // write
-    //   const q = toolStore('lastQuery');                  // read  (null if not found)
-    //   toolStoreDel('lastQuery');                         // delete
   </script>
 </body>
 </html>

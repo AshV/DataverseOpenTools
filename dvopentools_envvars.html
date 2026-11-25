@@ -9,135 +9,24 @@
   {
     "id":             "env-vars",
     "name":           "Environment Variables",
-    "version":        "1.0.0",
+    "version":        "1.1.0",
     "description":    "Inspect Default vs Current Environment Variable values, validate JSON configs, spot missing values, and safely update overrides.",
     "icon":           "⚙️",
     "category":       "Configuration",
     "author":         "Ashish Vishwakarma",
-    "minHostVersion": "2025.11.0"
+    "minHostVersion": "2025.11.1"
   }
   </script>
-
-  <style>
-    :root {
-      --bg: #ffffff;
-      --bg-alt: #f8f9fa;
-      --bg-card: #ffffff;
-      --border: #e1dfdd;
-      --border-subtle: #edebe9;
-      --text: #201f1e;
-      --text-sec: #605e5c;
-      --text-muted: #8a8886;
-      --primary: #0078d4;
-      --primary-hover: #106ebe;
-      --primary-subtle: #eff6fc;
-      --ok-bg: #dff6dd;
-      --ok-color: #107c10;
-      --warn-bg: #fef3c7;
-      --warn-color: #b45309;
-      --err-bg: #fde7e9;
-      --err-color: #d13438;
-      --modal-overlay: rgba(0,0,0,0.45);
-    }
-    body.dark {
-      --bg: #1e1e1e;
-      --bg-alt: #252526;
-      --bg-card: #2d2d2d;
-      --border: #3e3e42;
-      --border-subtle: #333337;
-      --text: #d4d4d4;
-      --text-sec: #a6a6a6;
-      --text-muted: #767676;
-      --primary: #2886de;
-      --primary-hover: #4797e2;
-      --primary-subtle: #19324d;
-      --ok-bg: #1c361e;
-      --ok-color: #57b35e;
-      --warn-bg: #422d05;
-      --warn-color: #fbbf24;
-      --err-bg: #431c20;
-      --err-color: #f1707b;
-      --modal-overlay: rgba(0,0,0,0.7);
-    }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; overflow: hidden; }
-    body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      font-size: 13px; background: var(--bg); color: var(--text);
-      display: flex; flex-direction: column;
-    }
-
-    .toolbar {
-      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-      padding: 8px 14px; background: var(--bg-alt); border-bottom: 1px solid var(--border); flex-shrink: 0;
-    }
-    input[type="text"], select, textarea {
-      padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;
-      background: var(--bg); color: var(--text); font-size: 12px; font-family: inherit;
-    }
-    .btn {
-      padding: 5px 11px; border: 1px solid var(--border); border-radius: 4px;
-      background: var(--bg-card); color: var(--text); cursor: pointer; font-size: 12px; font-family: inherit;
-    }
-    .btn:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-subtle); }
-    .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
-    .spacer { flex: 1; }
-
-    .summary-strip {
-      display: flex; gap: 18px; padding: 7px 14px; border-bottom: 1px solid var(--border-subtle);
-      background: var(--bg); font-size: 12px; flex-shrink: 0;
-    }
-    .table-wrap { flex: 1; min-height: 0; overflow: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
-    th {
-      position: sticky; top: 0; background: var(--bg-alt); padding: 7px 12px;
-      border-bottom: 1px solid var(--border); color: var(--text-sec); font-weight: 600; z-index: 2;
-    }
-    td { padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; user-select: text; }
-    tr:hover td { background: var(--primary-subtle); }
-    code { font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 11px; }
-
-    .badge { padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; display: inline-block; }
-    .b-ok   { background: var(--ok-bg); color: var(--ok-color); }
-    .b-warn { background: var(--warn-bg); color: var(--warn-color); }
-    .b-err  { background: var(--err-bg); color: var(--err-color); }
-    .b-info { background: var(--primary-subtle); color: var(--primary); }
-
-    .val-box {
-      max-width: 270px; max-height: 85px; overflow: auto; white-space: pre-wrap; word-break: break-word;
-      font-family: monospace; font-size: 11px; background: var(--bg-alt); padding: 4px 6px;
-      border: 1px solid var(--border-subtle); border-radius: 3px;
-    }
-
-    .footer {
-      padding: 5px 14px; border-top: 1px solid var(--border); background: var(--bg-alt);
-      display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--text-sec);
-    }
-    .pill { padding: 2px 8px; border-radius: 10px; color: #fff; font-weight: 600; background: var(--text-muted); }
-
-    .overlay {
-      display: none; position: fixed; inset: 0; background: var(--modal-overlay);
-      z-index: 100; align-items: center; justify-content: center;
-    }
-    .overlay.open { display: flex; }
-    .modal {
-      background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
-      width: 500px; max-width: 94vw; padding: 18px; display: flex; flex-direction: column; gap: 12px;
-    }
-  </style>
 </head>
-<body>
+<body class="dv-app">
 
-  <div class="toolbar">
+  <div class="dv-toolbar">
     <input type="text" id="f-search" placeholder="Filter schema name, display name, value…" style="width:260px;">
     <select id="f-type">
       <option value="ALL">All Types</option>
-      <option value="100000000">String</option>
-      <option value="100000001">Number</option>
-      <option value="100000002">Boolean</option>
-      <option value="100000003">JSON</option>
-      <option value="100000004">Data Source</option>
-      <option value="100000005">Secret</option>
+      <option value="100000000">String</option><option value="100000001">Number</option>
+      <option value="100000002">Boolean</option><option value="100000003">JSON</option>
+      <option value="100000004">Data Source</option><option value="100000005">Secret</option>
     </select>
     <select id="f-status">
       <option value="ALL">All States</option>
@@ -146,59 +35,45 @@
       <option value="MISSING">Missing Both Values</option>
       <option value="INVALID_JSON">Invalid JSON</option>
     </select>
-
-    <div class="spacer"></div>
-
-    <button class="btn btn-primary" id="btn-refresh">↻ Refresh</button>
-    <button class="btn" id="btn-export-json">📥 Export JSON</button>
-    <button class="btn" id="btn-export-csv">📥 Export CSV</button>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn dv-btn-primary" id="btn-refresh">↻ Refresh</button>
+    <button class="dv-btn" id="btn-export-json">📥 Export JSON</button>
+    <button class="dv-btn" id="btn-export-csv">📥 Export CSV</button>
   </div>
 
-  <div class="summary-strip">
+  <div class="dv-strip">
     <span>Total Definitions: <strong id="st-total">0</strong></span>
     <span>Overridden: <strong id="st-over">0</strong></span>
     <span>Missing Required: <strong id="st-miss" style="color:var(--err-color);">0</strong></span>
     <span>JSON Errors: <strong id="st-jerr" style="color:var(--warn-color);">0</strong></span>
   </div>
 
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Variable (Display / Schema)</th>
-          <th>Type</th>
-          <th>Status</th>
-          <th>Default Value</th>
-          <th>Current Value (Env Override)</th>
-          <th style="width:90px;">Action</th>
-        </tr>
-      </thead>
-      <tbody id="env-tbody">
-        <tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-sec);">Connecting to Dataverse…</td></tr>
-      </tbody>
+  <div class="dv-scroll">
+    <table class="dv-table">
+      <thead><tr><th>Variable (Display / Schema)</th><th>Type</th><th>Status</th><th>Default Value</th><th>Current Value (Env Override)</th><th style="width:90px;">Action</th></tr></thead>
+      <tbody id="env-tbody"><tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-sec);">Connecting to Dataverse…</td></tr></tbody>
     </table>
   </div>
 
-  <footer class="footer">
-    <span class="pill" id="tel-pill">Ready</span>
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
     <span id="tel-msg">Environment Variables Inspector</span>
-    <div class="spacer"></div>
+    <div class="dv-spacer"></div>
     <span>Edits are guarded by Host Safe Mode / Zero Trust</span>
   </footer>
 
-  <!-- Edit Current Value Modal -->
-  <div class="overlay" id="edit-modal">
-    <div class="modal">
+  <div class="dv-overlay" id="edit-modal">
+    <div class="dv-modal">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <strong id="edit-title">Edit Current Value</strong>
-        <button class="btn" id="edit-close">✕</button>
+        <button class="dv-btn dv-btn-sm" id="edit-close">✕</button>
       </div>
       <div style="font-size:11px;color:var(--text-sec);" id="edit-schema"></div>
-      <div id="edit-default-info" style="font-size:11px;background:var(--bg-alt);padding:6px 8px;border-radius:4px;"></div>
+      <div id="edit-default-info" class="dv-code"></div>
       <textarea id="edit-val-input" rows="6" style="width:100%;font-family:monospace;" placeholder="Enter new current value…"></textarea>
       <div style="display:flex;justify-content:flex-end;gap:8px;">
-        <button class="btn" id="edit-cancel">Cancel</button>
-        <button class="btn btn-primary" id="edit-save">Save Current Value</button>
+        <button class="dv-btn" id="edit-cancel">Cancel</button>
+        <button class="dv-btn dv-btn-primary" id="edit-save">Save Current Value</button>
       </div>
     </div>
   </div>
@@ -207,267 +82,116 @@
     'use strict';
 
     const HOST_ORIGIN = window.location.origin;
-    let context = null;
-    let items = [];
-    let editingItem = null;
+    const TYPE_LABELS = { 100000000: 'String', 100000001: 'Number', 100000002: 'Boolean', 100000003: 'JSON', 100000004: 'Data Source', 100000005: 'Secret' };
+    let items = [], editingItem = null;
 
-    const TYPE_LABELS = {
-      100000000: 'String',
-      100000001: 'Number',
-      100000002: 'Boolean',
-      100000003: 'JSON',
-      100000004: 'Data Source',
-      100000005: 'Secret'
-    };
-
-    function toHost(type, payload = {}) {
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
-      }
-    }
-    function notify(message, level = 'info', duration = 3500) { toHost('NOTIFY', { message, level, duration }); }
-    function setTitle(title) { toHost('SET_TITLE', { title }); }
-
-    toHost('TOOL_READY');
-    const _standaloneTimer = setTimeout(() => {
-      if (!context) {
-        context = { environmentUrl: location.origin, apiVersion: '9.2', theme: 'light' };
-        onContextReady();
-      }
-    }, 1500);
-
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
     window.addEventListener('message', e => {
-      if (e.origin !== HOST_ORIGIN) return;
-      const { source, type, payload } = e.data || {};
-      if (source !== 'dvopentools-host') return;
-      if (type === 'CONTEXT_INIT') { clearTimeout(_standaloneTimer); context = payload; onContextReady(); }
-      if (type === 'THEME_CHANGE') { document.body.classList.toggle('dark', payload.theme === 'dark'); }
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') loadEnvVars();
     });
-
-    async function dvReq(path, opts = {}) {
-      const url = `${context.environmentUrl}/api/data/v${context.apiVersion}${path}`;
-      const t0 = performance.now();
-      const res = await fetch(url, {
-        ...opts,
-        headers: {
-          'OData-MaxVersion': '4.0', 'OData-Version': '4.0',
-          'Accept': 'application/json', 'Content-Type': 'application/json',
-          ...opts.headers
-        }
-      });
-      const ms = Math.round(performance.now() - t0);
-      const pill = document.getElementById('tel-pill');
-      pill.textContent = `${res.status} (${ms}ms)`;
-      pill.style.background = res.ok ? 'var(--ok-color)' : 'var(--err-color)';
-      document.getElementById('tel-msg').textContent = `${opts.method || 'GET'} ${path.split('?')[0]}`;
-
-      if (res.status === 204) return {};
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
-      return json;
-    }
-
-    async function onContextReady() {
-      document.body.classList.toggle('dark', context.theme === 'dark');
-      await loadEnvVars();
-    }
 
     async function loadEnvVars() {
       try {
         const [defsRes, valsRes] = await Promise.all([
-          dvReq('/environmentvariabledefinitions?$select=environmentvariabledefinitionid,schemaname,displayname,description,type,defaultvalue,isrequired,secretstore&$orderby=displayname asc'),
-          dvReq('/environmentvariablevalues?$select=environmentvariablevalueid,value,_environmentvariabledefinitionid_value,schemaname')
+          DV.fetch('/environmentvariabledefinitions?$select=environmentvariabledefinitionid,schemaname,displayname,description,type,defaultvalue,isrequired,secretstore&$orderby=displayname asc'),
+          DV.fetch('/environmentvariablevalues?$select=environmentvariablevalueid,value,_environmentvariabledefinitionid_value,schemaname')
         ]);
-
-        const valByDef = new Map();
-        for (const v of (valsRes.value || [])) {
-          if (v._environmentvariabledefinitionid_value) {
-            valByDef.set(v._environmentvariabledefinitionid_value, v);
-          }
-        }
+        const valByDef = new Map((valsRes.value || []).filter(v => v._environmentvariabledefinitionid_value).map(v => [v._environmentvariabledefinitionid_value, v]));
 
         items = (defsRes.value || []).map(d => {
           const valRec = valByDef.get(d.environmentvariabledefinitionid);
           const effective = valRec?.value ?? d.defaultvalue ?? '';
           let jsonInvalid = false;
-          if (d.type === 100000003 && effective) {
-            try { JSON.parse(effective); } catch { jsonInvalid = true; }
-          }
-          const isSecret = d.type === 100000005;
+          if (d.type === 100000003 && effective) { try { JSON.parse(effective); } catch { jsonInvalid = true; } }
           const isOverridden = valRec !== undefined && valRec.value !== null && valRec.value !== '';
-          const isMissing = !isOverridden && (d.defaultvalue === null || d.defaultvalue === undefined || d.defaultvalue === '');
-
           return {
-            defId: d.environmentvariabledefinitionid,
-            valId: valRec?.environmentvariablevalueid || null,
-            schemaName: d.schemaname,
-            displayName: d.displayname || d.schemaname,
-            description: d.description || '',
-            type: d.type,
-            typeLabel: TYPE_LABELS[d.type] || String(d.type),
-            defaultValue: d.defaultvalue ?? '',
-            currentValue: valRec?.value ?? '',
-            isRequired: !!d.isrequired,
-            isSecret,
-            isOverridden,
-            isMissing,
-            jsonInvalid
+            defId: d.environmentvariabledefinitionid, valId: valRec?.environmentvariablevalueid || null,
+            schemaName: d.schemaname, displayName: d.displayname || d.schemaname, description: d.description || '',
+            type: d.type, typeLabel: TYPE_LABELS[d.type] || String(d.type), defaultValue: d.defaultvalue ?? '',
+            currentValue: valRec?.value ?? '', isRequired: !!d.isrequired, isSecret: d.type === 100000005,
+            isOverridden, isMissing: !isOverridden && (d.defaultvalue === null || d.defaultvalue === undefined || d.defaultvalue === ''), jsonInvalid
           };
         });
-
         renderTable();
       } catch (err) {
-        document.getElementById('env-tbody').innerHTML = `<tr><td colspan="6" style="color:var(--err-color);padding:20px;">❌ ${esc(err.message)}</td></tr>`;
-        notify(err.message, 'error');
+        document.getElementById('env-tbody').innerHTML = `<tr><td colspan="6" style="color:var(--err-color);padding:20px;">❌ ${DV.esc(err.message)}</td></tr>`;
+        DV.notify(err.message, 'error');
       }
     }
 
     function getFiltered() {
       const q = document.getElementById('f-search').value.trim().toLowerCase();
-      const t = document.getElementById('f-type').value;
-      const st = document.getElementById('f-status').value;
-
-      return items.filter(i => {
-        if (t !== 'ALL' && String(i.type) !== t) return false;
-        if (st === 'OVERRIDDEN' && !i.isOverridden) return false;
-        if (st === 'DEFAULT_ONLY' && (i.isOverridden || i.isMissing)) return false;
-        if (st === 'MISSING' && !i.isMissing) return false;
-        if (st === 'INVALID_JSON' && !i.jsonInvalid) return false;
-        if (!q) return true;
-        return `${i.displayName} ${i.schemaName} ${i.defaultValue} ${i.currentValue}`.toLowerCase().includes(q);
-      });
+      const t = document.getElementById('f-type').value, st = document.getElementById('f-status').value;
+      return items.filter(i => (t === 'ALL' || String(i.type) === t) &&
+        (st === 'ALL' || (st === 'OVERRIDDEN' && i.isOverridden) || (st === 'DEFAULT_ONLY' && !i.isOverridden && !i.isMissing) ||
+         (st === 'MISSING' && i.isMissing) || (st === 'INVALID_JSON' && i.jsonInvalid)) &&
+        (!q || `${i.displayName} ${i.schemaName} ${i.defaultValue} ${i.currentValue}`.toLowerCase().includes(q)));
     }
 
     function renderTable() {
-      const overCount = items.filter(i => i.isOverridden).length;
-      const missReqCount = items.filter(i => i.isRequired && i.isMissing).length;
-      const jsonErrCount = items.filter(i => i.jsonInvalid).length;
-
       document.getElementById('st-total').textContent = items.length;
-      document.getElementById('st-over').textContent = overCount;
-      document.getElementById('st-miss').textContent = missReqCount;
-      document.getElementById('st-jerr').textContent = jsonErrCount;
-      setTitle(`Env Vars (${items.length})`);
+      document.getElementById('st-over').textContent = items.filter(i => i.isOverridden).length;
+      document.getElementById('st-miss').textContent = items.filter(i => i.isRequired && i.isMissing).length;
+      document.getElementById('st-jerr').textContent = items.filter(i => i.jsonInvalid).length;
+      DV.setTitle(`Env Vars (${items.length})`);
 
-      const rows = getFiltered();
-      const tbody = document.getElementById('env-tbody');
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-sec);">No environment variables match the current filter.</td></tr>';
-        return;
-      }
+      const rows = getFiltered(), tbody = document.getElementById('env-tbody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-sec);">No environment variables match the current filter.</td></tr>'; return; }
 
       tbody.innerHTML = rows.map(i => {
-        let statusBadge = '<span class="badge b-info">Default</span>';
-        if (i.jsonInvalid) statusBadge = '<span class="badge b-err">Invalid JSON</span>';
-        else if (i.isMissing && i.isRequired) statusBadge = '<span class="badge b-err">Missing Required</span>';
-        else if (i.isMissing) statusBadge = '<span class="badge b-warn">Unset</span>';
-        else if (i.isOverridden) statusBadge = '<span class="badge b-ok">Overridden</span>';
-
+        const badge = i.jsonInvalid ? DV.ui.badge('Invalid JSON', 'err')
+          : (i.isMissing && i.isRequired) ? DV.ui.badge('Missing Required', 'err')
+          : i.isMissing ? DV.ui.badge('Unset', 'warn')
+          : i.isOverridden ? DV.ui.badge('Overridden', 'ok') : DV.ui.badge('Default', 'info');
+        const box = v => `<div class="dv-code" style="max-width:270px;max-height:80px;padding:4px 6px;">${DV.esc(i.isSecret ? '•••••••• (Secret Ref)' : v)}</div>`;
         return `<tr>
-          <td>
-            <strong>${esc(i.displayName)}</strong> ${i.isRequired ? '<span style="color:var(--err-color);">*</span>' : ''}<br>
-            <code>${esc(i.schemaName)}</code>
-            ${i.description ? `<div style="font-size:11px;color:var(--text-sec);margin-top:2px;">${esc(i.description)}</div>` : ''}
-          </td>
-          <td><code>${esc(i.typeLabel)}</code></td>
-          <td>${statusBadge}</td>
-          <td>${i.defaultValue ? `<div class="val-box">${esc(i.isSecret ? '•••••••• (Secret Ref)' : i.defaultValue)}</div>` : '<span style="color:var(--text-muted)">—</span>'}</td>
-          <td>${i.currentValue ? `<div class="val-box">${esc(i.isSecret ? '•••••••• (Secret Ref)' : i.currentValue)}</div>` : '<span style="color:var(--text-muted)">(uses default)</span>'}</td>
-          <td><button class="btn" data-edit="${esc(i.defId)}" ${i.isSecret ? 'disabled title="Secret store values are managed via Key Vault"' : ''}>✏️ Edit</button></td>
+          <td><strong>${DV.esc(i.displayName)}</strong> ${i.isRequired ? '<span style="color:var(--err-color);">*</span>' : ''}<br><code>${DV.esc(i.schemaName)}</code>${i.description ? `<div style="font-size:11px;color:var(--text-sec);margin-top:2px;">${DV.esc(i.description)}</div>` : ''}</td>
+          <td><code>${DV.esc(i.typeLabel)}</code></td><td>${badge}</td>
+          <td>${i.defaultValue ? box(i.defaultValue) : '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td>${i.currentValue ? box(i.currentValue) : '<span style="color:var(--text-muted)">(uses default)</span>'}</td>
+          <td><button class="dv-btn dv-btn-sm" data-edit="${DV.esc(i.defId)}" ${i.isSecret ? 'disabled title="Managed via Key Vault"' : ''}>✏️ Edit</button></td>
         </tr>`;
       }).join('');
-
-      tbody.querySelectorAll('[data-edit]').forEach(btn => {
-        btn.addEventListener('click', () => openEditModal(btn.dataset.edit));
-      });
-    }
-
-    function openEditModal(defId) {
-      editingItem = items.find(i => i.defId === defId);
-      if (!editingItem) return;
-      document.getElementById('edit-title').textContent = `Edit: ${editingItem.displayName}`;
-      document.getElementById('edit-schema').textContent = `${editingItem.schemaName} (${editingItem.typeLabel})`;
-      document.getElementById('edit-default-info').textContent = `Default Value: ${editingItem.defaultValue || '(none)'}`;
-      document.getElementById('edit-val-input').value = editingItem.currentValue;
-      document.getElementById('edit-modal').classList.add('open');
+      tbody.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => {
+        editingItem = items.find(i => i.defId === btn.dataset.edit); if (!editingItem) return;
+        document.getElementById('edit-title').textContent = `Edit: ${editingItem.displayName}`;
+        document.getElementById('edit-schema').textContent = `${editingItem.schemaName} (${editingItem.typeLabel})`;
+        document.getElementById('edit-default-info').textContent = `Default Value: ${editingItem.defaultValue || '(none)'}`;
+        document.getElementById('edit-val-input').value = editingItem.currentValue;
+        document.getElementById('edit-modal').classList.add('open');
+      }));
     }
 
     async function saveCurrentValue() {
       if (!editingItem) return;
       const newVal = document.getElementById('edit-val-input').value;
       if (editingItem.type === 100000003 && newVal.trim()) {
-        try { JSON.parse(newVal); } catch { notify('Value must be valid JSON for JSON-typed variable.', 'warning'); return; }
+        try { JSON.parse(newVal); } catch { DV.notify('Value must be valid JSON.', 'warning'); return; }
       }
-
       const btn = document.getElementById('edit-save');
       btn.disabled = true; btn.textContent = 'Saving…';
       try {
-        if (editingItem.valId) {
-          await dvReq(`/environmentvariablevalues(${editingItem.valId})`, {
-            method: 'PATCH',
-            body: JSON.stringify({ value: newVal })
-          });
-        } else {
-          await dvReq('/environmentvariablevalues', {
-            method: 'POST',
-            body: JSON.stringify({
-              schemaname: editingItem.schemaName + '_val',
-              value: newVal,
-              'EnvironmentVariableDefinitionId@odata.bind': `/environmentvariabledefinitions(${editingItem.defId})`
-            })
-          });
-        }
+        if (editingItem.valId) await DV.fetch(`/environmentvariablevalues(${editingItem.valId})`, { method: 'PATCH', body: JSON.stringify({ value: newVal }) });
+        else await DV.fetch('/environmentvariablevalues', { method: 'POST', body: JSON.stringify({ schemaname: editingItem.schemaName + '_val', value: newVal, 'EnvironmentVariableDefinitionId@odata.bind': `/environmentvariabledefinitions(${editingItem.defId})` }) });
         document.getElementById('edit-modal').classList.remove('open');
-        notify(`Updated ${editingItem.schemaName}`, 'success');
+        DV.notify(`Updated ${editingItem.schemaName}`, 'success');
         await loadEnvVars();
-      } catch (err) {
-        notify(err.message, 'error');
-      } finally {
-        btn.disabled = false; btn.textContent = 'Save Current Value';
-      }
+      } catch (err) { DV.notify(err.message, 'error'); }
+      finally { btn.disabled = false; btn.textContent = 'Save Current Value'; }
     }
 
-    ['f-search', 'f-type', 'f-status'].forEach(id => {
-      document.getElementById(id).addEventListener('input', renderTable);
-      document.getElementById(id).addEventListener('change', renderTable);
-    });
+    ['f-search', 'f-type', 'f-status'].forEach(id => { document.getElementById(id).addEventListener('input', renderTable); document.getElementById(id).addEventListener('change', renderTable); });
     document.getElementById('btn-refresh').addEventListener('click', loadEnvVars);
-    document.getElementById('edit-close').addEventListener('click', () => document.getElementById('edit-modal').classList.remove('open'));
-    document.getElementById('edit-cancel').addEventListener('click', () => document.getElementById('edit-modal').classList.remove('open'));
+    ['edit-close', 'edit-cancel'].forEach(id => document.getElementById(id).addEventListener('click', () => document.getElementById('edit-modal').classList.remove('open')));
     document.getElementById('edit-save').addEventListener('click', saveCurrentValue);
-
     document.getElementById('btn-export-json').addEventListener('click', () => {
-      const payload = getFiltered().map(i => ({
-        schemaName: i.schemaName,
-        displayName: i.displayName,
-        type: i.typeLabel,
-        defaultValue: i.isSecret ? '[SECRET]' : i.defaultValue,
-        currentValue: i.isSecret ? '[SECRET]' : i.currentValue
-      }));
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `env_vars_${new Date().toISOString().slice(0, 10)}.json`;
-      a.click(); URL.revokeObjectURL(url);
+      DV.exportJson(`env_vars_${new Date().toISOString().slice(0, 10)}.json`, getFiltered().map(i => ({ schemaName: i.schemaName, displayName: i.displayName, type: i.typeLabel, defaultValue: i.isSecret ? '[SECRET]' : i.defaultValue, currentValue: i.isSecret ? '[SECRET]' : i.currentValue })));
     });
-
     document.getElementById('btn-export-csv').addEventListener('click', () => {
-      const rows = getFiltered();
-      const csvSafe = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return `"${s.replace(/"/g, '""')}"`; };
-      const lines = ['SchemaName,DisplayName,Type,Required,DefaultValue,CurrentValue'];
-      for (const i of rows) {
-        lines.push([i.schemaName, i.displayName, i.typeLabel, i.isRequired, i.isSecret ? '[SECRET]' : i.defaultValue, i.isSecret ? '[SECRET]' : i.currentValue].map(csvSafe).join(','));
-      }
-      const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `env_vars_${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click(); URL.revokeObjectURL(url);
+      DV.exportCsv(`env_vars_${new Date().toISOString().slice(0, 10)}.csv`, ['SchemaName', 'DisplayName', 'Type', 'Required', 'DefaultValue', 'CurrentValue'],
+        getFiltered().map(i => [i.schemaName, i.displayName, i.typeLabel, i.isRequired, i.isSecret ? '[SECRET]' : i.defaultValue, i.isSecret ? '[SECRET]' : i.currentValue]));
     });
-
-    function esc(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
   </script>
 </body>
 </html>

@@ -1114,3 +1114,39 @@ A **single self-contained `.html` file** named `dvopentools_{id}.html`.
 </body>
 </html>
 ```
+
+---
+
+## 15. Host Shared UI/UX Kit & `window.DV` SDK (`v2025.11.1+`)
+
+To keep tools ultra-lightweight without duplicating CSS resets, dark-mode tokens, table/card styling, or Dataverse fetch/CSV boilerplate, `dvopentools_host.html` automatically injects:
+
+1. **`#dvopentools-shared-css`** into `<head>` (prepended so tool-specific CSS overrides cleanly).
+2. **`window.DV`** into the iframe before `CONTEXT_INIT`.
+
+### Opting In (`<body class="dv-app">`)
+
+Add `class="dv-app"` on `<body>` to activate the host's full design system:
+
+- **Layout:** `.dv-toolbar`, `.dv-strip`, `.dv-split` (`.dv-pane-left`, `.dv-pane-right`), `.dv-scroll`, `.dv-pad`, `.dv-spacer`, `.dv-footer`
+- **Controls:** `.dv-btn`, `.dv-btn-primary`, `.dv-btn-sm`, `.dv-seg-group` / `.dv-seg-btn.active`, `.dv-tabs` / `.dv-tab-btn.active`, `.dv-field`
+- **Data Display:** `.dv-card` (`.dv-card-hdr`, `.dv-card-body`), `.dv-table`, `.dv-badge` (`.dv-b-ok`, `.dv-b-warn`, `.dv-b-err`, `.dv-b-info`, `.dv-b-muted`), `.dv-kv-grid` / `.dv-kv-card`, `.dv-code`, `.dv-empty`, `.dv-err-banner`, `.dv-pill`
+- **Modals:** `.dv-overlay` / `.dv-modal`
+
+### `window.DV` Runtime API
+
+| Method / Property | Purpose |
+|---|---|
+| `DV.fetch(path, opts)` | Same-origin Web API v9.2 call (transparently enforced by Host Security Gateway Safe Mode / Zero Trust), updates `#tel-pill` / `#tel-msg`, and binds `#tel-pill` click to `DV.showHeaders()`. |
+| `DV.showHeaders()` | Opens the host's built-in HTTP Response Headers inspector modal for the current tab's last request. |
+| `DV.store(toolId)` | Tiered storage (`localStorage` → `sessionStorage` → memory) with `.get(k, d)`, `.set(k, v)`, `.del(k)`. |
+| `DV.openTool(toolId, data)` | Opens/focuses another tool and delivers `data` via `CONTEXT_INIT.launchData` and `TOOL_LAUNCH`. |
+| `DV.exportCsv(file, cols, rows)` | Exports UTF-8 BOM CSV with formula-injection protection. |
+| `DV.exportJson(file, data)` | Downloads formatted JSON. |
+| `DV.copyText(text, msg)` | Copies to clipboard and displays a host toast. |
+| `DV.notify(msg, level, ms)` | Shows a host toast notification. |
+| `DV.setTitle(title)` | Updates the active tab title. |
+| `DV.esc(str)` | HTML-escapes strings safely. |
+| `DV.ui.empty / error / badge` | Ready-to-render HTML fragments for empty states, error banners, and badges. |
+
+*(See `dvopentools_template.html` for the minimal `<body class="dv-app">` starter.)*

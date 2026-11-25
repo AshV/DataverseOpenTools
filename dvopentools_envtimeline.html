@@ -1075,7 +1075,10 @@
 
         <!-- Traces or Custom Message Section -->
         <div id="md-trace-sec" style="display:none;">
-          <div class="detail-label" style="margin-bottom:4px;">Execution Traces / Message Block:</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <div class="detail-label">Execution Traces / Message Block:</div>
+            <button class="btn" id="md-open-plugin-cascade" style="display:none;padding:2px 8px;font-size:11px;">🔗 Open Cascade in Plugin Trace Logs</button>
+          </div>
           <pre class="code-block" id="md-trace-text"></pre>
         </div>
 
@@ -1636,7 +1639,7 @@
           }).catch(e => console.warn('[EnvTimeline] Audits query:', e.message)),
 
         // 2. Plugin Trace Logs (performanceexecutionduration is the official Dataverse Web API property name)
-        dvFetchWithHeaders(`/plugintracelogs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=plugintracelogid,createdon,typename,messagename,primaryentity,mode,operationtype,performanceexecutionduration,messageblock,exceptiondetails&$orderby=createdon desc&$top=150`)
+        dvFetchWithHeaders(`/plugintracelogs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=plugintracelogid,createdon,typename,messagename,primaryentity,mode,operationtype,performanceexecutionduration,correlationid,messageblock,exceptiondetails&$orderby=createdon desc&$top=150`)
           .then(data => {
             (data.value || []).forEach(r => events.push(normalizePluginEvent(r)));
           }).catch(e => console.warn('[EnvTimeline] PluginTraces query:', e.message)),
@@ -2748,11 +2751,22 @@
 
       // Trace section
       const traceSec = document.getElementById('md-trace-sec');
-      if (ev.traces) {
+      const cascadeBtn = document.getElementById('md-open-plugin-cascade');
+      if (ev.traces || (ev.category === 'plugin' && ev.raw?.correlationid)) {
         traceSec.style.display = 'block';
-        document.getElementById('md-trace-text').textContent = ev.traces;
+        document.getElementById('md-trace-text').textContent = ev.traces || '(no trace text)';
+        if (ev.category === 'plugin' && ev.raw?.correlationid) {
+          cascadeBtn.style.display = 'inline-block';
+          cascadeBtn.onclick = () => {
+            toHost('OPEN_TOOL', { toolId: 'plugin-traces', data: { correlationId: ev.raw.correlationid } });
+            document.getElementById('detail-modal').classList.remove('open');
+          };
+        } else {
+          cascadeBtn.style.display = 'none';
+        }
       } else {
         traceSec.style.display = 'none';
+        cascadeBtn.style.display = 'none';
       }
 
       // Raw json

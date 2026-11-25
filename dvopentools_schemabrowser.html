@@ -9,151 +9,29 @@
   {
     "id":             "schema-browser",
     "name":           "Schema Browser",
-    "version":        "1.0.0",
+    "version":        "1.1.0",
     "description":    "Explore Dataverse EntityDefinitions, columns, OptionSet integer mappings, relationships, keys, and Global Option Sets.",
     "icon":           "📖",
     "category":       "Metadata",
     "author":         "Ashish Vishwakarma",
-    "minHostVersion": "2025.11.0"
+    "minHostVersion": "2025.11.1"
   }
   </script>
 
   <style>
-    :root {
-      --bg: #ffffff;
-      --bg-alt: #f8f9fa;
-      --bg-card: #ffffff;
-      --border: #e1dfdd;
-      --border-subtle: #edebe9;
-      --text: #201f1e;
-      --text-sec: #605e5c;
-      --text-muted: #8a8886;
-      --primary: #0078d4;
-      --primary-hover: #106ebe;
-      --primary-subtle: #eff6fc;
-      --status-success: #107c10;
-      --status-error: #d13438;
-      --badge-custom-bg: #e8f4fd;
-      --badge-custom-color: #0078d4;
-    }
-    body.dark {
-      --bg: #1e1e1e;
-      --bg-alt: #252526;
-      --bg-card: #2d2d2d;
-      --border: #3e3e42;
-      --border-subtle: #333337;
-      --text: #d4d4d4;
-      --text-sec: #a6a6a6;
-      --text-muted: #767676;
-      --primary: #2886de;
-      --primary-hover: #4797e2;
-      --primary-subtle: #19324d;
-      --status-success: #57b35e;
-      --status-error: #f1707b;
-      --badge-custom-bg: #14324f;
-      --badge-custom-color: #60b4ff;
-    }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; overflow: hidden; }
-    body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      font-size: 13px; background: var(--bg); color: var(--text);
-      display: flex; flex-direction: column;
-    }
-
-    .app-split { flex: 1; min-height: 0; display: flex; overflow: hidden; }
-    .left-pane {
-      width: 300px; flex-shrink: 0; border-right: 1px solid var(--border);
-      display: flex; flex-direction: column; background: var(--bg-alt); min-height: 0;
-    }
-    .left-hdr { padding: 10px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 7px; }
-    .left-list { flex: 1; overflow-y: auto; }
-    .entity-item {
-      padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); cursor: pointer;
-      display: flex; flex-direction: column; gap: 2px;
-    }
-    .entity-item:hover { background: var(--primary-subtle); }
-    .entity-item.active { background: var(--primary-subtle); border-left: 3px solid var(--primary); }
-    .entity-title { font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-    .entity-sub { font-size: 11px; color: var(--text-sec); font-family: monospace; }
-
-    .right-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
-    .detail-hdr {
-      padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg-alt);
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    }
-    .tab-strip {
-      display: flex; gap: 4px; padding: 6px 16px 0; border-bottom: 1px solid var(--border); background: var(--bg-alt);
-    }
-    .tab-btn {
-      padding: 7px 14px; border: 1px solid transparent; border-bottom: none; background: transparent;
-      color: var(--text-sec); cursor: pointer; font-size: 12px; font-weight: 600; border-radius: 4px 4px 0 0;
-    }
-    .tab-btn.active { background: var(--bg); color: var(--primary); border-color: var(--border); margin-bottom: -1px; padding-bottom: 8px; }
-
-    .content-bar {
-      padding: 8px 16px; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    }
-    .content-body { flex: 1; min-height: 0; overflow: auto; }
-
-    input[type="text"], select {
-      padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;
-      background: var(--bg); color: var(--text); font-size: 12px; font-family: inherit;
-    }
-    .btn {
-      padding: 5px 10px; border: 1px solid var(--border); border-radius: 4px;
-      background: var(--bg-card); color: var(--text); cursor: pointer; font-size: 12px; font-family: inherit;
-    }
-    .btn:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-subtle); }
-    .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
-    .badge {
-      padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 600;
-      background: var(--badge-custom-bg); color: var(--badge-custom-color);
-    }
-    .badge-std { background: var(--border-subtle); color: var(--text-sec); }
-
-    table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
-    th {
-      position: sticky; top: 0; background: var(--bg-alt); padding: 7px 12px;
-      border-bottom: 1px solid var(--border); color: var(--text-sec); font-weight: 600; z-index: 2;
-    }
-    td { padding: 7px 12px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; user-select: text; }
-    tr:hover td { background: var(--primary-subtle); }
-    code { font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 11px; }
-
-    .kv-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; padding: 16px;
-    }
-    .kv-card {
-      padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-alt);
-    }
-    .kv-label { font-size: 11px; color: var(--text-sec); margin-bottom: 4px; }
-    .kv-val { font-weight: 600; word-break: break-all; user-select: text; }
-
-    .opt-box {
-      margin-top: 6px; padding: 6px 8px; background: var(--bg-alt); border: 1px solid var(--border);
-      border-radius: 4px; font-size: 11px;
-    }
-    .opt-row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; border-bottom: 1px dashed var(--border-subtle); }
-    .opt-row:last-child { border-bottom: none; }
-
-    .footer {
-      padding: 5px 14px; border-top: 1px solid var(--border); background: var(--bg-alt);
-      display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--text-sec);
-    }
-    .pill { padding: 2px 8px; border-radius: 10px; color: #fff; font-weight: 600; background: var(--text-muted); }
-    .spacer { flex: 1; }
+    .sb-opt-box { margin-top: 6px; padding: 6px 8px; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 4px; font-size: 11px; }
+    .sb-opt-row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; border-bottom: 1px dashed var(--border-subtle); }
+    .sb-opt-row:last-child { border-bottom: none; }
   </style>
 </head>
-<body>
+<body class="dv-app">
 
-  <div class="app-split">
-    <!-- Left Table List -->
-    <aside class="left-pane">
-      <div class="left-hdr">
+  <div class="dv-split">
+    <aside class="dv-pane-left" style="width:300px;">
+      <div class="dv-toolbar" style="flex-direction:column;align-items:stretch;gap:7px;">
         <div style="display:flex;gap:6px;">
-          <input type="text" id="entity-search" placeholder="Search tables / OTC..." style="flex:1;">
-          <button class="btn" id="btn-refresh" title="Refresh Metadata">↻</button>
+          <input type="text" id="entity-search" placeholder="Search tables / OTC…" style="flex:1;">
+          <button class="dv-btn" id="btn-refresh" title="Refresh Metadata">↻</button>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
           <select id="entity-scope" style="flex:1;">
@@ -165,31 +43,30 @@
           <span id="entity-count" style="font-size:11px;color:var(--text-sec);">0</span>
         </div>
       </div>
-      <div class="left-list" id="entity-list">
-        <div style="padding:20px;color:var(--text-sec);text-align:center;">Waiting for context…</div>
+      <div class="dv-scroll" id="entity-list">
+        <div class="dv-empty">Waiting for context…</div>
       </div>
     </aside>
 
-    <!-- Right Details -->
-    <main class="right-pane">
-      <div class="detail-hdr">
+    <main class="dv-pane-right">
+      <div class="dv-toolbar">
         <div>
           <strong id="sel-title" style="font-size:15px;">Select a Table</strong>
           <div id="sel-subtitle" style="font-size:11px;color:var(--text-sec);font-family:monospace;">Choose an entity on the left or inspect Global Option Sets</div>
         </div>
-        <div class="spacer"></div>
-        <button class="btn btn-primary" id="btn-open-fetchxml" disabled>🔍 Query in FetchXML</button>
-        <button class="btn" id="btn-export-cols" disabled>📥 Export Schema CSV</button>
+        <div class="dv-spacer"></div>
+        <button class="dv-btn dv-btn-primary" id="btn-open-fetchxml" disabled>🔍 Query in FetchXML</button>
+        <button class="dv-btn" id="btn-export-cols" disabled>📥 Export Schema CSV</button>
       </div>
 
-      <div class="tab-strip">
-        <button class="tab-btn active" data-tab="columns">Columns &amp; OptionSets</button>
-        <button class="tab-btn" data-tab="overview">Overview &amp; Keys</button>
-        <button class="tab-btn" data-tab="relationships">Relationships</button>
-        <button class="tab-btn" data-tab="globals">Global Option Sets</button>
+      <div class="dv-tabs">
+        <button class="dv-tab-btn active" data-tab="columns">Columns &amp; OptionSets</button>
+        <button class="dv-tab-btn" data-tab="overview">Overview &amp; Keys</button>
+        <button class="dv-tab-btn" data-tab="relationships">Relationships</button>
+        <button class="dv-tab-btn" data-tab="globals">Global Option Sets</button>
       </div>
 
-      <div class="content-bar" id="sub-filter-bar">
+      <div class="dv-strip">
         <input type="text" id="detail-search" placeholder="Filter columns, relationships, or choices…" style="width:260px;">
         <select id="col-type-filter">
           <option value="ALL">All Column Types</option>
@@ -197,20 +74,20 @@
           <option value="PICKLIST">OptionSets / Status / Boolean</option>
           <option value="LOOKUP">Lookups</option>
         </select>
-        <div class="spacer"></div>
+        <div class="dv-spacer"></div>
         <span id="detail-stats" style="font-size:11px;color:var(--text-sec);">—</span>
       </div>
 
-      <div class="content-body" id="content-body">
-        <div style="padding:40px;text-align:center;color:var(--text-sec);">Select a Dataverse table from the directory to explore its schema.</div>
+      <div class="dv-scroll" id="content-body">
+        <div class="dv-empty">Select a Dataverse table from the directory to explore its schema.</div>
       </div>
     </main>
   </div>
 
-  <footer class="footer">
-    <span class="pill" id="tel-pill">Ready</span>
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
     <span id="tel-msg">Schema Browser initialized</span>
-    <div class="spacer"></div>
+    <div class="dv-spacer"></div>
     <span id="tel-store">Storage: —</span>
   </footer>
 
@@ -218,106 +95,41 @@
     'use strict';
 
     const HOST_ORIGIN = window.location.origin;
-    const TOOL_STORE = 'dvopentools::tool::schema-browser::';
-    let context = null;
-    let entities = [];
-    let selectedEntity = null;
-    let activeTab = 'columns';
-    let entityCache = new Map(); // logicalName -> { attributes, optionMaps, oneToMany, manyToOne, manyToMany, keys }
-    let globalOptionSets = null;
+    let store = null, entities = [], selectedEntity = null, activeTab = 'columns';
+    let entityCache = new Map(), globalOptionSets = null;
 
-    function toHost(type, payload = {}) {
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
-      }
-    }
-    function notify(message, level = 'info', duration = 3500) { toHost('NOTIFY', { message, level, duration }); }
-    function setTitle(title) { toHost('SET_TITLE', { title }); }
-    function openTool(toolId) { toHost('OPEN_TOOL', { toolId }); }
-
-    const _store = (() => {
-      function canUse(s) { try { const k = '__dvot__'; s.setItem(k, '1'); s.removeItem(k); return true; } catch { return false; } }
-      const _ls = typeof localStorage !== 'undefined' && canUse(localStorage) ? localStorage : null;
-      const _ss = typeof sessionStorage !== 'undefined' && canUse(sessionStorage) ? sessionStorage : null;
-      const _mem = Object.create(null);
-      const _b = _ls || _ss;
-      return {
-        type: _ls ? 'localStorage' : _ss ? 'sessionStorage' : 'memory',
-        get(k) { if (_b) try { return JSON.parse(_b.getItem(k)); } catch {} return _mem[k] ?? null; },
-        set(k, v) { if (_b) try { _b.setItem(k, JSON.stringify(v)); return; } catch {} _mem[k] = v; },
-      };
-    })();
-    function toolStore(k, v) { return v === undefined ? _store.get(TOOL_STORE + k) : _store.set(TOOL_STORE + k, v); }
-
-    toHost('TOOL_READY');
-    const _standaloneTimer = setTimeout(() => {
-      if (!context) {
-        context = { environmentUrl: location.origin, apiVersion: '9.2', theme: 'light' };
-        onContextReady();
-      }
-    }, 1500);
-
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
     window.addEventListener('message', e => {
-      if (e.origin !== HOST_ORIGIN) return;
-      const { source, type, payload } = e.data || {};
-      if (source !== 'dvopentools-host') return;
-      if (type === 'CONTEXT_INIT') { clearTimeout(_standaloneTimer); context = payload; onContextReady(); }
-      if (type === 'THEME_CHANGE') { document.body.classList.toggle('dark', payload.theme === 'dark'); }
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') onContextReady();
     });
 
-    async function dvGet(path) {
-      const url = `${context.environmentUrl}/api/data/v${context.apiVersion}${path}`;
-      const t0 = performance.now();
-      const res = await fetch(url, {
-        headers: { 'OData-MaxVersion': '4.0', 'OData-Version': '4.0', 'Accept': 'application/json' }
-      });
-      const ms = Math.round(performance.now() - t0);
-      const pill = document.getElementById('tel-pill');
-      pill.textContent = `${res.status} (${ms}ms)`;
-      pill.style.background = res.ok ? 'var(--status-success)' : 'var(--status-error)';
-      document.getElementById('tel-msg').textContent = path.split('?')[0];
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
-      return json;
-    }
-
     async function onContextReady() {
-      document.body.classList.toggle('dark', context.theme === 'dark');
-      document.getElementById('tel-store').textContent = `Storage: ${_store.type}`;
+      store = DV.store('schema-browser');
+      document.getElementById('tel-store').textContent = `Storage: ${store.type}`;
       await loadEntities();
     }
 
     async function loadEntities(force = false) {
-      document.getElementById('entity-list').innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-sec);">Loading EntityDefinitions…</div>';
-      const cached = !force ? toolStore('entities') : null;
+      document.getElementById('entity-list').innerHTML = DV.ui.empty('Loading EntityDefinitions…');
+      const cached = !force ? store.get('entities') : null;
       if (cached && Date.now() - cached.ts < 10 * 60000) {
-        entities = cached.items;
-        renderEntityList();
-        return;
+        entities = cached.items; renderEntityList(); return;
       }
       try {
-        const data = await dvGet('/EntityDefinitions?$select=LogicalName,SchemaName,EntitySetName,DisplayName,PrimaryIdAttribute,PrimaryNameAttribute,ObjectTypeCode,IsCustomEntity,IsActivity,OwnershipType,IsAuditEnabled,ChangeTrackingEnabled');
-        entities = (data.value || [])
-          .map(e => ({
-            logicalName: e.LogicalName,
-            schemaName: e.SchemaName,
-            entitySetName: e.EntitySetName || '',
-            displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
-            primaryId: e.PrimaryIdAttribute || '',
-            primaryName: e.PrimaryNameAttribute || '',
-            otc: e.ObjectTypeCode,
-            isCustom: !!e.IsCustomEntity,
-            isActivity: !!e.IsActivity,
-            ownership: e.OwnershipType || '—',
-            isAudited: !!e.IsAuditEnabled?.Value,
-            changeTracking: !!e.ChangeTrackingEnabled
-          }))
-          .sort((a, b) => a.displayName.localeCompare(b.displayName));
-        toolStore('entities', { ts: Date.now(), items: entities });
+        const data = await DV.fetch('/EntityDefinitions?$select=LogicalName,SchemaName,EntitySetName,DisplayName,PrimaryIdAttribute,PrimaryNameAttribute,ObjectTypeCode,IsCustomEntity,IsActivity,OwnershipType,IsAuditEnabled,ChangeTrackingEnabled');
+        entities = (data.value || []).map(e => ({
+          logicalName: e.LogicalName, schemaName: e.SchemaName, entitySetName: e.EntitySetName || '',
+          displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+          primaryId: e.PrimaryIdAttribute || '', primaryName: e.PrimaryNameAttribute || '',
+          otc: e.ObjectTypeCode, isCustom: !!e.IsCustomEntity, ownership: e.OwnershipType || '—',
+          isAudited: !!e.IsAuditEnabled?.Value, changeTracking: !!e.ChangeTrackingEnabled
+        })).sort((a, b) => a.displayName.localeCompare(b.displayName));
+        store.set('entities', { ts: Date.now(), items: entities });
         renderEntityList();
       } catch (err) {
-        document.getElementById('entity-list').innerHTML = `<div style="padding:16px;color:var(--status-error);">${esc(err.message)}</div>`;
-        notify(err.message, 'error');
+        document.getElementById('entity-list').innerHTML = DV.ui.error(err.message);
+        DV.notify(err.message, 'error');
       }
     }
 
@@ -328,30 +140,23 @@
         if (scope === 'CUSTOM' && !e.isCustom) return false;
         if (scope === 'STANDARD' && e.isCustom) return false;
         if (scope === 'AUDITED' && !e.isAudited) return false;
-        if (!q) return true;
-        return e.displayName.toLowerCase().includes(q) || e.logicalName.toLowerCase().includes(q) || String(e.otc).includes(q);
+        return !q || e.displayName.toLowerCase().includes(q) || e.logicalName.toLowerCase().includes(q) || String(e.otc).includes(q);
       });
 
       document.getElementById('entity-count').textContent = `${list.length}`;
-      const container = document.getElementById('entity-list');
-      if (!list.length) {
-        container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-sec);">No matching tables.</div>';
-        return;
-      }
+      const el = document.getElementById('entity-list');
+      if (!list.length) { el.innerHTML = DV.ui.empty('No matching tables.'); return; }
 
-      container.innerHTML = list.map(e => `
-        <div class="entity-item${selectedEntity?.logicalName === e.logicalName ? ' active' : ''}" data-ln="${esc(e.logicalName)}">
-          <div class="entity-title">
-            <span>${esc(e.displayName)}</span>
-            <span class="badge${e.isCustom ? '' : ' badge-std'}">${e.isCustom ? 'Custom' : 'Std'} · ${e.otc}</span>
+      el.innerHTML = list.map(e => `
+        <div class="dv-list-item${selectedEntity?.logicalName === e.logicalName ? ' active' : ''}" data-ln="${DV.esc(e.logicalName)}">
+          <div style="font-weight:600;display:flex;justify-content:space-between;gap:6px;">
+            <span>${DV.esc(e.displayName)}</span>
+            ${DV.ui.badge(`${e.isCustom ? 'Custom' : 'Std'} · ${e.otc}`, e.isCustom ? 'info' : 'muted')}
           </div>
-          <div class="entity-sub">${esc(e.logicalName)}</div>
+          <div style="font-size:11px;color:var(--text-sec);font-family:monospace;">${DV.esc(e.logicalName)}</div>
         </div>
       `).join('');
-
-      container.querySelectorAll('.entity-item').forEach(el => {
-        el.addEventListener('click', () => selectEntity(el.dataset.ln));
-      });
+      el.querySelectorAll('.dv-list-item').forEach(node => node.addEventListener('click', () => selectEntity(node.dataset.ln)));
     }
 
     async function selectEntity(logicalName) {
@@ -360,14 +165,13 @@
       renderEntityList();
 
       document.getElementById('sel-title').textContent = selectedEntity.displayName;
-      document.getElementById('sel-subtitle').textContent =
-        `${selectedEntity.logicalName} | Set: ${selectedEntity.entitySetName || '—'} | OTC: ${selectedEntity.otc}`;
+      document.getElementById('sel-subtitle').textContent = `${selectedEntity.logicalName} | Set: ${selectedEntity.entitySetName || '—'} | OTC: ${selectedEntity.otc}`;
       document.getElementById('btn-open-fetchxml').disabled = false;
       document.getElementById('btn-export-cols').disabled = false;
-      setTitle(`Schema — ${selectedEntity.logicalName}`);
+      DV.setTitle(`Schema — ${selectedEntity.logicalName}`);
 
       if (!entityCache.has(logicalName)) {
-        document.getElementById('content-body').innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-sec);">Loading schema metadata…</div>';
+        document.getElementById('content-body').innerHTML = DV.ui.empty('Loading schema metadata…');
         await loadEntityDetails(logicalName);
       }
       renderActiveTab();
@@ -376,63 +180,42 @@
     async function loadEntityDetails(logicalName) {
       const detail = { attributes: [], optionMaps: new Map(), oneToMany: [], manyToOne: [], manyToMany: [], keys: [] };
       const enc = encodeURIComponent(logicalName);
-
-      const results = await Promise.allSettled([
-        dvGet(`/EntityDefinitions(LogicalName='${enc}')/Attributes?$select=LogicalName,SchemaName,DisplayName,AttributeType,IsCustomAttribute,RequiredLevel,IsValidForRead,Description`),
-        dvGet(`/EntityDefinitions(LogicalName='${enc}')/Attributes/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$select=LogicalName&$expand=OptionSet`),
-        dvGet(`/EntityDefinitions(LogicalName='${enc}')/Attributes/Microsoft.Dynamics.CRM.StateAttributeMetadata?$select=LogicalName&$expand=OptionSet`),
-        dvGet(`/EntityDefinitions(LogicalName='${enc}')/Attributes/Microsoft.Dynamics.CRM.StatusAttributeMetadata?$select=LogicalName&$expand=OptionSet`),
-        dvGet(`/EntityDefinitions(LogicalName='${enc}')/Attributes/Microsoft.Dynamics.CRM.BooleanAttributeMetadata?$select=LogicalName&$expand=OptionSet`),
-        dvGet(`/EntityDefinitions(LogicalName='${enc}')/Attributes/Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata?$select=LogicalName&$expand=OptionSet`),
-        dvGet(`/EntityDefinitions(LogicalName='${enc}')/OneToManyRelationships?$select=SchemaName,ReferencedEntity,ReferencingEntity,ReferencingAttribute`),
-        dvGet(`/EntityDefinitions(LogicalName='${enc}')/ManyToOneRelationships?$select=SchemaName,ReferencedEntity,ReferencingEntity,ReferencingAttribute`),
-        dvGet(`/EntityDefinitions(LogicalName='${enc}')/ManyToManyRelationships?$select=SchemaName,Entity1LogicalName,Entity2LogicalName,IntersectEntityName`),
-        dvGet(`/EntityDefinitions(LogicalName='${enc}')/Keys?$select=LogicalName,DisplayName,KeyAttributes`)
+      const res = await Promise.allSettled([
+        DV.fetch(`/EntityDefinitions(LogicalName='${enc}')/Attributes?$select=LogicalName,SchemaName,DisplayName,AttributeType,IsCustomAttribute,RequiredLevel,Description`),
+        DV.fetch(`/EntityDefinitions(LogicalName='${enc}')/Attributes/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$select=LogicalName&$expand=OptionSet`),
+        DV.fetch(`/EntityDefinitions(LogicalName='${enc}')/Attributes/Microsoft.Dynamics.CRM.StateAttributeMetadata?$select=LogicalName&$expand=OptionSet`),
+        DV.fetch(`/EntityDefinitions(LogicalName='${enc}')/Attributes/Microsoft.Dynamics.CRM.StatusAttributeMetadata?$select=LogicalName&$expand=OptionSet`),
+        DV.fetch(`/EntityDefinitions(LogicalName='${enc}')/Attributes/Microsoft.Dynamics.CRM.BooleanAttributeMetadata?$select=LogicalName&$expand=OptionSet`),
+        DV.fetch(`/EntityDefinitions(LogicalName='${enc}')/Attributes/Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata?$select=LogicalName&$expand=OptionSet`),
+        DV.fetch(`/EntityDefinitions(LogicalName='${enc}')/OneToManyRelationships?$select=SchemaName,ReferencedEntity,ReferencingEntity,ReferencingAttribute`),
+        DV.fetch(`/EntityDefinitions(LogicalName='${enc}')/ManyToOneRelationships?$select=SchemaName,ReferencedEntity,ReferencingEntity,ReferencingAttribute`),
+        DV.fetch(`/EntityDefinitions(LogicalName='${enc}')/ManyToManyRelationships?$select=SchemaName,Entity1LogicalName,Entity2LogicalName,IntersectEntityName`),
+        DV.fetch(`/EntityDefinitions(LogicalName='${enc}')/Keys?$select=LogicalName,DisplayName,KeyAttributes`)
       ]);
 
-      if (results[0].status === 'fulfilled') {
-        detail.attributes = (results[0].value.value || []).sort((a, b) => a.LogicalName.localeCompare(b.LogicalName));
-      }
-      // OptionSets
-      [1, 2, 3, 5].forEach(idx => {
-        if (results[idx].status === 'fulfilled') {
-          for (const attr of (results[idx].value.value || [])) {
-            const opts = (attr.OptionSet?.Options || []).map(o => ({
-              value: o.Value,
-              label: o.Label?.UserLocalizedLabel?.Label || String(o.Value)
-            }));
+      if (res[0].status === 'fulfilled') detail.attributes = (res[0].value.value || []).sort((a, b) => a.LogicalName.localeCompare(b.LogicalName));
+      [1, 2, 3, 5].forEach(i => {
+        if (res[i].status === 'fulfilled') {
+          for (const attr of (res[i].value.value || [])) {
+            const opts = (attr.OptionSet?.Options || []).map(o => ({ value: o.Value, label: o.Label?.UserLocalizedLabel?.Label || String(o.Value) }));
             if (opts.length) detail.optionMaps.set(attr.LogicalName, opts);
           }
         }
       });
-      if (results[4].status === 'fulfilled') {
-        for (const attr of (results[4].value.value || [])) {
+      if (res[4].status === 'fulfilled') {
+        for (const attr of (res[4].value.value || [])) {
           const os = attr.OptionSet;
-          if (os) {
-            detail.optionMaps.set(attr.LogicalName, [
-              { value: os.FalseOption?.Value ?? 0, label: os.FalseOption?.Label?.UserLocalizedLabel?.Label || 'No' },
-              { value: os.TrueOption?.Value ?? 1, label: os.TrueOption?.Label?.UserLocalizedLabel?.Label || 'Yes' }
-            ]);
-          }
+          if (os) detail.optionMaps.set(attr.LogicalName, [
+            { value: os.FalseOption?.Value ?? 0, label: os.FalseOption?.Label?.UserLocalizedLabel?.Label || 'No' },
+            { value: os.TrueOption?.Value ?? 1, label: os.TrueOption?.Label?.UserLocalizedLabel?.Label || 'Yes' }
+          ]);
         }
       }
-      if (results[6].status === 'fulfilled') detail.oneToMany = results[6].value.value || [];
-      if (results[7].status === 'fulfilled') detail.manyToOne = results[7].value.value || [];
-      if (results[8].status === 'fulfilled') detail.manyToMany = results[8].value.value || [];
-      if (results[9].status === 'fulfilled') detail.keys = results[9].value.value || [];
-
+      if (res[6].status === 'fulfilled') detail.oneToMany = res[6].value.value || [];
+      if (res[7].status === 'fulfilled') detail.manyToOne = res[7].value.value || [];
+      if (res[8].status === 'fulfilled') detail.manyToMany = res[8].value.value || [];
+      if (res[9].status === 'fulfilled') detail.keys = res[9].value.value || [];
       entityCache.set(logicalName, detail);
-    }
-
-    async function loadGlobalOptionSets() {
-      if (globalOptionSets) return;
-      document.getElementById('content-body').innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-sec);">Loading GlobalOptionSetDefinitions…</div>';
-      try {
-        const data = await dvGet('/GlobalOptionSetDefinitions');
-        globalOptionSets = (data.value || []).sort((a, b) => (a.Name || '').localeCompare(b.Name || ''));
-      } catch (err) {
-        document.getElementById('content-body').innerHTML = `<div style="padding:20px;color:var(--status-error);">${esc(err.message)}</div>`;
-      }
     }
 
     async function renderActiveTab() {
@@ -442,154 +225,113 @@
       document.getElementById('col-type-filter').style.display = activeTab === 'columns' ? 'inline-block' : 'none';
 
       if (activeTab === 'globals') {
-        await loadGlobalOptionSets();
-        if (!globalOptionSets) return;
-        const filtered = globalOptionSets.filter(g => {
-          if (!q) return true;
-          const lbl = g.DisplayName?.UserLocalizedLabel?.Label || '';
-          const optsStr = (g.Options || []).map(o => `${o.Value} ${o.Label?.UserLocalizedLabel?.Label || ''}`).join(' ');
-          return (g.Name || '').toLowerCase().includes(q) || lbl.toLowerCase().includes(q) || optsStr.toLowerCase().includes(q);
-        });
+        if (!globalOptionSets) {
+          body.innerHTML = DV.ui.empty('Loading GlobalOptionSetDefinitions…');
+          try { globalOptionSets = ((await DV.fetch('/GlobalOptionSetDefinitions')).value || []).sort((a, b) => (a.Name || '').localeCompare(b.Name || '')); }
+          catch (err) { body.innerHTML = DV.ui.error(err.message); return; }
+        }
+        const filtered = globalOptionSets.filter(g => !q || `${g.Name} ${g.DisplayName?.UserLocalizedLabel?.Label || ''} ${(g.Options || []).map(o => `${o.Value} ${o.Label?.UserLocalizedLabel?.Label || ''}`).join(' ')}`.toLowerCase().includes(q));
         document.getElementById('detail-stats').textContent = `${filtered.length} global choice sets`;
-        body.innerHTML = `<table><thead><tr><th>Name</th><th>Display Name</th><th>Type</th><th>Options (Value → Label)</th></tr></thead><tbody>
+        body.innerHTML = `<table class="dv-table"><thead><tr><th>Name</th><th>Display Name</th><th>Type</th><th>Options (Value → Label)</th></tr></thead><tbody>
           ${filtered.slice(0, 200).map(g => {
-            const opts = (g.Options || []).map(o => `<div class="opt-row"><code>${o.Value}</code><span>${esc(o.Label?.UserLocalizedLabel?.Label || '')}</span></div>`).join('');
-            return `<tr>
-              <td><code>${esc(g.Name)}</code></td>
-              <td>${esc(g.DisplayName?.UserLocalizedLabel?.Label || '—')}</td>
-              <td>${esc(g.OptionSetType || 'Picklist')}</td>
-              <td>${opts ? `<div class="opt-box">${opts}</div>` : '—'}</td>
-            </tr>`;
-          }).join('')}
-        </tbody></table>`;
+            const opts = (g.Options || []).map(o => `<div class="sb-opt-row"><code>${o.Value}</code><span>${DV.esc(o.Label?.UserLocalizedLabel?.Label || '')}</span></div>`).join('');
+            return `<tr><td><code>${DV.esc(g.Name)}</code></td><td>${DV.esc(g.DisplayName?.UserLocalizedLabel?.Label || '—')}</td><td>${DV.esc(g.OptionSetType || 'Picklist')}</td><td>${opts ? `<div class="sb-opt-box">${opts}</div>` : '—'}</td></tr>`;
+          }).join('')}</tbody></table>`;
         return;
       }
 
-      if (!selectedEntity) {
-        body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-sec);">Select a table on the left to inspect its metadata.</div>';
-        return;
-      }
-
+      if (!selectedEntity) { body.innerHTML = DV.ui.empty('Select a table on the left to inspect its metadata.'); return; }
       const detail = entityCache.get(selectedEntity.logicalName);
       if (!detail) return;
 
       if (activeTab === 'overview') {
-        document.getElementById('detail-stats').textContent = `${detail.keys.length} alternate keys`;
         const e = selectedEntity;
-        body.innerHTML = `
-          <div class="kv-grid">
-            <div class="kv-card"><div class="kv-label">Logical Name</div><div class="kv-val"><code>${esc(e.logicalName)}</code></div></div>
-            <div class="kv-card"><div class="kv-label">Schema Name</div><div class="kv-val"><code>${esc(e.schemaName)}</code></div></div>
-            <div class="kv-card"><div class="kv-label">OData EntitySetName</div><div class="kv-val"><code>${esc(e.entitySetName || '—')}</code></div></div>
-            <div class="kv-card"><div class="kv-label">Object Type Code (OTC)</div><div class="kv-val">${e.otc}</div></div>
-            <div class="kv-card"><div class="kv-label">Primary ID Column</div><div class="kv-val"><code>${esc(e.primaryId || '—')}</code></div></div>
-            <div class="kv-card"><div class="kv-label">Primary Name Column</div><div class="kv-val"><code>${esc(e.primaryName || '—')}</code></div></div>
-            <div class="kv-card"><div class="kv-label">Ownership Type</div><div class="kv-val">${esc(e.ownership)}</div></div>
-            <div class="kv-card"><div class="kv-label">Auditing / Change Tracking</div><div class="kv-val">${e.isAudited ? '✅ Audited' : '❌ Off'} / ${e.changeTracking ? '✅ Sync On' : 'Off'}</div></div>
+        document.getElementById('detail-stats').textContent = `${detail.keys.length} alternate keys`;
+        body.innerHTML = `<div class="dv-pad">
+          <div class="dv-kv-grid">
+            <div class="dv-kv-card"><div class="dv-kv-label">Logical Name</div><div class="dv-kv-val"><code>${DV.esc(e.logicalName)}</code></div></div>
+            <div class="dv-kv-card"><div class="dv-kv-label">Schema Name</div><div class="dv-kv-val"><code>${DV.esc(e.schemaName)}</code></div></div>
+            <div class="dv-kv-card"><div class="dv-kv-label">OData EntitySetName</div><div class="dv-kv-val"><code>${DV.esc(e.entitySetName || '—')}</code></div></div>
+            <div class="dv-kv-card"><div class="dv-kv-label">Object Type Code (OTC)</div><div class="dv-kv-val">${e.otc}</div></div>
+            <div class="dv-kv-card"><div class="dv-kv-label">Primary ID</div><div class="dv-kv-val"><code>${DV.esc(e.primaryId || '—')}</code></div></div>
+            <div class="dv-kv-card"><div class="dv-kv-label">Primary Name</div><div class="dv-kv-val"><code>${DV.esc(e.primaryName || '—')}</code></div></div>
+            <div class="dv-kv-card"><div class="dv-kv-label">Ownership</div><div class="dv-kv-val">${DV.esc(e.ownership)}</div></div>
+            <div class="dv-kv-card"><div class="dv-kv-label">Auditing / Sync</div><div class="dv-kv-val">${e.isAudited ? '✅ Audited' : '❌ Off'} / ${e.changeTracking ? '✅ On' : 'Off'}</div></div>
           </div>
-          <div style="padding:0 16px 16px;">
-            <h3 style="font-size:13px;margin-bottom:8px;">Alternate Keys (${detail.keys.length})</h3>
-            ${detail.keys.length ? `<table><thead><tr><th>Logical Name</th><th>Display Name</th><th>Key Columns</th></tr></thead><tbody>
-              ${detail.keys.map(k => `<tr><td><code>${esc(k.LogicalName)}</code></td><td>${esc(k.DisplayName?.UserLocalizedLabel?.Label || '—')}</td><td><code>${esc((k.KeyAttributes || []).join(', '))}</code></td></tr>`).join('')}
-            </tbody></table>` : '<p style="color:var(--text-sec);">No alternate keys defined.</p>'}
-          </div>
-        `;
+          <div class="dv-card"><div class="dv-card-hdr">Alternate Keys (${detail.keys.length})</div><div class="dv-card-body" style="padding:0;">
+            ${detail.keys.length ? `<table class="dv-table"><thead><tr><th>Logical Name</th><th>Display Name</th><th>Key Columns</th></tr></thead><tbody>
+              ${detail.keys.map(k => `<tr><td><code>${DV.esc(k.LogicalName)}</code></td><td>${DV.esc(k.DisplayName?.UserLocalizedLabel?.Label || '—')}</td><td><code>${DV.esc((k.KeyAttributes || []).join(', '))}</code></td></tr>`).join('')}
+            </tbody></table>` : '<div style="padding:12px;color:var(--text-sec);">No alternate keys defined.</div>'}
+          </div></div></div>`;
         return;
       }
 
       if (activeTab === 'relationships') {
-        const allRels = [
-          ...detail.oneToMany.map(r => ({ kind: '1:N', schema: r.SchemaName, ref: r.ReferencedEntity, target: `${r.ReferencingEntity}.${r.ReferencingAttribute}` })),
-          ...detail.manyToOne.map(r => ({ kind: 'N:1', schema: r.SchemaName, ref: r.ReferencingEntity, target: `${r.ReferencedEntity} (via ${r.ReferencingAttribute})` })),
-          ...detail.manyToMany.map(r => ({ kind: 'N:N', schema: r.SchemaName, ref: r.Entity1LogicalName, target: `${r.Entity2LogicalName} (intersect: ${r.IntersectEntityName})` }))
+        const rels = [
+          ...detail.oneToMany.map(r => ({ kind: '1:N', schema: r.SchemaName, target: `${r.ReferencingEntity}.${r.ReferencingAttribute}` })),
+          ...detail.manyToOne.map(r => ({ kind: 'N:1', schema: r.SchemaName, target: `${r.ReferencedEntity} (via ${r.ReferencingAttribute})` })),
+          ...detail.manyToMany.map(r => ({ kind: 'N:N', schema: r.SchemaName, target: `${r.Entity2LogicalName} (${r.IntersectEntityName})` }))
         ].filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-        document.getElementById('detail-stats').textContent = `${allRels.length} relationships`;
-        body.innerHTML = `<table><thead><tr><th>Kind</th><th>Relationship SchemaName</th><th>Target / Link</th></tr></thead><tbody>
-          ${allRels.map(r => `<tr><td><span class="badge">${r.kind}</span></td><td><code>${esc(r.schema)}</code></td><td><code>${esc(r.target)}</code></td></tr>`).join('')}
+        document.getElementById('detail-stats').textContent = `${rels.length} relationships`;
+        body.innerHTML = `<table class="dv-table"><thead><tr><th>Kind</th><th>SchemaName</th><th>Target / Intersect</th></tr></thead><tbody>
+          ${rels.map(r => `<tr><td>${DV.ui.badge(r.kind, 'info')}</td><td><code>${DV.esc(r.schema)}</code></td><td><code>${DV.esc(r.target)}</code></td></tr>`).join('')}
         </tbody></table>`;
         return;
       }
 
-      // Columns tab
       const filteredCols = detail.attributes.filter(a => {
         const t = a.AttributeType || '';
         if (colFilter === 'CUSTOM' && !a.IsCustomAttribute) return false;
         if (colFilter === 'PICKLIST' && !['Picklist', 'State', 'Status', 'Boolean', 'Virtual'].includes(t) && !detail.optionMaps.has(a.LogicalName)) return false;
         if (colFilter === 'LOOKUP' && !['Lookup', 'Customer', 'Owner'].includes(t)) return false;
         if (!q) return true;
-        const lbl = a.DisplayName?.UserLocalizedLabel?.Label || '';
         const opts = (detail.optionMaps.get(a.LogicalName) || []).map(o => `${o.value} ${o.label}`).join(' ');
-        return a.LogicalName.toLowerCase().includes(q) || (a.SchemaName || '').toLowerCase().includes(q) || lbl.toLowerCase().includes(q) || opts.toLowerCase().includes(q);
+        return `${a.LogicalName} ${a.SchemaName || ''} ${a.DisplayName?.UserLocalizedLabel?.Label || ''} ${opts}`.toLowerCase().includes(q);
       });
       document.getElementById('detail-stats').textContent = `${filteredCols.length} / ${detail.attributes.length} columns`;
 
-      body.innerHTML = `<table><thead><tr><th>Display Name</th><th>Logical / Schema Name</th><th>Type</th><th>Required</th><th>Choices / Description</th></tr></thead><tbody>
+      body.innerHTML = `<table class="dv-table"><thead><tr><th>Display Name</th><th>Logical / Schema Name</th><th>Type</th><th>Required</th><th>Choices / Description</th></tr></thead><tbody>
         ${filteredCols.map(a => {
-          const disp = a.DisplayName?.UserLocalizedLabel?.Label || '—';
-          const req = a.RequiredLevel?.Value || 'None';
           const opts = detail.optionMaps.get(a.LogicalName);
           const desc = a.Description?.UserLocalizedLabel?.Label || '';
-          const optHtml = opts ? `<div class="opt-box">${opts.map(o => `<div class="opt-row"><code>${o.value}</code><span>${esc(o.label)}</span></div>`).join('')}</div>` : '';
+          const optHtml = opts ? `<div class="sb-opt-box">${opts.map(o => `<div class="sb-opt-row"><code>${o.value}</code><span>${DV.esc(o.label)}</span></div>`).join('')}</div>` : '';
           return `<tr>
-            <td><strong>${esc(disp)}</strong> ${a.IsCustomAttribute ? '<span class="badge">Custom</span>' : ''}</td>
-            <td><code>${esc(a.LogicalName)}</code><br><span style="font-size:10px;color:var(--text-muted);font-family:monospace;">${esc(a.SchemaName)}</span></td>
-            <td><code>${esc(a.AttributeType)}</code></td>
-            <td>${esc(req)}</td>
-            <td>${desc ? `<div style="font-size:11px;color:var(--text-sec);margin-bottom:4px;">${esc(desc)}</div>` : ''}${optHtml || (desc ? '' : '—')}</td>
+            <td><strong>${DV.esc(a.DisplayName?.UserLocalizedLabel?.Label || '—')}</strong> ${a.IsCustomAttribute ? DV.ui.badge('Custom', 'info') : ''}</td>
+            <td><code>${DV.esc(a.LogicalName)}</code><br><span style="font-size:10px;color:var(--text-muted);font-family:monospace;">${DV.esc(a.SchemaName)}</span></td>
+            <td><code>${DV.esc(a.AttributeType)}</code></td>
+            <td>${DV.esc(a.RequiredLevel?.Value || 'None')}</td>
+            <td>${desc ? `<div style="font-size:11px;color:var(--text-sec);margin-bottom:4px;">${DV.esc(desc)}</div>` : ''}${optHtml || (desc ? '' : '—')}</td>
           </tr>`;
-        }).join('')}
-      </tbody></table>`;
+        }).join('')}</tbody></table>`;
     }
 
-    /* ─── Events ─────────────────────────────────────────────── */
     document.getElementById('entity-search').addEventListener('input', renderEntityList);
     document.getElementById('entity-scope').addEventListener('change', renderEntityList);
     document.getElementById('btn-refresh').addEventListener('click', () => { entityCache.clear(); globalOptionSets = null; loadEntities(true); });
     document.getElementById('detail-search').addEventListener('input', renderActiveTab);
     document.getElementById('col-type-filter').addEventListener('change', renderActiveTab);
 
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        activeTab = btn.dataset.tab;
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-        renderActiveTab();
-      });
-    });
+    document.querySelectorAll('.dv-tab-btn').forEach(btn => btn.addEventListener('click', () => {
+      activeTab = btn.dataset.tab;
+      document.querySelectorAll('.dv-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+      renderActiveTab();
+    }));
 
     document.getElementById('btn-open-fetchxml').addEventListener('click', () => {
       if (!selectedEntity) return;
-      const pk = selectedEntity.primaryId;
-      const pn = selectedEntity.primaryName;
-      const attrs = [pk, pn].filter(Boolean).map(a => `    <attribute name="${a}" />`).join('\n');
-      const xml = `<fetch top="25">\n  <entity name="${selectedEntity.logicalName}">\n${attrs}\n  </entity>\n</fetch>`;
-      try { localStorage.setItem('dvopentools::tool::fetchxml-playground::prefillFetchXml', JSON.stringify(xml)); } catch {}
-      openTool('fetchxml-playground');
-      notify(`Opening FetchXML Playground for ${selectedEntity.logicalName}`, 'info');
+      const attrs = [selectedEntity.primaryId, selectedEntity.primaryName].filter(Boolean).map(a => `    <attribute name="${a}" />`).join('\n');
+      DV.openTool('fetchxml-playground', { fetchXml: `<fetch top="25">\n  <entity name="${selectedEntity.logicalName}">\n${attrs}\n  </entity>\n</fetch>` });
     });
 
     document.getElementById('btn-export-cols').addEventListener('click', () => {
       if (!selectedEntity) return;
-      const detail = entityCache.get(selectedEntity.logicalName);
-      if (!detail) return;
-      const csvSafe = v => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return `"${s.replace(/"/g, '""')}"`; };
-      const lines = ['LogicalName,SchemaName,DisplayName,AttributeType,IsCustom,RequiredLevel,Options'];
-      for (const a of detail.attributes) {
-        const opts = (detail.optionMaps.get(a.LogicalName) || []).map(o => `${o.value}:${o.label}`).join('; ');
-        lines.push([a.LogicalName, a.SchemaName, a.DisplayName?.UserLocalizedLabel?.Label || '', a.AttributeType, a.IsCustomAttribute, a.RequiredLevel?.Value || '', opts].map(csvSafe).join(','));
-      }
-      const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${selectedEntity.logicalName}_schema.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-      notify(`Exported schema for ${selectedEntity.logicalName}`, 'success');
+      const detail = entityCache.get(selectedEntity.logicalName); if (!detail) return;
+      DV.exportCsv(`${selectedEntity.logicalName}_schema.csv`, ['LogicalName', 'SchemaName', 'DisplayName', 'AttributeType', 'IsCustom', 'RequiredLevel', 'Options'],
+        detail.attributes.map(a => [
+          a.LogicalName, a.SchemaName, a.DisplayName?.UserLocalizedLabel?.Label || '', a.AttributeType, a.IsCustomAttribute,
+          a.RequiredLevel?.Value || '', (detail.optionMaps.get(a.LogicalName) || []).map(o => `${o.value}:${o.label}`).join('; ')
+        ]));
     });
-
-    function esc(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
   </script>
 </body>
 </html>
