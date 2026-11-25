@@ -570,6 +570,7 @@
         </label>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-secondary" id="appr-reject-btn" style="color:#d13438;">✕ Reject</button>
+          <button class="btn btn-secondary" id="appr-approve-all-btn" style="display:none;font-size:12px;">✔ Approve All</button>
           <button class="btn btn-primary" id="appr-approve-btn">✔ Approve</button>
         </div>
       </div>
@@ -916,6 +917,20 @@
     function closeTab(tabId) {
       const idx = S.tabs.findIndex(t => t.tabId === tabId);
       if (idx === -1) return;
+
+      // Drain any pending approvals for this tab to avoid hanging promises
+      const remaining = [];
+      for (const item of S.pendingApprovals) {
+        if (item.tabId === tabId) {
+          item.resolve(false);
+        } else {
+          remaining.push(item);
+        }
+      }
+      S.pendingApprovals = remaining;
+      S.alwaysAllowedTabs.delete(tabId);
+      showNextApproval();
+
       const frame = document.querySelector(`.tool-frame[data-tab-id="${tabId}"]`);
       if (frame?.dataset.blob) URL.revokeObjectURL(frame.dataset.blob);
       frame?.remove();
@@ -957,6 +972,10 @@
       frame.dataset.tabId = tabId;
       frame.dataset.ready = '0';
 
+      frame.addEventListener('load', () => {
+        interceptFrameFetch(frame, tabId);
+      });
+
       if (opts.type === 'wr') {
         frame.src = opts.src;
       } else {
@@ -968,7 +987,12 @@
       }
 
       // Fallback: send CONTEXT_INIT after timeout even if TOOL_READY never fires
-      const tid = setTimeout(() => { if (frame.dataset.ready === '0') sendContext(frame); }, TOOL_READY_MS);
+      const tid = setTimeout(() => {
+        if (frame.dataset.ready === '0') {
+          interceptFrameFetch(frame, tabId);
+          sendContext(frame);
+        }
+      }, TOOL_READY_MS);
       frame.dataset.timeout = tid;
 
       document.getElementById('frames').appendChild(frame);
@@ -999,7 +1023,10 @@
 
       switch (type) {
         case 'TOOL_READY':
-          if (frame) sendContext(frame);
+          if (frame) {
+            interceptFrameFetch(frame, tabId);
+            sendContext(frame);
+          }
           break;
         case 'TOOL_METADATA':
           if (tabId && payload) updateTabMeta(tabId, payload);
@@ -1022,7 +1049,154 @@
       }
     });
 
-    /* ─── Security Gateway & API Audit Console ───────────────── */
+    /* ─── Security Gateway & In-Frame Fetch Interceptor ──────── */
+    function interceptFrameFetch(frame, tabId) {
+      try {
+        const win = frame.contentWindow;
+        if (!win || win._dvot_intercepted) return;
+        win._dvot_intercepted = true;
+
+        const originalFetch = win.fetch.bind(win);
+
+        win.fetch = async function(input, init = {}) {
+          const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : String(input || ''));
+          const methUpper = ((init && init.method) || (typeof input === 'object' && input && input.method) || 'GET').toUpperCase();
+
+          const isDataverseApi = urlStr.includes('/api/data/v') || urlStr.startsWith('/api/data/v');
+
+          if (isDataverseApi) {
+            const tab = S.tabs.find(t => t.tabId === tabId);
+            const toolName = tab?.name || 'Tool';
+            const toolIcon = tab?.icon || '🔧';
+
+            const isAlwaysAllowed = S.alwaysAllowedTabs.has(tabId);
+            let needsApproval = false;
+
+            if (!isAlwaysAllowed) {
+              if (S.cfg.securityPolicy === 'STRICT') {
+                needsApproval = true;
+              } else if (S.cfg.securityPolicy === 'SAFE' && methUpper !== 'GET' && methUpper !== 'HEAD') {
+                needsApproval = true;
+              }
+            }
+
+            let displayPath = urlStr;
+            const pathMatch = urlStr.match(/\/api\/data\/v[^\/]+(\/.*)$/);
+            if (pathMatch && pathMatch[1]) {
+              displayPath = pathMatch[1];
+            } else {
+              try {
+                const u = new URL(urlStr, location.origin);
+                displayPath = u.pathname + u.search;
+              } catch {}
+            }
+
+            if (needsApproval) {
+              const reqId = 'INT_' + Math.random().toString(36).slice(2, 9);
+              let bodyPayload = init?.body || (typeof input === 'object' && input?.body) || null;
+              if (typeof bodyPayload === 'string') {
+                try { bodyPayload = JSON.parse(bodyPayload); } catch {}
+              }
+
+              const approved = await requestUserApproval({
+                reqId,
+                tabId,
+                toolName,
+                toolIcon,
+                method: methUpper,
+                path: displayPath,
+                headers: init?.headers || {},
+                body: bodyPayload
+              });
+
+              if (!approved) {
+                recordNetworkLog({
+                  id: reqId,
+                  tabId,
+                  toolName,
+                  toolIcon,
+                  method: methUpper,
+                  path: displayPath,
+                  url: urlStr,
+                  status: 403,
+                  statusText: 'Rejected by Security Gateway',
+                  latency: 0,
+                  headers: {},
+                  body: bodyPayload,
+                  policy: S.cfg.securityPolicy,
+                  timestamp: new Date()
+                });
+
+                const ResponseClass = win.Response || Response;
+                return new ResponseClass(JSON.stringify({
+                  error: {
+                    code: '0x80040220',
+                    message: 'Dataverse API call was rejected by developer approval policy (Zero Trust)'
+                  }
+                }), {
+                  status: 403,
+                  statusText: 'Forbidden (Approval Rejected)',
+                  headers: { 'Content-Type': 'application/json' }
+                });
+              }
+            }
+
+            const t0 = performance.now();
+            try {
+              const res = await originalFetch.apply(win, arguments);
+              const latency = Math.round(performance.now() - t0);
+              const capturedHeaders = {};
+              if (res.headers && typeof res.headers.forEach === 'function') {
+                res.headers.forEach((val, k) => { capturedHeaders[k.toLowerCase()] = val; });
+              }
+
+              recordNetworkLog({
+                id: uid(),
+                tabId,
+                toolName,
+                toolIcon,
+                method: methUpper,
+                path: displayPath,
+                url: urlStr,
+                status: res.status,
+                statusText: res.statusText || 'OK',
+                latency,
+                headers: capturedHeaders,
+                body: init?.body || null,
+                policy: S.cfg.securityPolicy,
+                timestamp: new Date()
+              });
+
+              return res;
+            } catch (err) {
+              const latency = Math.round(performance.now() - t0);
+              recordNetworkLog({
+                id: uid(),
+                tabId,
+                toolName,
+                toolIcon,
+                method: methUpper,
+                path: displayPath,
+                url: urlStr,
+                status: 0,
+                statusText: 'Network Error',
+                latency,
+                headers: {},
+                body: init?.body || null,
+                policy: S.cfg.securityPolicy,
+                timestamp: new Date()
+              });
+              throw err;
+            }
+          }
+
+          return originalFetch.apply(win, arguments);
+        };
+      } catch (e) {
+        console.warn('[dvopentools] Could not intercept frame fetch:', e);
+      }
+    }
+
     async function handleToolApiRequest(frame, tabId, req) {
       const { reqId, method = 'GET', path = '', headers = {}, body = null } = req;
       const tab = S.tabs.find(t => t.tabId === tabId);
@@ -1173,6 +1347,12 @@
     }
 
     function handleToolApiLog(tabId, log) {
+      // If frame's fetch was intercepted, interceptFrameFetch already recorded the log
+      const frame = document.querySelector(`.tool-frame[data-tab-id="${tabId}"]`);
+      if (frame && frame.contentWindow?._dvot_intercepted) {
+        return;
+      }
+
       const tab = S.tabs.find(t => t.tabId === tabId);
       recordNetworkLog({
         id: uid(),
@@ -1201,12 +1381,21 @@
     }
 
     function showNextApproval() {
+      // Auto-resolve any pending approvals for tabs that are now alwaysAllowed
+      while (S.pendingApprovals.length && S.alwaysAllowedTabs.has(S.pendingApprovals[0].tabId)) {
+        const autoItem = S.pendingApprovals.shift();
+        autoItem.resolve(true);
+      }
+
       if (!S.pendingApprovals.length) {
         document.getElementById('approval-modal').classList.remove('open');
         return;
       }
+
       const curr = S.pendingApprovals[0];
-      document.getElementById('appr-tool-name').textContent = `Tool: ${curr.toolIcon} ${curr.toolName}`;
+      const pendingCount = S.pendingApprovals.length;
+      const countSuffix = pendingCount > 1 ? ` (${pendingCount} requests in queue)` : '';
+      document.getElementById('appr-tool-name').textContent = `Tool: ${curr.toolIcon} ${curr.toolName}${countSuffix}`;
       document.getElementById('appr-path').textContent = curr.path;
 
       const mBadge = document.getElementById('appr-method-badge');
@@ -1220,6 +1409,16 @@
         bodyPrev.textContent = typeof curr.body === 'string' ? curr.body : JSON.stringify(curr.body, null, 2);
       } else {
         bodyWrap.style.display = 'none';
+      }
+
+      const approveAllBtn = document.getElementById('appr-approve-all-btn');
+      if (approveAllBtn) {
+        if (pendingCount > 1) {
+          approveAllBtn.style.display = 'inline-block';
+          approveAllBtn.textContent = `✔ Approve All (${pendingCount})`;
+        } else {
+          approveAllBtn.style.display = 'none';
+        }
       }
 
       document.getElementById('appr-always-chk').checked = false;
@@ -1387,8 +1586,34 @@
       const sec    = document.getElementById('cfg-security').value || 'AUDIT';
 
       const changed = prefix !== S.cfg.prefix || api !== S.cfg.apiVersion;
+      const policyChanged = sec !== S.cfg.securityPolicy;
+
       S.cfg.prefix = prefix; S.cfg.apiVersion = api; S.cfg.tabLimit = tabs; S.cfg.theme = theme;
       S.cfg.securityPolicy = sec;
+      if (S.ctx) {
+        S.ctx.securityPolicy = sec;
+        S.ctx.apiVersion = api;
+      }
+
+      // If switched to STRICT (Zero Trust), clear any remembered tool approvals
+      if (policyChanged && sec === 'STRICT') {
+        S.alwaysAllowedTabs.clear();
+      }
+
+      // If switched to AUDIT, auto-approve any queued requests
+      if (policyChanged && sec === 'AUDIT') {
+        while (S.pendingApprovals.length) {
+          const item = S.pendingApprovals.shift();
+          item.resolve(true);
+        }
+        showNextApproval();
+      }
+
+      // Re-apply interceptor to all open frames
+      document.querySelectorAll('.tool-frame').forEach(f => {
+        if (f.dataset.tabId) interceptFrameFetch(f, f.dataset.tabId);
+      });
+
       ls.set('cfg', S.cfg);
       applyTheme(theme);
       setStatus(true);
@@ -1448,6 +1673,17 @@
       item.resolve(true);
       showNextApproval();
     });
+    document.getElementById('appr-approve-all-btn')?.addEventListener('click', () => {
+      const alwaysAllow = document.getElementById('appr-always-chk').checked;
+      while (S.pendingApprovals.length) {
+        const item = S.pendingApprovals.shift();
+        if (alwaysAllow) {
+          S.alwaysAllowedTabs.add(item.tabId);
+        }
+        item.resolve(true);
+      }
+      showNextApproval();
+    });
     document.getElementById('appr-reject-btn').addEventListener('click', () => {
       if (!S.pendingApprovals.length) return;
       const item = S.pendingApprovals.shift();
@@ -1455,8 +1691,13 @@
       showNextApproval();
     });
 
-    // Close overlay on backdrop click
-    document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); }));
+    // Close overlay on backdrop click (exclude approval modal to avoid hanging promises)
+    document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
+      if (e.target === o) {
+        if (o.id === 'approval-modal') return;
+        o.classList.remove('open');
+      }
+    }));
 
     // Keyboard shortcuts
     document.addEventListener('keydown', e => {
