@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Resource Code Search</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "wr-code-search",
+    "name":           "Web Resource Search",
+    "version":        "1.0.0",
+    "description":    "Decode and full-text / regex search across all JavaScript, HTML, CSS, XML, and ResX Web Resources to spot legacy Xrm.Page calls, hardcoded URLs/GUIDs, or field usage.",
+    "icon":           "💻",
+    "category":       "Extensibility",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+
+  <style>
+    .preset-bar {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--bg-card); font-size: 11px;
+    }
+    .preset-chip {
+      border: 1px solid var(--border); background: var(--bg-header); color: var(--text);
+      border-radius: 999px; padding: 2px 9px; font-size: 11px; cursor: pointer; font-weight: 600;
+    }
+    .preset-chip:hover { border-color: var(--accent, #0078d4); }
+    .wr-row { cursor: pointer; }
+    .snippet {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px; background: var(--bg-header); border: 1px solid var(--border);
+      border-radius: 4px; padding: 4px 6px; margin-top: 3px; white-space: pre-wrap; word-break: break-word;
+    }
+    .hl { background: rgba(250, 204, 21, 0.35); padding: 0 2px; border-radius: 2px; font-weight: 700; }
+    .code-view {
+      max-height: 60vh; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11.5px; line-height: 1.5; background: var(--bg-header); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 12px; white-space: pre; tab-size: 2;
+    }
+    .code-line-hit { background: rgba(250, 204, 21, 0.2); display: inline-block; width: 100%; }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <strong>💻 Web Resource Code Search</strong>
+    <input type="text" id="q-search" placeholder="Search text or regex (e.g. Xrm.Page, account, new_field)…" style="min-width:270px;">
+    <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;">
+      <input type="checkbox" id="q-regex"> Regex
+    </label>
+    <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;">
+      <input type="checkbox" id="q-case"> Match Case
+    </label>
+    <select id="f-type">
+      <option value="ALL">All Text Types</option>
+      <option value="3">JavaScript (.js)</option>
+      <option value="1">HTML (.html)</option>
+      <option value="2">CSS (.css)</option>
+      <option value="4">XML / Data (.xml)</option>
+      <option value="12">ResX (.resx)</option>
+    </select>
+    <select id="f-managed">
+      <option value="ALL">Managed + Unmanaged</option>
+      <option value="0">Unmanaged Only</option>
+      <option value="1">Managed Only</option>
+    </select>
+    <input type="text" id="f-prefix" placeholder="Name prefix (e.g. new_)" style="width:140px;">
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-sample">🧪 Sample</button>
+    <button class="dv-btn" id="btn-refresh">↻ Reload Content</button>
+    <button class="dv-btn dv-btn-primary" id="btn-export">📥 Export CSV</button>
+  </div>
+
+  <div class="preset-bar">
+    <span style="font-weight:700;color:var(--text-sec);">Quick Audits:</span>
+    <button type="button" class="preset-chip" data-q="Xrm\.Page" data-rx="1">Legacy Xrm.Page</button>
+    <button type="button" class="preset-chip" data-q="\.dynamics\.com" data-rx="1">Hardcoded Org URL</button>
+    <button type="button" class="preset-chip" data-q="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" data-rx="1">Hardcoded GUIDs</button>
+    <button type="button" class="preset-chip" data-q="XMLHttpRequest|async\s*:\s*false" data-rx="1">Sync / Raw XHR</button>
+    <button type="button" class="preset-chip" data-q="/api/data/v" data-rx="0">Direct Web API Calls</button>
+    <button type="button" class="preset-chip" data-q="debugger|console\.log" data-rx="1">Debug Statements</button>
+  </div>
+
+  <div class="dv-strip">
+    <span>Text Web Resources Loaded: <strong id="st-total">0</strong></span>
+    <span>Matching Files: <strong id="st-files" style="color:var(--accent,#0078d4)">0</strong></span>
+    <span>Total Matches: <strong id="st-hits" style="color:var(--ok-color)">0</strong></span>
+    <div class="dv-spacer"></div>
+    <span style="font-size:11px;color:var(--text-sec);">Click any file to view decoded source</span>
+  </div>
+
+  <div class="dv-scroll">
+    <table class="dv-table">
+      <thead>
+        <tr>
+          <th style="min-width:240px;">Web Resource Name</th>
+          <th style="width:95px;">Type</th>
+          <th style="width:95px;">Scope</th>
+          <th style="width:80px;">Lines</th>
+          <th style="width:75px;">Hits</th>
+          <th style="min-width:320px;">Matching Snippets</th>
+        </tr>
+      </thead>
+      <tbody id="wr-tbody">
+        <tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-sec);">Connecting to Dataverse…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Web Resource Code Search</span>
+  </footer>
+
+  <div class="dv-overlay" id="code-modal">
+    <div class="dv-modal" style="width:920px;max-width:95vw;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <div>
+          <strong id="cm-title" style="font-size:14px;">Web Resource</strong>
+          <div id="cm-sub" style="font-size:11px;color:var(--text-sec);"></div>
+        </div>
+        <button class="dv-btn dv-btn-sm" id="cm-close">✕</button>
+      </div>
+      <div class="code-view" id="cm-code"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="dv-btn" id="cm-copy">📋 Copy Source</button>
+        <button class="dv-btn dv-btn-primary" id="cm-ok">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let context = null;
+    let resources = [];
+    let currentViewItem = null;
+
+    const TYPE_LABELS = { 1: 'HTML', 2: 'CSS', 3: 'JS', 4: 'XML', 11: 'Vector/SVG', 12: 'ResX' };
+
+    function toHost(type, payload = {}) {
+      window.parent?.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
+    }
+
+    toHost('TOOL_READY');
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') {
+        context = e.data.payload;
+        loadWebResources();
+      }
+    });
+
+    function decodeBase64Utf8(b64) {
+      if (!b64) return '';
+      try {
+        const bin = atob(String(b64).replace(/\s+/g, ''));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+      } catch {
+        return '';
+      }
+    }
+
+    async function fetchAllTextWebResources() {
+      const all = [];
+      // Query text-based web resources only (1=HTML, 2=CSS, 3=JS, 4=XML, 12=ResX)
+      let next = '/webresourceset?$select=webresourceid,name,displayname,webresourcetype,ismanaged,modifiedon,content&$filter=webresourcetype eq 3 or webresourcetype eq 1 or webresourcetype eq 2 or webresourcetype eq 4 or webresourcetype eq 12&$orderby=name asc&$top=200';
+      while (next && all.length < 2000) {
+        const res = await DV.fetch(next);
+        all.push(...(res.value || []));
+        next = res['@odata.nextLink'] || '';
+      }
+      return all;
+    }
+
+    async function loadWebResources() {
+      document.getElementById('wr-tbody').innerHTML =
+        '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-sec);">Loading and Base64-decoding Web Resources…</td></tr>';
+      try {
+        const raw = await fetchAllTextWebResources();
+        resources = raw.map(r => {
+          const text = decodeBase64Utf8(r.content);
+          const lines = text ? text.split(/\r?\n/) : [];
+          return {
+            id: r.webresourceid,
+            name: r.name || '',
+            displayName: r.displayname || r.name || '',
+            type: Number(r.webresourcetype),
+            typeLabel: TYPE_LABELS[r.webresourcetype] || `Type ${r.webresourcetype}`,
+            isManaged: !!r.ismanaged,
+            modifiedon: r.modifiedon || '',
+            text,
+            lines
+          };
+        });
+        renderResults();
+        DV.notify(`Decoded ${resources.length} text Web Resources.`, 'success');
+      } catch (err) {
+        document.getElementById('wr-tbody').innerHTML =
+          `<tr><td colspan="6" style="color:var(--err-color);padding:20px;">❌ ${DV.esc(err.message)}</td></tr>`;
+        DV.notify(err.message, 'error');
+      }
+    }
+
+    function loadSampleData() {
+      const makeSample = (id, name, type, isManaged, code) => ({
+        id, name, displayName: name, type, typeLabel: TYPE_LABELS[type], isManaged,
+        modifiedon: new Date().toISOString(), text: code, lines: code.split(/\r?\n/)
+      });
+      resources = [
+        makeSample('w1', 'new_/scripts/account_main.js', 3, false,
+          `function onAccountLoad(executionContext) {\n  var formContext = executionContext.getFormContext();\n  // Legacy fallback still present:\n  var oldName = Xrm.Page.getAttribute("name").getValue();\n  console.log("Loaded account", oldName);\n  fetch("https://contoso.crm.dynamics.com/api/data/v9.2/accounts?$top=1");\n}`),
+        makeSample('w2', 'new_/scripts/invoice_ribbon.js', 3, false,
+          `async function sendToErp(primaryControl) {\n  const id = primaryControl.data.entity.getId();\n  const ownerFallback = "8f7a1122-3344-5566-7788-99aabbccddee";\n  debugger;\n  await Xrm.WebApi.updateRecord("invoice", id, { new_sync: true });\n}`),
+        makeSample('w3', 'msdyn_/helper/core.js', 3, true,
+          `export function formatCurrency(v) { return Number(v || 0).toFixed(2); }`),
+        makeSample('w4', 'new_/pages/summary.html', 1, false,
+          `<!DOCTYPE html><html><body><h2>Summary Widget</h2><script>console.log("Xrm.Page check");<\/script></body></html>`)
+      ];
+      renderResults();
+      DV.notify(`Loaded ${resources.length} sample Web Resources.`, 'info');
+    }
+
+    function buildMatcher(query, useRegex, matchCase) {
+      if (!query) return null;
+      const flags = matchCase ? 'g' : 'gi';
+      if (useRegex) {
+        return new RegExp(query, flags);
+      }
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(escaped, flags);
+    }
+
+    function searchResources() {
+      const q = document.getElementById('q-search').value;
+      const useRegex = document.getElementById('q-regex').checked;
+      const matchCase = document.getElementById('q-case').checked;
+      const fType = document.getElementById('f-type').value;
+      const fManaged = document.getElementById('f-managed').value;
+      const fPrefix = document.getElementById('f-prefix').value.trim().toLowerCase();
+
+      let matcher = null;
+      let regexErr = '';
+      if (q) {
+        try { matcher = buildMatcher(q, useRegex, matchCase); }
+        catch (e) { regexErr = e.message; }
+      }
+
+      const matched = [];
+      let totalHits = 0;
+
+      for (const r of resources) {
+        if (fType !== 'ALL' && String(r.type) !== fType) continue;
+        if (fManaged !== 'ALL' && String(r.isManaged ? 1 : 0) !== fManaged) continue;
+        if (fPrefix && !r.name.toLowerCase().startsWith(fPrefix)) continue;
+
+        if (!matcher) {
+          const nameHit = !q || r.name.toLowerCase().includes(q.toLowerCase());
+          if (nameHit) matched.push({ resource: r, hits: 0, lineHits: [] });
+          continue;
+        }
+
+        const lineHits = [];
+        let fileHits = 0;
+        for (let i = 0; i < r.lines.length; i++) {
+          const line = r.lines[i];
+          matcher.lastIndex = 0;
+          const matches = [...line.matchAll(matcher)];
+          if (matches.length) {
+            fileHits += matches.length;
+            if (lineHits.length < 5) {
+              lineHits.push({ lineNo: i + 1, text: line, matcher });
+            }
+          }
+        }
+        if (fileHits > 0 || r.name.toLowerCase().includes(q.toLowerCase())) {
+          totalHits += fileHits;
+          matched.push({ resource: r, hits: fileHits, lineHits });
+        }
+      }
+
+      return { matched, totalHits, matcher, regexErr };
+    }
+
+    function highlightLine(line, matcher) {
+      if (!matcher) return DV.esc(line);
+      matcher.lastIndex = 0;
+      let out = '';
+      let last = 0;
+      for (const m of line.matchAll(matcher)) {
+        if (!m[0]) break;
+        out += DV.esc(line.slice(last, m.index));
+        out += `<span class="hl">${DV.esc(m[0])}</span>`;
+        last = m.index + m[0].length;
+      }
+      out += DV.esc(line.slice(last));
+      return out;
+    }
+
+    function renderResults() {
+      const { matched, totalHits, matcher, regexErr } = searchResources();
+      document.getElementById('st-total').textContent = resources.length;
+      document.getElementById('st-files').textContent = matched.length;
+      document.getElementById('st-hits').textContent = totalHits;
+      DV.setTitle(`WR Search (${matched.length} files)`);
+
+      const tbody = document.getElementById('wr-tbody');
+      if (regexErr) {
+        tbody.innerHTML = `<tr><td colspan="6" style="color:var(--err-color);padding:20px;">Invalid Regex: ${DV.esc(regexErr)}</td></tr>`;
+        return;
+      }
+      if (!matched.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-sec);">No matching Web Resources found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = matched.slice(0, 300).map((m, idx) => {
+        const r = m.resource;
+        const snipHtml = m.lineHits.length
+          ? m.lineHits.map(lh => `<div class="snippet"><span style="color:var(--text-sec);">L${lh.lineNo}:</span> ${highlightLine(lh.text.trim().slice(0, 180), matcher)}</div>`).join('')
+          : `<span style="color:var(--text-sec);font-size:11px;">${matcher ? 'Matched name only' : `${r.lines.length} lines ready — type a query above`}</span>`;
+        return `<tr class="wr-row" data-idx="${idx}">
+          <td><strong>${DV.esc(r.name)}</strong>${r.displayName && r.displayName !== r.name ? `<div style="font-size:11px;color:var(--text-sec);">${DV.esc(r.displayName)}</div>` : ''}</td>
+          <td>${DV.ui.badge(r.typeLabel, r.type === 3 ? 'info' : 'ok')}</td>
+          <td>${DV.ui.badge(r.isManaged ? 'Managed' : 'Unmanaged', r.isManaged ? 'warn' : 'ok')}</td>
+          <td>${r.lines.length}</td>
+          <td><strong>${m.hits}</strong></td>
+          <td>${snipHtml}</td>
+        </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('tr.wr-row').forEach(tr => {
+        tr.addEventListener('click', () => {
+          const item = matched[Number(tr.dataset.idx)];
+          if (item) openCodeModal(item.resource, matcher);
+        });
+      });
+    }
+
+    function openCodeModal(res, matcher) {
+      currentViewItem = res;
+      document.getElementById('cm-title').textContent = res.name;
+      document.getElementById('cm-sub').textContent = `${res.typeLabel} · ${res.lines.length} lines · ${res.isManaged ? 'Managed' : 'Unmanaged'}`;
+      const codeHtml = res.lines.map((line, i) => {
+        const ln = String(i + 1).padStart(4, ' ');
+        if (matcher) {
+          matcher.lastIndex = 0;
+          if (matcher.test(line)) {
+            return `<span class="code-line-hit"><span style="color:var(--text-sec);user-select:none;">${ln} | </span>${highlightLine(line, matcher)}</span>`;
+          }
+        }
+        return `<span style="color:var(--text-sec);user-select:none;">${ln} | </span>${DV.esc(line)}`;
+      }).join('\n');
+      document.getElementById('cm-code').innerHTML = codeHtml;
+      document.getElementById('code-modal').classList.add('open');
+    }
+
+    document.getElementById('cm-close').addEventListener('click', () => document.getElementById('code-modal').classList.remove('open'));
+    document.getElementById('cm-ok').addEventListener('click', () => document.getElementById('code-modal').classList.remove('open'));
+    document.getElementById('code-modal').addEventListener('click', e => {
+      if (e.target === document.getElementById('code-modal')) document.getElementById('code-modal').classList.remove('open');
+    });
+    document.getElementById('cm-copy').addEventListener('click', () => {
+      if (currentViewItem) navigator.clipboard?.writeText(currentViewItem.text).then(() => DV.notify('Source copied', 'success'));
+    });
+
+    document.querySelectorAll('.preset-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('q-search').value = btn.dataset.q;
+        document.getElementById('q-regex').checked = btn.dataset.rx === '1';
+        renderResults();
+      });
+    });
+
+    ['q-search', 'f-prefix'].forEach(id => document.getElementById(id).addEventListener('input', renderResults));
+    ['q-regex', 'q-case', 'f-type', 'f-managed'].forEach(id => document.getElementById(id).addEventListener('change', renderResults));
+    document.getElementById('btn-sample').addEventListener('click', loadSampleData);
+    document.getElementById('btn-refresh').addEventListener('click', () => context ? loadWebResources() : loadSampleData());
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const { matched } = searchResources();
+      DV.exportCsv(
+        `webresource_search_${new Date().toISOString().slice(0, 10)}.csv`,
+        ['Name', 'DisplayName', 'Type', 'Managed', 'Lines', 'MatchHits', 'WebResourceId'],
+        matched.map(m => [m.resource.name, m.resource.displayName, m.resource.typeLabel, m.resource.isManaged ? 'Yes' : 'No', m.resource.lines.length, m.hits, m.resource.id])
+      );
+    });
+  </script>
+</body>
+</html>

@@ -10,6 +10,16 @@
     "description": "Inspect Default vs Current Environment Variable values, validate JSON configs, spot missing values, and safely update overrides."
   },
   {
+    "wrName": "dvopentools_usersettings.html",
+    "id": "user-settings",
+    "name": "User Settings & Views",
+    "icon": "👤",
+    "category": "Configuration",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Inspect and bulk-update User Settings (paging limit, timezone, UI language) and manage or reassign user-owned Personal Views and Personal Dashboards."
+  },
+  {
     "wrName": "dvopentools_bulkops.html",
     "id": "bulk-ops",
     "name": "Bulk Operations",
@@ -18,6 +28,16 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
     "description": "Preview records with FetchXML and execute throttled bulk PATCH, state activation/deactivation, or DELETE operations safely under Host Security Gateway."
+  },
+  {
+    "wrName": "dvopentools_duprules.html",
+    "id": "dup-rules",
+    "name": "Duplicate Rules Auditor",
+    "icon": "👯",
+    "category": "Data",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Inspect all Dataverse Duplicate Detection Rules, match conditions, operator parameters, case-sensitivity, and test records via RetrieveDuplicates."
   },
   {
     "wrName": "dvopentools_recordinspector.html",
@@ -80,6 +100,16 @@
     "description": "Unified view of every Plugin Step, Business Rule, Classic Workflow, Business Process Flow, Cloud Flow trigger, and Bound Custom API on any Dataverse table."
   },
   {
+    "wrName": "dvopentools_ribbon.html",
+    "id": "ribbon-inspector",
+    "name": "Command Bar & Ribbon",
+    "icon": "🎀",
+    "category": "Extensibility",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Inspect Modern Command Bar buttons (appactions Power Fx & JavaScript) and Classic RibbonDiffXml diffs (ribbondiffs) per table."
+  },
+  {
     "wrName": "dvopentools_plugins.html",
     "id": "plugin-manager",
     "name": "Plugin Step Manager",
@@ -88,6 +118,16 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
     "description": "Browse registered Plugin Assemblies, Types, SDK Message Processing Steps, and Pre/Post Images, with 1-click step Enable/Disable."
+  },
+  {
+    "wrName": "dvopentools_wrsearch.html",
+    "id": "wr-code-search",
+    "name": "Web Resource Search",
+    "icon": "💻",
+    "category": "Extensibility",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Decode and full-text / regex search across all JavaScript, HTML, CSS, XML, and ResX Web Resources to spot legacy Xrm.Page calls, hardcoded URLs/GUIDs, or field usage."
   },
   {
     "wrName": "dvopentools_webhooks.html",
@@ -198,6 +238,16 @@
     "version": "1.1.0",
     "minHostVersion": "2025.11.1",
     "description": "Diagnose effective record permissions via RetrievePrincipalAccess and inspect Security Roles, Team memberships, and record ownership."
+  },
+  {
+    "wrName": "dvopentools_buqueues.html",
+    "id": "bu-queues",
+    "name": "BU & Queue Explorer",
+    "icon": "🏢",
+    "category": "Security",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Visualize Business Unit hierarchy trees, default teams & divisions, plus inspect Public/Private Queues, email routing, and queue members."
   },
   {
     "wrName": "dvopentools_rolematrix.html",

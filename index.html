@@ -296,15 +296,15 @@
           <div class="pill">⚡ Open, Single-File Dataverse Developer Workbench</div>
           <h1>Zero-dependency tools for Microsoft Dataverse &amp; Power Platform.</h1>
           <p class="hero-sub">
-            22 self-contained HTML developer tools inside one unified tabbed workbench. Run natively inside Dynamics 365 as Web Resources, or connect from this page via your local <code>dev-server.js</code> proxy — with zero build steps and zero tokens stored in the browser.
+            27 self-contained HTML developer tools inside one unified tabbed workbench. Run natively inside Dynamics 365 as Web Resources, or connect from this page via your local <code>dev-server.js</code> proxy — with zero build steps and zero tokens stored in the browser.
           </p>
           <div class="hero-cta">
             <a href="dvopentools_host.html" class="btn btn-primary btn-lg">Launch DV Open Tools Host →</a>
-            <a href="#tools" class="btn btn-lg">Explore 22 Tools</a>
+            <a href="#tools" class="btn btn-lg">Explore 27 Tools</a>
             <a href="#local-proxy" class="btn btn-lg">Local Proxy Setup</a>
           </div>
           <div class="hero-stats">
-            <span><strong>22</strong> Built-in Tools</span>
+            <span><strong>27</strong> Built-in Tools</span>
             <span><strong>0</strong> Build Steps / Dependencies</span>
             <span><strong>3</strong> Security Gateway Modes</span>
             <span><strong>100%</strong> Relative GitHub Pages Paths</span>
@@ -376,7 +376,7 @@
       <div class="container">
         <div class="section-head">
           <div>
-            <h2>Included Tools (<span id="tools-count">22</span>)</h2>
+            <h2>Included Tools (<span id="tools-count">27</span>)</h2>
             <p>All tool files live in <code>tools/</code>. Open any tool directly in the host workbench or grab the standalone HTML file for Web Resource upload.</p>
           </div>
           <a href="dvopentools_host.html" class="btn btn-primary">Launch Host Workbench →</a>
@@ -415,12 +415,15 @@
       { id: 'plugin-traces', file: 'tools/dvopentools_plugintraces.html', name: 'Plugin Trace Logs', icon: '📜', category: 'Diagnostics', version: '1.1.0', description: 'Stream and filter Dataverse plugintracelog entries, trace full correlation cascades by depth, inspect stack traces, and spot slow plugins.' },
       { id: 'access-checker', file: 'tools/dvopentools_accesschecker.html', name: 'Access Diagnostics', icon: '🛡️', category: 'Security', version: '1.1.0', description: 'Diagnose effective record permissions via RetrievePrincipalAccess and inspect Security Roles, Team memberships, and record ownership.' },
       { id: 'role-matrix', file: 'tools/dvopentools_rolematrix.html', name: 'Role Matrix', icon: '🎭', category: 'Security', version: '1.0.0', description: 'Compare Dataverse Security Role table privileges side-by-side (Create, Read, Write, Delete, Append, Assign, Share) and export security audit CSVs.' },
+      { id: 'bu-queues', file: 'tools/dvopentools_buqueues.html', name: 'BU & Queue Explorer', icon: '🏢', category: 'Security', version: '1.0.0', description: 'Visualize Business Unit hierarchy trees, default teams & divisions, plus inspect Public/Private Queues, email routing, and queue members.' },
       { id: 'solution-layers', file: 'tools/dvopentools_solutionlayers.html', name: 'Solution Layers', icon: '📦', category: 'Solutions', version: '1.1.0', description: 'Inspect managed vs Active unmanaged solution component layers (msdyn_componentlayer) and diagnose delete blockers via RetrieveDependenciesForDelete.' },
       { id: 'env-vars', file: 'tools/dvopentools_envvars.html', name: 'Environment Variables', icon: '⚙️', category: 'Configuration', version: '1.1.0', description: 'Inspect Default vs Current Environment Variable values, validate JSON configs, spot missing values, and safely update overrides.' },
+      { id: 'user-settings', file: 'tools/dvopentools_usersettings.html', name: 'User Settings & Views', icon: '👤', category: 'Configuration', version: '1.0.0', description: 'Inspect and bulk-update User Settings (paging limit, timezone, UI language) and manage or reassign user-owned Personal Views and Personal Dashboards.' },
       { id: 'record-inspector', file: 'tools/dvopentools_recordinspector.html', name: 'Record Inspector', icon: '🔎', category: 'Data', version: '1.0.0', description: 'Inspect all fields (including hidden attributes) on any Dataverse record by pasting a URL or GUID, edit updatable values, or jump to Access Diagnostics.' },
       { id: 'bulk-ops', file: 'tools/dvopentools_bulkops.html', name: 'Bulk Operations', icon: '♻️', category: 'Data', version: '1.0.0', description: 'Preview records with FetchXML and execute throttled bulk PATCH, state activation/deactivation, or DELETE operations safely under Host Security Gateway.' },
       { id: 'row-counter', file: 'tools/dvopentools_rowcounter.html', name: 'Row Counter', icon: '📊', category: 'Data', version: '1.0.0', description: 'Count records across Dataverse tables (Total, Active, Inactive, Custom Filter) with HTTP headers inspection & CSV export.' },
       { id: 'storage-analyzer', file: 'tools/dvopentools_storage.html', name: 'Storage Analyzer', icon: '💾', category: 'Data', version: '1.0.0', description: 'Identify Dataverse log and file storage bloat across AsyncOperations, Plugin Traces, Audits, Notes/Attachments, and Bulk Delete jobs.' },
+      { id: 'dup-rules', file: 'tools/dvopentools_duprules.html', name: 'Duplicate Rules Auditor', icon: '👯', category: 'Data', version: '1.0.0', description: 'Inspect all Dataverse Duplicate Detection Rules, match conditions, operator parameters, case-sensitivity, and test records via RetrieveDuplicates.' },
       { id: 'table-map', file: 'tools/dvopentools_tablemap.html', name: 'Table Automation Map', icon: '⚡', category: 'Diagnostics', version: '1.0.0', description: 'Unified view of every Plugin Step, Business Rule, Classic Workflow, Business Process Flow, Cloud Flow trigger, and Bound Custom API on any Dataverse table.' },
       { id: 'env-timeline', file: 'tools/dvopentools_envtimeline.html', name: 'Environment Timeline', icon: '🕒', category: 'Diagnostics', version: '1.0.0', description: 'Unified chronological activity and event timeline across Dataverse: Audits, Plugin Traces, Flow Runs, System Jobs, Solution Operations, and Sync Logs.' },
       { id: 'flow-calendar', file: 'tools/dvopentools_flowcalendar.html', name: 'Flow Calendar', icon: '📅', category: 'Flow', version: '1.0.0', description: 'Visualise Power Automate cloud flow run history across a 7-day hourly timeline with response headers inspection.' },
@@ -429,6 +432,8 @@
       { id: 'conn-refs', file: 'tools/dvopentools_connrefs.html', name: 'Connection Audit', icon: '🔗', category: 'Flow', version: '1.0.0', description: 'Audit Connection References, map which Cloud Flows depend on each connection, and flag disconnected references or turned-off flows.' },
       { id: 'plugin-manager', file: 'tools/dvopentools_plugins.html', name: 'Plugin Step Manager', icon: '🧩', category: 'Extensibility', version: '1.0.0', description: 'Browse registered Plugin Assemblies, Types, SDK Message Processing Steps, and Pre/Post Images, with 1-click step Enable/Disable.' },
       { id: 'webhook-inspector', file: 'tools/dvopentools_webhooks.html', name: 'Webhook Inspector', icon: '🪝', category: 'Extensibility', version: '1.1.0', description: 'Inspect Dataverse Service Endpoints and Webhooks, linked SDK Message Processing Steps, recent Async delivery failures, and build sample RemoteExecutionContext payloads.' },
+      { id: 'wr-code-search', file: 'tools/dvopentools_wrsearch.html', name: 'Web Resource Search', icon: '💻', category: 'Extensibility', version: '1.0.0', description: 'Decode and full-text / regex search across all JavaScript, HTML, CSS, XML, and ResX Web Resources to spot legacy Xrm.Page calls, hardcoded URLs/GUIDs, or field usage.' },
+      { id: 'ribbon-inspector', file: 'tools/dvopentools_ribbon.html', name: 'Command Bar & Ribbon', icon: '🎀', category: 'Extensibility', version: '1.0.0', description: 'Inspect Modern Command Bar buttons (appactions Power Fx & JavaScript) and Classic RibbonDiffXml diffs (ribbondiffs) per table.' },
       { id: 'form-view', file: 'tools/dvopentools_formview.html', name: 'Form & View XML', icon: '📋', category: 'Metadata', version: '1.0.0', description: 'Audit FormXML JavaScript libraries, OnLoad/OnSave/OnChange handlers, tabs & fields, plus SavedQuery view layouts and FetchXML.' },
       { id: 'label-explorer', file: 'tools/dvopentools_labels.html', name: 'Label Explorer', icon: '🌍', category: 'Metadata', version: '1.0.0', description: 'Inspect localized Display Labels across all provisioned Dataverse languages (RetrieveProvisionedLanguages) for Tables and Columns, and export translation CSVs.' }
     ];

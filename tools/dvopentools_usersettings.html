@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Settings & Personal Views</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "user-settings",
+    "name":           "User Settings & Views",
+    "version":        "1.0.0",
+    "description":    "Inspect and bulk-update User Settings (paging limit, timezone, UI language) and manage or reassign user-owned Personal Views and Personal Dashboards.",
+    "icon":           "👤",
+    "category":       "Configuration",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+
+  <style>
+    .tab-bar { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .tab-btn {
+      border: none; background: var(--bg-header); color: var(--text-sec);
+      padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .tab-btn + .tab-btn { border-left: 1px solid var(--border); }
+    .tab-btn.active { background: var(--accent, #0078d4); color: #fff; }
+    .bulk-bar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg-card); font-size: 12px;
+    }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <strong>👤 User Settings &amp; Personal Views</strong>
+    <div class="tab-bar">
+      <button type="button" class="tab-btn active" id="tab-us-btn">⚙️ User Settings (<span id="cnt-us">0</span>)</button>
+      <button type="button" class="tab-btn" id="tab-pv-btn">📋 Personal Views &amp; Dashboards (<span id="cnt-pv">0</span>)</button>
+    </div>
+    <input type="text" id="f-search" placeholder="Filter by user, email, view name, table…" style="min-width:240px;">
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-sample">🧪 Sample</button>
+    <button class="dv-btn" id="btn-refresh">↻ Refresh</button>
+    <button class="dv-btn dv-btn-primary" id="btn-export">📥 Export CSV</button>
+  </div>
+
+  <!-- User Settings Tab -->
+  <div id="panel-us" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+    <div class="bulk-bar">
+      <span><strong>Selected:</strong> <span id="us-sel-count">0</span> users</span>
+      <label>Paging Limit:
+        <select id="upd-paging" style="width:90px;">
+          <option value="">(unchanged)</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="250">250</option>
+        </select>
+      </label>
+      <label>TimeZone Code:
+        <input type="number" id="upd-tz" placeholder="e.g. 190 (IST), 85 (GMT)" style="width:165px;">
+      </label>
+      <label>UI Lang (LCID):
+        <input type="number" id="upd-lang" placeholder="e.g. 1033" style="width:105px;">
+      </label>
+      <button class="dv-btn dv-btn-primary" id="btn-apply-us" disabled>💾 Update Selected Users</button>
+    </div>
+    <div class="dv-scroll">
+      <table class="dv-table">
+        <thead>
+          <tr>
+            <th style="width:34px;"><input type="checkbox" id="chk-us-all"></th>
+            <th style="min-width:200px;">User</th>
+            <th style="min-width:200px;">Email</th>
+            <th style="width:100px;">Paging</th>
+            <th style="width:160px;">TimeZone Code</th>
+            <th style="width:110px;">UI Language</th>
+            <th style="width:110px;">Help Language</th>
+            <th style="width:120px;">Adv. Find Mode</th>
+          </tr>
+        </thead>
+        <tbody id="us-tbody">
+          <tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">Connecting to Dataverse…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Personal Views & Dashboards Tab -->
+  <div id="panel-pv" style="display:none;flex-direction:column;flex:1;min-height:0;">
+    <div class="bulk-bar">
+      <span><strong>Selected:</strong> <span id="pv-sel-count">0</span> items</span>
+      <label>Reassign To User:
+        <select id="reassign-user" style="min-width:220px;"><option value="">Choose target user…</option></select>
+      </label>
+      <button class="dv-btn dv-btn-primary" id="btn-reassign-pv" disabled>🔁 Reassign Selected</button>
+      <div class="dv-spacer"></div>
+      <select id="pv-kind">
+        <option value="ALL">Views + Dashboards</option>
+        <option value="view">Personal Views Only</option>
+        <option value="dash">Personal Dashboards Only</option>
+      </select>
+    </div>
+    <div class="dv-scroll">
+      <table class="dv-table">
+        <thead>
+          <tr>
+            <th style="width:34px;"><input type="checkbox" id="chk-pv-all"></th>
+            <th style="width:120px;">Type</th>
+            <th style="min-width:220px;">Name</th>
+            <th style="width:140px;">Table / Entity</th>
+            <th style="min-width:170px;">Current Owner</th>
+            <th style="width:100px;">State</th>
+            <th style="width:140px;">Modified</th>
+            <th style="width:85px;text-align:center;">Inspect</th>
+          </tr>
+        </thead>
+        <tbody id="pv-tbody">
+          <tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">Connecting to Dataverse…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">User Settings &amp; Personal Views Manager</span>
+  </footer>
+
+  <div class="dv-overlay" id="xml-modal">
+    <div class="dv-modal" style="width:800px;max-width:94vw;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <strong id="xm-title">Personal View Definition</strong>
+        <button class="dv-btn dv-btn-sm" id="xm-close">✕</button>
+      </div>
+      <pre class="dv-code" id="xm-body" style="max-height:55vh;overflow:auto;"></pre>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button class="dv-btn dv-btn-primary" id="xm-ok">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let context = null;
+    let activeTab = 'us';
+    let userRows = [];
+    let pvRows = [];
+    const selectedUs = new Set();
+    const selectedPv = new Set();
+
+    const TZ_HINTS = { 35: 'EST (UTC-5)', 4: 'PST (UTC-8)', 20: 'CST (UTC-6)', 85: 'GMT/UTC', 110: 'CET (UTC+1)', 190: 'IST (UTC+5:30)', 215: 'Singapore (UTC+8)', 255: 'AUS Eastern (UTC+10)' };
+
+    function toHost(type, payload = {}) {
+      window.parent?.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
+    }
+
+    toHost('TOOL_READY');
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') {
+        context = e.data.payload;
+        loadAllData();
+      }
+    });
+
+    async function fetchAllPages(path, cap = 1500) {
+      const all = [];
+      let next = path;
+      while (next && all.length < cap) {
+        const res = await DV.fetch(next);
+        all.push(...(res.value || []));
+        next = res['@odata.nextLink'] || '';
+      }
+      return all;
+    }
+
+    async function loadAllData() {
+      try {
+        const [users, settings, uQueries, uForms] = await Promise.all([
+          fetchAllPages('/systemusers?$select=systemuserid,fullname,internalemailaddress,isdisabled&$filter=isdisabled eq false&$orderby=fullname asc'),
+          fetchAllPages('/usersettingscollection?$select=systemuserid,paginglimit,timezonecode,uilanguageid,helplanguageid,advancedfindstartupmode').catch(() => []),
+          fetchAllPages('/userqueries?$select=userqueryid,name,returnedtypecode,querytype,statecode,_ownerid_value,modifiedon,fetchxml,layoutxml&$orderby=name asc').catch(() => []),
+          fetchAllPages('/userforms?$select=userformid,name,objecttypecode,type,_ownerid_value,modifiedon,formxml&$orderby=name asc').catch(() => [])
+        ]);
+
+        const usByUser = new Map(settings.map(s => [String(s.systemuserid).toLowerCase(), s]));
+        userRows = users.map(u => {
+          const s = usByUser.get(String(u.systemuserid).toLowerCase()) || {};
+          return {
+            userId: u.systemuserid,
+            fullName: u.fullname || 'Unnamed User',
+            email: u.internalemailaddress || '—',
+            pagingLimit: s.paginglimit ?? null,
+            timeZoneCode: s.timezonecode ?? null,
+            uiLanguageId: s.uilanguageid ?? null,
+            helpLanguageId: s.helplanguageid ?? null,
+            advFindMode: s.advancedfindstartupmode ?? null
+          };
+        });
+
+        pvRows = [
+          ...uQueries.map(q => ({
+            id: q.userqueryid, kind: 'view', kindLabel: 'Personal View',
+            entitySet: 'userqueries',
+            name: q.name || 'Untitled View',
+            table: q.returnedtypecode || '—',
+            ownerId: q._ownerid_value || '',
+            ownerName: q['_ownerid_value@OData.Community.Display.V1.FormattedValue'] || q._ownerid_value || '—',
+            stateLabel: q.statecode === 0 ? 'Active' : 'Inactive',
+            modifiedon: q.modifiedon || '',
+            xml: `<!-- FetchXML -->\n${q.fetchxml || ''}\n\n<!-- LayoutXML -->\n${q.layoutxml || ''}`
+          })),
+          ...uForms.map(f => ({
+            id: f.userformid, kind: 'dash', kindLabel: 'Personal Dashboard',
+            entitySet: 'userforms',
+            name: f.name || 'Untitled Dashboard',
+            table: f.objecttypecode || 'system',
+            ownerId: f._ownerid_value || '',
+            ownerName: f['_ownerid_value@OData.Community.Display.V1.FormattedValue'] || f._ownerid_value || '—',
+            stateLabel: 'Active',
+            modifiedon: f.modifiedon || '',
+            xml: f.formxml || ''
+          }))
+        ];
+
+        populateReassignUsers();
+        renderCurrentTab();
+        DV.notify(`Loaded ${userRows.length} users & ${pvRows.length} personal views/dashboards.`, 'success');
+      } catch (err) {
+        DV.notify(err.message, 'error');
+      }
+    }
+
+    function loadSampleData() {
+      userRows = [
+        { userId: 'u1', fullName: 'Ashish Vishwakarma', email: 'ashish@contoso.com', pagingLimit: 250, timeZoneCode: 190, uiLanguageId: 1033, helpLanguageId: 1033, advFindMode: 1 },
+        { userId: 'u2', fullName: 'Priya Sharma', email: 'priya@contoso.com', pagingLimit: 50, timeZoneCode: 35, uiLanguageId: 1033, helpLanguageId: 1033, advFindMode: 2 },
+        { userId: 'u3', fullName: 'Alex Mercer', email: 'alex@contoso.com', pagingLimit: 50, timeZoneCode: 85, uiLanguageId: 1033, helpLanguageId: 1033, advFindMode: 1 }
+      ];
+      pvRows = [
+        { id: 'v1', kind: 'view', kindLabel: 'Personal View', entitySet: 'userqueries', name: 'My High Value Open Deals', table: 'opportunity', ownerId: 'u2', ownerName: 'Priya Sharma', stateLabel: 'Active', modifiedon: new Date().toISOString(), xml: '<fetch><entity name="opportunity"><filter><condition attribute="estimatedvalue" operator="gt" value="50000"/></filter></entity></fetch>' },
+        { id: 'd1', kind: 'dash', kindLabel: 'Personal Dashboard', entitySet: 'userforms', name: 'Q4 Sales Exec Overview', table: 'system', ownerId: 'u1', ownerName: 'Ashish Vishwakarma', stateLabel: 'Active', modifiedon: new Date().toISOString(), xml: '<form><tabs><tab name="tab_main"/></tabs></form>' }
+      ];
+      populateReassignUsers();
+      renderCurrentTab();
+      DV.notify('Loaded sample user settings & personal views.', 'info');
+    }
+
+    function populateReassignUsers() {
+      document.getElementById('reassign-user').innerHTML = '<option value="">Choose target user…</option>' +
+        userRows.map(u => `<option value="${DV.esc(u.userId)}">${DV.esc(u.fullName)} (${DV.esc(u.email)})</option>`).join('');
+    }
+
+    function getFilteredUsers() {
+      const q = document.getElementById('f-search').value.trim().toLowerCase();
+      return !q ? userRows : userRows.filter(u => `${u.fullName} ${u.email} ${u.timeZoneCode}`.toLowerCase().includes(q));
+    }
+
+    function getFilteredPv() {
+      const q = document.getElementById('f-search').value.trim().toLowerCase();
+      const kind = document.getElementById('pv-kind').value;
+      return pvRows.filter(p => {
+        if (kind !== 'ALL' && p.kind !== kind) return false;
+        if (!q) return true;
+        return `${p.name} ${p.table} ${p.ownerName} ${p.kindLabel}`.toLowerCase().includes(q);
+      });
+    }
+
+    function renderCurrentTab() {
+      document.getElementById('cnt-us').textContent = userRows.length;
+      document.getElementById('cnt-pv').textContent = pvRows.length;
+      DV.setTitle(`User Settings (${userRows.length})`);
+      if (activeTab === 'us') renderUsersTable();
+      else renderPvTable();
+    }
+
+    function renderUsersTable() {
+      const rows = getFilteredUsers();
+      const tbody = document.getElementById('us-tbody');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">No matching users.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(u => {
+        const tzHint = TZ_HINTS[u.timeZoneCode] ? ` · ${TZ_HINTS[u.timeZoneCode]}` : '';
+        return `<tr>
+          <td><input type="checkbox" class="us-chk" data-id="${DV.esc(u.userId)}" ${selectedUs.has(u.userId) ? 'checked' : ''}></td>
+          <td><strong>${DV.esc(u.fullName)}</strong></td>
+          <td>${DV.esc(u.email)}</td>
+          <td><strong>${u.pagingLimit ?? '—'}</strong></td>
+          <td><code>${u.timeZoneCode ?? '—'}</code><span style="font-size:11px;color:var(--text-sec);">${DV.esc(tzHint)}</span></td>
+          <td>${u.uiLanguageId ?? '—'}</td>
+          <td>${u.helpLanguageId ?? '—'}</td>
+          <td>${u.advFindMode === 1 ? 'Simple' : u.advFindMode === 2 ? 'Detailed' : (u.advFindMode ?? '—')}</td>
+        </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('.us-chk').forEach(chk => {
+        chk.addEventListener('change', () => {
+          if (chk.checked) selectedUs.add(chk.dataset.id);
+          else selectedUs.delete(chk.dataset.id);
+          updateUsButtons();
+        });
+      });
+      updateUsButtons();
+    }
+
+    function renderPvTable() {
+      const rows = getFilteredPv();
+      const tbody = document.getElementById('pv-tbody');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">No personal views or dashboards found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map((p, idx) => `<tr>
+        <td><input type="checkbox" class="pv-chk" data-id="${DV.esc(p.id)}" ${selectedPv.has(p.id) ? 'checked' : ''}></td>
+        <td>${DV.ui.badge(p.kindLabel, p.kind === 'view' ? 'info' : 'ok')}</td>
+        <td><strong>${DV.esc(p.name)}</strong></td>
+        <td><code>${DV.esc(p.table)}</code></td>
+        <td>${DV.esc(p.ownerName)}</td>
+        <td>${DV.ui.badge(p.stateLabel, p.stateLabel === 'Active' ? 'ok' : 'warn')}</td>
+        <td style="font-size:11px;font-family:monospace;">${p.modifiedon ? new Date(p.modifiedon).toLocaleDateString() : '—'}</td>
+        <td style="text-align:center;"><button class="dv-btn dv-btn-sm btn-xml" data-idx="${idx}">📄 XML</button></td>
+      </tr>`).join('');
+
+      tbody.querySelectorAll('.pv-chk').forEach(chk => {
+        chk.addEventListener('change', () => {
+          if (chk.checked) selectedPv.add(chk.dataset.id);
+          else selectedPv.delete(chk.dataset.id);
+          updatePvButtons();
+        });
+      });
+      tbody.querySelectorAll('.btn-xml').forEach(b => {
+        b.addEventListener('click', () => {
+          const item = rows[Number(b.dataset.idx)];
+          if (!item) return;
+          document.getElementById('xm-title').textContent = `${item.kindLabel}: ${item.name}`;
+          document.getElementById('xm-body').textContent = item.xml || '(empty)';
+          document.getElementById('xml-modal').classList.add('open');
+        });
+      });
+      updatePvButtons();
+    }
+
+    function updateUsButtons() {
+      document.getElementById('us-sel-count').textContent = selectedUs.size;
+      document.getElementById('btn-apply-us').disabled = selectedUs.size === 0;
+    }
+
+    function updatePvButtons() {
+      document.getElementById('pv-sel-count').textContent = selectedPv.size;
+      document.getElementById('btn-reassign-pv').disabled = selectedPv.size === 0 || !document.getElementById('reassign-user').value;
+    }
+
+    document.getElementById('btn-apply-us').addEventListener('click', async () => {
+      if (!selectedUs.size || !context) return;
+      const body = {};
+      const pg = document.getElementById('upd-paging').value;
+      const tz = document.getElementById('upd-tz').value.trim();
+      const lg = document.getElementById('upd-lang').value.trim();
+      if (pg) body.paginglimit = Number(pg);
+      if (tz !== '') body.timezonecode = Number(tz);
+      if (lg !== '') body.uilanguageid = Number(lg);
+      if (!Object.keys(body).length) { DV.notify('Choose at least one field value to update.', 'warning'); return; }
+
+      let ok = 0;
+      for (const uid of selectedUs) {
+        try {
+          await DV.fetch(`/usersettingscollection(${uid})`, { method: 'PATCH', body });
+          ok++;
+        } catch (err) {
+          DV.notify(`Failed updating ${uid}: ${err.message}`, 'error');
+        }
+      }
+      if (ok) {
+        DV.notify(`Updated settings for ${ok} user(s).`, 'success');
+        loadAllData();
+      }
+    });
+
+    document.getElementById('btn-reassign-pv').addEventListener('click', async () => {
+      const targetUserId = document.getElementById('reassign-user').value;
+      if (!targetUserId || !selectedPv.size || !context) return;
+      let ok = 0;
+      for (const id of selectedPv) {
+        const item = pvRows.find(p => p.id === id);
+        if (!item) continue;
+        try {
+          await DV.fetch(`/${item.entitySet}(${id})`, {
+            method: 'PATCH',
+            body: { 'ownerid@odata.bind': `/systemusers(${targetUserId})` }
+          });
+          ok++;
+        } catch (err) {
+          DV.notify(`Reassign failed for ${item.name}: ${err.message}`, 'error');
+        }
+      }
+      if (ok) {
+        selectedPv.clear();
+        DV.notify(`Reassigned ${ok} item(s).`, 'success');
+        loadAllData();
+      }
+    });
+
+    document.getElementById('tab-us-btn').addEventListener('click', () => {
+      activeTab = 'us';
+      document.getElementById('tab-us-btn').classList.add('active');
+      document.getElementById('tab-pv-btn').classList.remove('active');
+      document.getElementById('panel-us').style.display = 'flex';
+      document.getElementById('panel-pv').style.display = 'none';
+      renderCurrentTab();
+    });
+    document.getElementById('tab-pv-btn').addEventListener('click', () => {
+      activeTab = 'pv';
+      document.getElementById('tab-pv-btn').classList.add('active');
+      document.getElementById('tab-us-btn').classList.remove('active');
+      document.getElementById('panel-pv').style.display = 'flex';
+      document.getElementById('panel-us').style.display = 'none';
+      renderCurrentTab();
+    });
+
+    document.getElementById('chk-us-all').addEventListener('change', e => {
+      getFilteredUsers().forEach(u => e.target.checked ? selectedUs.add(u.userId) : selectedUs.delete(u.userId));
+      renderUsersTable();
+    });
+    document.getElementById('chk-pv-all').addEventListener('change', e => {
+      getFilteredPv().forEach(p => e.target.checked ? selectedPv.add(p.id) : selectedPv.delete(p.id));
+      renderPvTable();
+    });
+
+    document.getElementById('reassign-user').addEventListener('change', updatePvButtons);
+    document.getElementById('f-search').addEventListener('input', renderCurrentTab);
+    document.getElementById('pv-kind').addEventListener('change', renderCurrentTab);
+    document.getElementById('btn-sample').addEventListener('click', loadSampleData);
+    document.getElementById('btn-refresh').addEventListener('click', () => context ? loadAllData() : loadSampleData());
+    document.getElementById('xm-close').addEventListener('click', () => document.getElementById('xml-modal').classList.remove('open'));
+    document.getElementById('xm-ok').addEventListener('click', () => document.getElementById('xml-modal').classList.remove('open'));
+    document.getElementById('btn-export').addEventListener('click', () => {
+      if (activeTab === 'us') {
+        const rows = getFilteredUsers();
+        DV.exportCsv(`user_settings_${new Date().toISOString().slice(0, 10)}.csv`,
+          ['FullName', 'Email', 'PagingLimit', 'TimeZoneCode', 'UILanguageId', 'HelpLanguageId', 'AdvFindMode', 'UserId'],
+          rows.map(u => [u.fullName, u.email, u.pagingLimit, u.timeZoneCode, u.uiLanguageId, u.helpLanguageId, u.advFindMode, u.userId]));
+      } else {
+        const rows = getFilteredPv();
+        DV.exportCsv(`personal_views_${new Date().toISOString().slice(0, 10)}.csv`,
+          ['Type', 'Name', 'Table', 'Owner', 'State', 'Modified', 'Id'],
+          rows.map(p => [p.kindLabel, p.name, p.table, p.ownerName, p.stateLabel, p.modifiedon, p.id]));
+      }
+    });
+  </script>
+</body>
+</html>

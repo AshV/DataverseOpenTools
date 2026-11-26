@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Business Units & Queues</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "bu-queues",
+    "name":           "BU & Queue Explorer",
+    "version":        "1.0.0",
+    "description":    "Visualize Business Unit hierarchy trees, default teams & divisions, plus inspect Public/Private Queues, email routing, and queue members.",
+    "icon":           "🏢",
+    "category":       "Security",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+
+  <style>
+    .bq-tabs { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .bq-tab {
+      border: none; background: var(--bg-header); color: var(--text-sec);
+      padding: 5px 11px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .bq-tab + .bq-tab { border-left: 1px solid var(--border); }
+    .bq-tab.active { background: var(--accent, #0078d4); color: #fff; }
+    .bu-tree-node {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 8px 12px; border-bottom: 1px solid var(--border);
+    }
+    .bu-tree-node:hover { background: var(--row-hover, rgba(0, 120, 212, 0.05)); }
+    .bu-indent { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+    .q-row { cursor: pointer; }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <strong>🏢 Business Units &amp; Queues</strong>
+    <div class="bq-tabs">
+      <button type="button" class="bq-tab active" data-t="bu">🌳 BU Hierarchy (<span id="cnt-bu">0</span>)</button>
+      <button type="button" class="bq-tab" data-t="queues">📥 Queues &amp; Members (<span id="cnt-q">0</span>)</button>
+    </div>
+    <input type="text" id="f-search" placeholder="Filter Business Units, Teams, or Queues…" style="min-width:240px;">
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-sample">🧪 Sample</button>
+    <button class="dv-btn" id="btn-refresh">↻ Refresh</button>
+    <button class="dv-btn dv-btn-primary" id="btn-export">📥 Export CSV</button>
+  </div>
+
+  <div class="dv-strip">
+    <span>Business Units: <strong id="st-bu">0</strong></span>
+    <span>Default / Owner Teams: <strong id="st-teams">0</strong></span>
+    <span>Total Queues: <strong id="st-q">0</strong></span>
+    <span>Public Queues: <strong id="st-pub" style="color:var(--ok-color)">0</strong></span>
+    <div class="dv-spacer"></div>
+    <span style="font-size:11px;color:var(--text-sec);">Click any Queue to inspect active members</span>
+  </div>
+
+  <div class="dv-scroll" id="bu-panel">
+    <div id="bu-tree">
+      <div class="dv-empty">Connecting to Dataverse…</div>
+    </div>
+  </div>
+
+  <div class="dv-scroll" id="q-panel" style="display:none;">
+    <table class="dv-table">
+      <thead>
+        <tr>
+          <th style="min-width:210px;">Queue Name</th>
+          <th style="width:105px;">Visibility</th>
+          <th style="min-width:170px;">Business Unit</th>
+          <th style="min-width:190px;">Email Address</th>
+          <th style="width:155px;">Incoming Method</th>
+          <th style="width:140px;">Owner</th>
+          <th style="width:85px;">State</th>
+        </tr>
+      </thead>
+      <tbody id="q-tbody">
+        <tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-sec);">Connecting to Dataverse…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Business Unit &amp; Queue Explorer</span>
+  </footer>
+
+  <div class="dv-overlay" id="q-modal">
+    <div class="dv-modal" style="width:620px;max-width:94vw;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <strong id="qm-title">Queue Members</strong>
+        <button class="dv-btn dv-btn-sm" id="qm-close">✕</button>
+      </div>
+      <div id="qm-meta" style="font-size:12px;color:var(--text-sec);"></div>
+      <div id="qm-body" style="max-height:320px;overflow:auto;"></div>
+      <div style="display:flex;justify-content:flex-end;">
+        <button class="dv-btn dv-btn-primary" id="qm-ok">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let context = null;
+    let activeTab = 'bu';
+    let units = [];
+    let teams = [];
+    let queues = [];
+    let isSample = false;
+
+    const INCOMING_LABELS = { 0: 'None', 1: 'Email Router / SSS', 2: 'Server-Side Sync', 3: 'Forward Mailbox' };
+
+    function toHost(type, payload = {}) {
+      window.parent?.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
+    }
+
+    toHost('TOOL_READY');
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') {
+        context = e.data.payload;
+        loadBuAndQueues();
+      }
+    });
+
+    async function fetchAllPages(path) {
+      const all = [];
+      let next = path;
+      while (next && all.length < 2000) {
+        const res = await DV.fetch(next);
+        all.push(...(res.value || []));
+        next = res['@odata.nextLink'] || '';
+      }
+      return all;
+    }
+
+    function flattenBuTree(unitList, parentId = null, depth = 0, visited = new Set()) {
+      const children = unitList
+        .filter(u => (u.parentId || null) === parentId && !visited.has(u.id))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      const out = [];
+      for (const c of children) {
+        visited.add(c.id);
+        out.push({ unit: c, depth });
+        out.push(...flattenBuTree(unitList, c.id, depth + 1, visited));
+      }
+      if (depth === 0) {
+        for (const u of unitList) {
+          if (!visited.has(u.id)) { visited.add(u.id); out.push({ unit: u, depth: 0 }); }
+        }
+      }
+      return out;
+    }
+
+    async function loadBuAndQueues() {
+      isSample = false;
+      try {
+        const [buRes, teamRes, qRes] = await Promise.all([
+          fetchAllPages('/businessunits?$select=businessunitid,name,_parentbusinessunitid_value,divisionname,costcenter,isdisabled&$orderby=name asc'),
+          fetchAllPages('/teams?$select=teamid,name,teamtype,_businessunitid_value,isdefault&$orderby=name asc'),
+          fetchAllPages('/queues?$select=queueid,name,queueviewtype,emailaddress,_businessunitid_value,_ownerid_value,incomingemaildeliverymethod,statecode&$orderby=name asc')
+        ]);
+
+        units = buRes.map(u => ({
+          id: String(u.businessunitid).toLowerCase(),
+          name: u.name || 'Unnamed BU',
+          parentId: u._parentbusinessunitid_value ? String(u._parentbusinessunitid_value).toLowerCase() : null,
+          division: u.divisionname || '',
+          costCenter: u.costcenter || '',
+          disabled: !!u.isdisabled
+        }));
+        teams = teamRes.map(t => ({
+          id: String(t.teamid).toLowerCase(),
+          name: t.name || 'Team',
+          buId: t._businessunitid_value ? String(t._businessunitid_value).toLowerCase() : '',
+          isDefault: !!t.isdefault,
+          type: t.teamtype
+        }));
+        const buById = new Map(units.map(u => [u.id, u.name]));
+        queues = qRes.map(q => {
+          const buId = q._businessunitid_value ? String(q._businessunitid_value).toLowerCase() : '';
+          return {
+            id: q.queueid,
+            name: q.name || 'Unnamed Queue',
+            isPrivate: q.queueviewtype === 1,
+            viewTypeLabel: q.queueviewtype === 1 ? 'Private' : 'Public',
+            buId,
+            buName: q['_businessunitid_value@OData.Community.Display.V1.FormattedValue'] || buById.get(buId) || '—',
+            email: q.emailaddress || '—',
+            incoming: INCOMING_LABELS[q.incomingemaildeliverymethod] || `Method ${q.incomingemaildeliverymethod ?? 0}`,
+            owner: q['_ownerid_value@OData.Community.Display.V1.FormattedValue'] || q._ownerid_value || '—',
+            active: q.statecode === 0
+          };
+        });
+
+        renderView();
+        DV.notify(`Loaded ${units.length} Business Units & ${queues.length} Queues.`, 'success');
+      } catch (err) {
+        DV.notify(err.message, 'error');
+      }
+    }
+
+    function loadSampleData() {
+      isSample = true;
+      units = [
+        { id: 'bu1', name: 'Contoso Root Org', parentId: null, division: 'HQ', costCenter: 'CC-100', disabled: false },
+        { id: 'bu2', name: 'North America Sales', parentId: 'bu1', division: 'Americas', costCenter: 'CC-210', disabled: false },
+        { id: 'bu3', name: 'EMEA Enterprise', parentId: 'bu1', division: 'EMEA', costCenter: 'CC-310', disabled: false },
+        { id: 'bu4', name: 'US West Field Ops', parentId: 'bu2', division: 'West', costCenter: 'CC-215', disabled: false }
+      ];
+      teams = [
+        { id: 't1', name: 'Contoso Root Org', buId: 'bu1', isDefault: true, type: 0 },
+        { id: 't2', name: 'NA Deal Desk Team', buId: 'bu2', isDefault: false, type: 0 },
+        { id: 't3', name: 'EMEA Support Team', buId: 'bu3', isDefault: true, type: 0 }
+      ];
+      queues = [
+        { id: 'q1', name: 'Tier 1 Customer Support', isPrivate: false, viewTypeLabel: 'Public', buId: 'bu1', buName: 'Contoso Root Org', email: 'support@contoso.com', incoming: 'Server-Side Sync', owner: 'Contoso Root Org', active: true, sampleMembers: ['Ashish V.', 'Priya Sharma'] },
+        { id: 'q2', name: 'VIP Escalations (Private)', isPrivate: true, viewTypeLabel: 'Private', buId: 'bu2', buName: 'North America Sales', email: 'vip@contoso.com', incoming: 'Server-Side Sync', owner: 'NA Deal Desk Team', active: true, sampleMembers: ['Alex Mercer'] }
+      ];
+      renderView();
+      DV.notify('Loaded sample Business Units & Queues.', 'info');
+    }
+
+    function renderView() {
+      const q = document.getElementById('f-search').value.trim().toLowerCase();
+      document.getElementById('cnt-bu').textContent = units.length;
+      document.getElementById('cnt-q').textContent = queues.length;
+      document.getElementById('st-bu').textContent = units.length;
+      document.getElementById('st-teams').textContent = teams.length;
+      document.getElementById('st-q').textContent = queues.length;
+      document.getElementById('st-pub').textContent = queues.filter(x => !x.isPrivate).length;
+      DV.setTitle(`BU & Queues (${units.length}/${queues.length})`);
+
+      const flat = flattenBuTree(units);
+      const filteredTree = !q ? flat : flat.filter(n => `${n.unit.name} ${n.unit.division} ${n.unit.costCenter}`.toLowerCase().includes(q));
+      const treeEl = document.getElementById('bu-tree');
+      if (!filteredTree.length) {
+        treeEl.innerHTML = '<div class="dv-empty">No matching Business Units.</div>';
+      } else {
+        treeEl.innerHTML = filteredTree.map(({ unit, depth }) => {
+          const buTeams = teams.filter(t => t.buId === unit.id);
+          const buQueues = queues.filter(x => x.buId === unit.id);
+          const pad = depth * 24;
+          const prefix = depth === 0 ? '🏛️' : '└─ 🏢';
+          return `<div class="bu-tree-node">
+            <div class="bu-indent" style="padding-left:${pad}px;">
+              <span>${prefix}</span>
+              <span>${DV.esc(unit.name)}</span>
+              ${unit.disabled ? DV.ui.badge('Disabled', 'err') : ''}
+              ${unit.division ? `<span style="font-size:11px;font-weight:400;color:var(--text-sec);">(${DV.esc(unit.division)})</span>` : ''}
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--text-sec);">
+              <span>👥 ${buTeams.length} team${buTeams.length === 1 ? '' : 's'}</span>
+              <span>📥 ${buQueues.length} queue${buQueues.length === 1 ? '' : 's'}</span>
+              ${unit.costCenter ? `<code>${DV.esc(unit.costCenter)}</code>` : ''}
+            </div>
+          </div>`;
+        }).join('');
+      }
+
+      const fQueues = !q ? queues : queues.filter(x => `${x.name} ${x.buName} ${x.email} ${x.owner}`.toLowerCase().includes(q));
+      const qBody = document.getElementById('q-tbody');
+      qBody.innerHTML = fQueues.length ? fQueues.map((x, idx) => `<tr class="q-row" data-idx="${idx}">
+        <td><strong>${DV.esc(x.name)}</strong></td>
+        <td>${DV.ui.badge(x.viewTypeLabel, x.isPrivate ? 'warn' : 'ok')}</td>
+        <td>${DV.esc(x.buName)}</td>
+        <td><code>${DV.esc(x.email)}</code></td>
+        <td>${DV.esc(x.incoming)}</td>
+        <td>${DV.esc(x.owner)}</td>
+        <td>${DV.ui.badge(x.active ? 'Active' : 'Inactive', x.active ? 'ok' : 'warn')}</td>
+      </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-sec);">No matching Queues found.</td></tr>';
+
+      qBody.querySelectorAll('.q-row').forEach(tr => tr.addEventListener('click', () => {
+        const item = fQueues[Number(tr.dataset.idx)];
+        if (item) inspectQueueMembers(item);
+      }));
+    }
+
+    async function inspectQueueMembers(qItem) {
+      document.getElementById('qm-title').textContent = `📥 ${qItem.name} — Members`;
+      document.getElementById('qm-meta').textContent = `${qItem.viewTypeLabel} · BU: ${qItem.buName} · Email: ${qItem.email}`;
+      const body = document.getElementById('qm-body');
+      document.getElementById('q-modal').classList.add('open');
+
+      if (isSample || !context) {
+        const list = qItem.sampleMembers || [];
+        body.innerHTML = list.length
+          ? `<ul style="padding-left:18px;margin:8px 0;">${list.map(m => `<li>${DV.esc(m)}</li>`).join('')}</ul>`
+          : '<div style="padding:14px;color:var(--text-sec);">No members listed in sample.</div>';
+        return;
+      }
+
+      body.innerHTML = '<div style="padding:16px;color:var(--text-sec);">Loading queue members…</div>';
+      try {
+        const res = await DV.fetch(`/queues(${qItem.id})/queuemembership_association?$select=systemuserid,fullname,internalemailaddress`);
+        const members = res.value || [];
+        body.innerHTML = members.length
+          ? `<table class="dv-table"><thead><tr><th>User</th><th>Email</th></tr></thead><tbody>${members.map(m => `<tr><td><strong>${DV.esc(m.fullname)}</strong></td><td>${DV.esc(m.internalemailaddress || '—')}</td></tr>`).join('')}</tbody></table>`
+          : `<div style="padding:14px;color:var(--text-sec);">${qItem.isPrivate ? 'No explicit members assigned.' : 'Public queue — accessible to all BU users.'}</div>`;
+      } catch (err) {
+        body.innerHTML = `<div style="padding:14px;color:var(--err-color);">${DV.esc(err.message)}</div>`;
+      }
+    }
+
+    document.querySelectorAll('.bq-tab').forEach(b => b.addEventListener('click', () => {
+      activeTab = b.dataset.t;
+      document.querySelectorAll('.bq-tab').forEach(x => x.classList.toggle('active', x === b));
+      document.getElementById('bu-panel').style.display = activeTab === 'bu' ? 'block' : 'none';
+      document.getElementById('q-panel').style.display = activeTab === 'queues' ? 'block' : 'none';
+    }));
+
+    document.getElementById('f-search').addEventListener('input', renderView);
+    document.getElementById('btn-sample').addEventListener('click', loadSampleData);
+    document.getElementById('btn-refresh').addEventListener('click', () => context ? loadBuAndQueues() : loadSampleData());
+    document.getElementById('qm-close').addEventListener('click', () => document.getElementById('q-modal').classList.remove('open'));
+    document.getElementById('qm-ok').addEventListener('click', () => document.getElementById('q-modal').classList.remove('open'));
+    document.getElementById('btn-export').addEventListener('click', () => {
+      if (activeTab === 'bu') {
+        DV.exportCsv(`business_units_${new Date().toISOString().slice(0, 10)}.csv`,
+          ['Name', 'Division', 'CostCenter', 'Disabled', 'ParentBUId', 'BusinessUnitId'],
+          units.map(u => [u.name, u.division, u.costCenter, u.disabled ? 'Yes' : 'No', u.parentId || '', u.id]));
+      } else {
+        DV.exportCsv(`queues_${new Date().toISOString().slice(0, 10)}.csv`,
+          ['Name', 'Visibility', 'BusinessUnit', 'Email', 'IncomingMethod', 'Owner', 'State', 'QueueId'],
+          queues.map(q => [q.name, q.viewTypeLabel, q.buName, q.email, q.incoming, q.owner, q.active ? 'Active' : 'Inactive', q.id]));
+      }
+    });
+  </script>
+</body>
+</html>
