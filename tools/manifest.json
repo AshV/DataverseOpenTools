@@ -95,9 +95,9 @@
     "name": "Process Cascade Tracer",
     "icon": "🕸️",
     "category": "Diagnostics",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "minHostVersion": "2025.11.1",
-    "description": "Trace multi-hop automation chains across Cloud Flows, Plugins, Webhooks, Classic Workflows, and Business Rules when a flow runs or a table field changes—including downstream writes and loop hazards."
+    "description": "Trace multi-hop automation chains across Cloud Flows, Plugins, Webhooks, Classic Workflows, and Business Rules with an interactive Flowchart, Cascade Tree, Edge Table, and loop detection."
   },
   {
     "wrName": "dvopentools_tablemap.html",
