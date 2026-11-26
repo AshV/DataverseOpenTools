@@ -66,6 +66,7 @@ function parseArgs(argv) {
     rawEnv: '',
     port: null,
     auth: '',
+    logMode: '',
     localOnly: null,
     buildManifest: false,
     buildBundle: false,
@@ -91,6 +92,10 @@ function parseArgs(argv) {
     else if (arg.startsWith('--port=')) cli.port = parseInt(arg.slice(7), 10) || null;
     else if (arg === '--auth' && argv[i + 1]) cli.auth = argv[++i].toLowerCase();
     else if (arg.startsWith('--auth=')) cli.auth = arg.slice(7).toLowerCase();
+    else if (arg === '--verbose' || arg === '-v') cli.logMode = 'all';
+    else if (arg === '--quiet' || arg === '-q') cli.logMode = 'quiet';
+    else if (arg === '--log' && argv[i + 1]) cli.logMode = argv[++i].toLowerCase();
+    else if (arg.startsWith('--log=')) cli.logMode = arg.slice(6).toLowerCase();
   }
 
   const loadedCfg = cli.help || cli.buildManifest || cli.buildBundle ? null : loadDevServerConfig(cli.configPath);
@@ -99,6 +104,7 @@ function parseArgs(argv) {
   const envVarUrl = (process.env.DV_ENV_URL || '').trim();
   const envVarPort = parseInt(process.env.PORT || '', 10) || null;
   const envVarAuth = (process.env.DV_AUTH_MODE || '').trim().toLowerCase();
+  const envVarLog = (process.env.DV_LOG_MODE || '').trim().toLowerCase();
 
   let activeEnvName = '';
   let profile = null;
@@ -134,6 +140,7 @@ function parseArgs(argv) {
     envUrl: rawResolvedEnv ? normalizeEnvUrl(rawResolvedEnv) : '',
     port: cli.port || envVarPort || (profile && parseInt(profile.port, 10)) || parseInt(cfg.port, 10) || 8787,
     auth: cli.auth || envVarAuth || (profile && String(profile.auth || '').toLowerCase()) || String(cfg.auth || 'auto').toLowerCase(),
+    logMode: cli.logMode || envVarLog || (profile && String(profile.logMode || '').toLowerCase()) || String(cfg.logMode || 'api').toLowerCase(),
     localOnly: cli.localOnly !== null ? cli.localOnly : Boolean(profile?.localOnly ?? cfg.localOnly ?? false),
     buildManifest: cli.buildManifest,
     buildBundle: cli.buildBundle,
@@ -385,14 +392,33 @@ function serveFile(res, filePath) {
   res.end(body);
 }
 
+function formatLogTime() {
+  return new Date().toTimeString().slice(0, 8);
+}
+
+function truncateLogUrl(rawUrl, maxLen = 140) {
+  const s = String(rawUrl || '/');
+  return s.length > maxLen ? s.slice(0, maxLen - 3) + '...' : s;
+}
+
+function logHttpRequest(opts, method, rawUrl, status, durationMs, category = 'static', note = '') {
+  const mode = (opts?.logMode || 'api').toLowerCase();
+  const isError = Number(status) >= 500 || category === 'error';
+  if (mode === 'quiet' && !isError) return;
+  if (mode === 'api' && category !== 'api' && !isError) return;
+  const suffix = note ? ` [${note}]` : '';
+  console.log(`[${formatLogTime()}] ${String(method || 'GET').padEnd(4)} ${truncateLogUrl(rawUrl)} -> ${status} (${Math.round(durationMs)}ms)${suffix}`);
+}
+
 /* ─── Dataverse HTTPS Proxy ────────────────────────────────── */
-function proxyToDataverse(req, res, opts, reqBodyBuffer, retried = false) {
+function proxyToDataverse(req, res, opts, reqBodyBuffer, retried = false, onLogDone = null) {
   let token;
   try {
     token = getBearerToken(opts, retried);
   } catch (err) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: `Local dev-server token error: ${err.message}` } }));
+    if (onLogDone) onLogDone(401, 'api', 'token error');
     return;
   }
 
@@ -413,10 +439,11 @@ function proxyToDataverse(req, res, opts, reqBodyBuffer, retried = false) {
     // Retry once with refreshed CLI token on 401
     if (proxyRes.statusCode === 401 && !retried) {
       proxyRes.resume();
-      proxyToDataverse(req, res, opts, reqBodyBuffer, true);
+      proxyToDataverse(req, res, opts, reqBodyBuffer, true, onLogDone);
       return;
     }
 
+    const note = retried ? 'token refreshed' : '';
     if (isWebResourceDiscovery && proxyRes.statusCode === 200) {
       const chunks = [];
       proxyRes.on('data', c => chunks.push(c));
@@ -440,17 +467,21 @@ function proxyToDataverse(req, res, opts, reqBodyBuffer, retried = false) {
           res.writeHead(200, sanitizeResponseHeaders(proxyRes.headers));
           res.end(Buffer.concat(chunks));
         }
+        if (onLogDone) onLogDone(200, 'api', note);
       });
       return;
     }
 
-    res.writeHead(proxyRes.statusCode || 502, sanitizeResponseHeaders(proxyRes.headers));
+    const code = proxyRes.statusCode || 502;
+    res.writeHead(code, sanitizeResponseHeaders(proxyRes.headers));
     proxyRes.pipe(res);
+    if (onLogDone) onLogDone(code, 'api', note);
   });
 
   proxyReq.on('error', err => {
     res.writeHead(502, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: `Dataverse proxy error: ${err.message}` } }));
+    if (onLogDone) onLogDone(502, 'error', err.message);
   });
 
   if (reqBodyBuffer.length > 0) proxyReq.write(reqBodyBuffer);
@@ -471,11 +502,16 @@ function sanitizeResponseHeaders(hdrs) {
 /* ─── HTTP Server Factory ──────────────────────────────────── */
 function createDevServer(opts) {
   return http.createServer((req, res) => {
+    const startMs = Date.now();
+    const logDone = (status, category = 'static', note = '') =>
+      logHttpRequest(opts, req.method, req.url || '/', status, Date.now() - startMs, category, note);
+
     applyCorsHeaders(req, res);
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       res.end();
+      logDone(204, 'static');
       return;
     }
 
@@ -493,17 +529,18 @@ function createDevServer(opts) {
         targetHost,
         localToolsCount: listLocalToolWebResources().length
       }));
+      logDone(200, 'static');
       return;
     }
 
     // 1. Home page & Host HTML
     if (reqUrl === '/' || reqUrl === '/index.html') {
       const homeFile = resolveSafeLocalFile('index.html') || resolveSafeLocalFile('dvot_host.html');
-      if (homeFile) { serveFile(res, homeFile); return; }
+      if (homeFile) { serveFile(res, homeFile); logDone(200, 'static'); return; }
     }
     if (reqUrl === '/dvot_host.html') {
       const hostFile = resolveSafeLocalFile('dvot_host.html');
-      if (hostFile) { serveFile(res, hostFile); return; }
+      if (hostFile) { serveFile(res, hostFile); logDone(200, 'static'); return; }
     }
 
     // 2. /WebResources/* -> Local tools/ (or root) file first (instant reload), else Dataverse proxy
@@ -512,12 +549,13 @@ function createDevServer(opts) {
       const localFile = resolveSafeLocalFile(wrName, TOOLS_DIR) || resolveSafeLocalFile(wrName, ROOT_DIR);
       if (localFile) {
         serveFile(res, localFile);
+        logDone(200, 'static', 'local');
         return;
       }
       if (!opts.localOnly && opts.envUrl) {
         const chunks = [];
         req.on('data', c => chunks.push(c));
-        req.on('end', () => proxyToDataverse(req, res, opts, Buffer.concat(chunks)));
+        req.on('end', () => proxyToDataverse(req, res, opts, Buffer.concat(chunks), false, logDone));
         return;
       }
     }
@@ -531,23 +569,26 @@ function createDevServer(opts) {
           if (/\/webresourceset/i.test(reqUrl)) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ value: listLocalToolWebResources() }));
+            logDone(200, 'api', 'local-only');
             return;
           }
           res.writeHead(503, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: { message: 'Running in local-only mode (pass --env https://yourorg.crm.dynamics.com to proxy live Dataverse calls).' } }));
+          logDone(503, 'api', 'local-only');
           return;
         }
-        proxyToDataverse(req, res, opts, Buffer.concat(chunks));
+        proxyToDataverse(req, res, opts, Buffer.concat(chunks), false, logDone);
       });
       return;
     }
 
     // 4. Other local files inside workspace
     const localFile = resolveSafeLocalFile(reqUrl);
-    if (localFile) { serveFile(res, localFile); return; }
+    if (localFile) { serveFile(res, localFile); logDone(200, 'static'); return; }
 
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not Found');
+    logDone(404, 'static');
   });
 }
 
@@ -566,6 +607,9 @@ Options:
   --config <path>   Path to JSON environment config (default: ./dev-server.config.json or dev-server/dev-server.config.json)
   --port <num>      Local HTTP port (default: 8787)
   --auth <mode>     Token source: auto (default), config (JSON token), pac (\`pac auth token\`), az (\`az account get-access-token\`), or env (DV_TOKEN)
+  --log <mode>      Request logging: api (default, /api/data/* only), all (--verbose), or quiet (--quiet)
+  --verbose         Log all requests including static files, /WebResources/*, and OPTIONS
+  --quiet           Only log 5xx / proxy errors
   --local-only      Serve local HTML tools without proxying Dataverse API calls
   --build-manifest  Regenerate tools/manifest.json from tools/dvot_*.html and exit
   --build-bundle    Generate a single-file tool bundle HTML (default: dist/dvot_bundle_all.html)
@@ -614,7 +658,7 @@ Options:
   server.listen(opts.port, '127.0.0.1', () => {
     console.log(`\n⚡ DV Open Tools Local Server running at: http://127.0.0.1:${opts.port}/dvot_host.html`);
     console.log(`   Mode: ${opts.localOnly ? 'Local UI only (no Dataverse proxy)' : `Proxying /api/data/* -> ${opts.envUrl}`}`);
-    console.log(`   Local tools auto-discovered: ${listLocalToolWebResources().length}\n`);
+    console.log(`   Request log: ${opts.logMode} · Local tools auto-discovered: ${listLocalToolWebResources().length}\n`);
   });
 }
 

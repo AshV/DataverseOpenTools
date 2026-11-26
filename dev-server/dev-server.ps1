@@ -17,7 +17,10 @@ param(
     [string]$Config = $(if ($env:DV_CONFIG) { $env:DV_CONFIG } else { '' }),
     [int]$Port = 0,
     [ValidateSet('', 'auto', 'pac', 'az', 'env', 'config')]
-    [string]$Auth = '',
+    [string]$Auth = $(if ($env:DV_AUTH_MODE) { '' } else { '' }),
+    [ValidateSet('', 'api', 'all', 'quiet')]
+    [string]$LogMode = '',
+    [switch]$Quiet,
     [switch]$LocalOnly,
     [switch]$BuildManifest,
     [switch]$BuildBundle,
@@ -50,6 +53,10 @@ if ($ExtraArgs) {
         elseif ($a.StartsWith('--port=')) { $Port = [int]$a.Substring(7) }
         elseif ($a -eq '--auth' -and ($i + 1) -lt $ExtraArgs.Count) { $Auth = $ExtraArgs[++$i].ToLowerInvariant() }
         elseif ($a.StartsWith('--auth=')) { $Auth = $a.Substring(7).ToLowerInvariant() }
+        elseif ($a -in @('--verbose', '-v')) { $LogMode = 'all' }
+        elseif ($a -in @('--quiet', '-q')) { $Quiet = $true; $LogMode = 'quiet' }
+        elseif ($a -eq '--log' -and ($i + 1) -lt $ExtraArgs.Count) { $LogMode = $ExtraArgs[++$i].ToLowerInvariant() }
+        elseif ($a.StartsWith('--log=')) { $LogMode = $a.Substring(6).ToLowerInvariant() }
     }
 }
 
@@ -58,13 +65,15 @@ if ($Help) {
 DV Open Tools — PowerShell Local Dev Server & Auth Proxy
 
 Usage:
-  .\dev-server\dev-server.ps1 [-Env <url|profile>] [-Config dev-server.config.json] [-Port 8787] [-Auth auto|pac|az|env|config] [-LocalOnly]
+  .\dev-server\dev-server.ps1 [-Env <url|profile>] [-Config dev-server.config.json] [-Port 8787] [-Auth auto|pac|az|env|config] [-Verbose|-Quiet] [-LocalOnly]
 
 Options:
   -Env <val>        Target Dataverse org URL or named environment in dev-server.config.json (auto-detected via ``pac org who`` if omitted)
   -Config <path>    Path to JSON environment config (default: ./dev-server.config.json or dev-server/dev-server.config.json)
   -Port <num>       Local HTTP port (default: 8787)
   -Auth <mode>      Token source: auto (default), config (JSON token), pac (``pac auth token``), az (``az account get-access-token``), or env (DV_TOKEN)
+  -LogMode <mode>   Request logging: api (default, /api/data/* only), all (-Verbose), or quiet (-Quiet)
+  -Verbose / -Quiet Log all requests including static files (-Verbose) or errors only (-Quiet)
   -LocalOnly        Serve local HTML tools without proxying Dataverse API calls
   -BuildManifest    Regenerate tools/manifest.json from tools/dvot_*.html and exit
   -BuildBundle      Generate a single-file tool bundle HTML (default: dist/dvot_bundle_all.html)
@@ -392,11 +401,26 @@ $handler.AllowAutoRedirect = $false
 $Script:HttpClient = New-Object System.Net.Http.HttpClient($handler)
 $Script:HttpClient.Timeout = [TimeSpan]::FromSeconds(120)
 
+function Write-HttpLog([string]$Mode, [string]$Method, [string]$RawUrl, [int]$Status, [long]$ElapsedMs, [string]$Category = 'static', [string]$Note = '') {
+    $m = if ($Mode) { $Mode.Trim().ToLowerInvariant() } else { 'api' }
+    $isErr = ($Status -ge 500) -or ($Category -eq 'error')
+    if ($m -eq 'quiet' -and -not $isErr) { return }
+    if ($m -eq 'api' -and $Category -ne 'api' -and -not $isErr) { return }
+    $u = if ($RawUrl) { $RawUrl } else { '/' }
+    if ($u.Length -gt 140) { $u = $u.Substring(0, 137) + '...' }
+    $time = (Get-Date).ToString('HH:mm:ss')
+    $meth = (if ($Method) { $Method } else { 'GET' }).PadRight(4)
+    $suffix = if ($Note) { " [$Note]" } else { '' }
+    Write-Host "[$time] $meth $u -> $Status ($($ElapsedMs)ms)$suffix"
+}
+
 function Invoke-DataverseProxy($Req, $Res, [string]$RawUrl, [string]$EnvUrl, [string]$AuthMode, [byte[]]$BodyBytes, [bool]$Retried = $false) {
+    $Script:LastProxyNote = if ($Retried) { 'token refreshed' } else { '' }
     $token = $null
     try {
         $token = Get-BearerToken $EnvUrl $AuthMode $false $Retried
     } catch {
+        $Script:LastProxyNote = 'token error'
         $errJson = (@{ error = @{ message = "Local dev-server token error: $($_.Exception.Message)" } } | ConvertTo-Json -Compress)
         Write-ResponseBytes $Res 401 'application/json; charset=utf-8' ([System.Text.Encoding]::UTF8.GetBytes($errJson))
         return
@@ -572,6 +596,17 @@ if (-not $Auth) {
     $Auth = if ($envVarAuth) { $envVarAuth } elseif ($pAuth) { $pAuth.Trim().ToLowerInvariant() } elseif ($cAuth) { $cAuth.Trim().ToLowerInvariant() } else { 'auto' }
 }
 
+$envVarLog = if ($env:DV_LOG_MODE) { $env:DV_LOG_MODE.Trim().ToLowerInvariant() } else { '' }
+if ($PSBoundParameters.ContainsKey('Verbose')) {
+    $LogMode = 'all'
+} elseif ($Quiet) {
+    $LogMode = 'quiet'
+} elseif (-not $LogMode) {
+    $pLog = [string](Get-ObjProp $profileObj 'logMode')
+    $cLog = [string](Get-ObjProp $cfg 'logMode')
+    $LogMode = if ($envVarLog) { $envVarLog } elseif ($pLog) { $pLog.Trim().ToLowerInvariant() } elseif ($cLog) { $cLog.Trim().ToLowerInvariant() } else { 'api' }
+}
+
 if (-not $PSBoundParameters.ContainsKey('LocalOnly') -and -not $LocalOnly) {
     $pLocal = Get-ObjProp $profileObj 'localOnly'
     $cLocal = Get-ObjProp $cfg 'localOnly'
@@ -621,13 +656,17 @@ $listener.Start()
 try {
     Write-Host "`n⚡ DV Open Tools Local Server (PowerShell) running at: ${prefixUrl}dvot_host.html"
     Write-Host "   Mode: $(if ($LocalOnly) { 'Local UI only (no Dataverse proxy)' } else { "Proxying /api/data/* -> $Env" })"
-    Write-Host "   Local tools auto-discovered: $((Get-LocalToolWebResources).Count)"
+    Write-Host "   Request log: $LogMode · Local tools auto-discovered: $((Get-LocalToolWebResources).Count)"
     Write-Host "   Press Ctrl+C to stop.`n"
 
     while ($listener.IsListening) {
         $ctx = $listener.GetContext()
         $req = $ctx.Request
         $res = $ctx.Response
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $rawUrl = if ($req.RawUrl) { $req.RawUrl } else { '/' }
+        $logCat = 'static'
+        $Script:LastProxyNote = ''
         try {
             Apply-CorsHeaders $req $res
             if ($req.HttpMethod -ieq 'OPTIONS') {
@@ -636,7 +675,6 @@ try {
                 continue
             }
 
-            $rawUrl = if ($req.RawUrl) { $req.RawUrl } else { '/' }
             $reqPath = ($rawUrl -split '\?', 2)[0]
 
             if ($reqPath -eq '/_proxy/status') {
@@ -668,9 +706,10 @@ try {
                 $wrName = $reqPath.Substring('/WebResources/'.Length)
                 $localFile = Resolve-SafeLocalFile $wrName $ToolsDir
                 if (-not $localFile) { $localFile = Resolve-SafeLocalFile $wrName $RootDir }
-                if ($localFile) { Serve-LocalFile $res $localFile; continue }
+                if ($localFile) { $Script:LastProxyNote = 'local'; Serve-LocalFile $res $localFile; continue }
 
                 if (-not $LocalOnly -and $Env) {
+                    $logCat = 'api'
                     $bodyBytes = Read-RequestBody $req
                     Invoke-DataverseProxy $req $res $rawUrl $Env $Auth $bodyBytes $false
                     continue
@@ -678,8 +717,10 @@ try {
             }
 
             if ($reqPath.StartsWith('/api/data/', [System.StringComparison]::Ordinal)) {
+                $logCat = 'api'
                 $bodyBytes = Read-RequestBody $req
                 if ($LocalOnly -or -not $Env) {
+                    $Script:LastProxyNote = 'local-only'
                     if ($reqPath -match '/webresourceset') {
                         $wrJson = (@{ value = @(Get-LocalToolWebResources) } | ConvertTo-Json -Depth 5 -Compress)
                         Write-ResponseBytes $res 200 'application/json; charset=utf-8' ([System.Text.Encoding]::UTF8.GetBytes($wrJson))
@@ -698,10 +739,17 @@ try {
 
             Write-ResponseBytes $res 404 'text/plain; charset=utf-8' ([System.Text.Encoding]::UTF8.GetBytes('Not Found'))
         } catch {
+            $logCat = 'error'
+            $Script:LastProxyNote = $_.Exception.Message
             try {
                 $errJson = (@{ error = @{ message = "Local PowerShell proxy error: $($_.Exception.Message)" } } | ConvertTo-Json -Compress)
                 Write-ResponseBytes $res 500 'application/json; charset=utf-8' ([System.Text.Encoding]::UTF8.GetBytes($errJson))
             } catch {}
+        } finally {
+            $sw.Stop()
+            $code = 500
+            try { $code = [int]$res.StatusCode } catch {}
+            Write-HttpLog $LogMode $req.HttpMethod $rawUrl $code $sw.ElapsedMilliseconds $logCat $Script:LastProxyNote
         }
     }
 } finally {

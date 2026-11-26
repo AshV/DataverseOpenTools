@@ -49,6 +49,7 @@ internal static class Program
         public string EnvUrl { get; set; } = "";
         public int Port { get; set; } = 8787;
         public string Auth { get; set; } = "auto";
+        public string LogMode { get; set; } = "api";
         public bool LocalOnly { get; set; }
         public bool BuildManifest { get; set; }
         public bool BuildBundle { get; set; }
@@ -125,7 +126,7 @@ internal static class Program
         Console.WriteLine($"⚡ DV Open Tools Local Server (.NET) running at: {prefix}dvot_host.html");
         Console.WriteLine($"   Workspace root: {rootDir}");
         Console.WriteLine($"   Mode: {(opts.LocalOnly ? "Local UI only (no Dataverse proxy)" : $"Proxying /api/data/* -> {opts.EnvUrl}")}");
-        Console.WriteLine($"   Local tools auto-discovered: {ListLocalToolWebResources(rootDir, toolsDir).Count}");
+        Console.WriteLine($"   Request log: {opts.LogMode} · Local tools auto-discovered: {ListLocalToolWebResources(rootDir, toolsDir).Count}");
         Console.WriteLine("   Press Ctrl+C to stop.");
         Console.WriteLine();
 
@@ -176,6 +177,9 @@ Options:
   --config <path>   Path to JSON environment config (default: ./dev-server.config.json or dev-server/dev-server.config.json)
   --port <num>      Local HTTP port (default: 8787)
   --auth <mode>     Token source: auto (default), config (JSON token), pac (`pac auth token`), az (`az account get-access-token`), or env (DV_TOKEN)
+  --log <mode>      Request logging: api (default, /api/data/* only), all (--verbose), or quiet (--quiet)
+  --verbose         Log all requests including static files, /WebResources/*, and OPTIONS
+  --quiet           Only log 5xx / proxy errors
   --local-only      Serve local HTML tools without proxying Dataverse API calls
   --build-manifest  Regenerate tools/manifest.json from tools/dvot_*.html and exit
   --build-bundle    Generate a single-file tool bundle HTML (default: dist/dvot_bundle_all.html)
@@ -261,6 +265,7 @@ Options:
         var rawEnv = "";
         int? cliPort = null;
         var cliAuth = "";
+        var cliLog = "";
         bool? cliLocalOnly = null;
         var buildManifest = false;
         var buildBundle = false;
@@ -287,6 +292,10 @@ Options:
             else if (arg.StartsWith("--port=")) cliPort = int.TryParse(arg[7..], out var pv2) && pv2 > 0 ? pv2 : null;
             else if (arg == "--auth" && i + 1 < args.Length) cliAuth = args[++i].Trim().ToLowerInvariant();
             else if (arg.StartsWith("--auth=")) cliAuth = arg[7..].Trim().ToLowerInvariant();
+            else if (arg is "--verbose" or "-v") cliLog = "all";
+            else if (arg is "--quiet" or "-q") cliLog = "quiet";
+            else if (arg == "--log" && i + 1 < args.Length) cliLog = args[++i].Trim().ToLowerInvariant();
+            else if (arg.StartsWith("--log=", StringComparison.Ordinal)) cliLog = arg[6..].Trim().ToLowerInvariant();
         }
 
         var loadedCfg = (help || buildManifest || buildBundle) ? null : LoadDevServerConfig(configPath, rootDir);
@@ -295,6 +304,7 @@ Options:
         var envVarUrl = (Environment.GetEnvironmentVariable("DV_ENV_URL") ?? "").Trim();
         var envVarPort = int.TryParse(Environment.GetEnvironmentVariable("PORT"), out var ep) && ep > 0 ? ep : (int?)null;
         var envVarAuth = (Environment.GetEnvironmentVariable("DV_AUTH_MODE") ?? "").Trim().ToLowerInvariant();
+        var envVarLog = (Environment.GetEnvironmentVariable("DV_LOG_MODE") ?? "").Trim().ToLowerInvariant();
 
         var activeEnvName = "";
         JsonObject? profile = null;
@@ -330,6 +340,7 @@ Options:
             : (!string.IsNullOrEmpty(requestedEnv) ? requestedEnv : (Str(cfg, "envUrl") is { Length: > 0 } ceu ? ceu : Str(cfg, "env")));
 
         var cfgAuth = Str(profile, "auth") is { Length: > 0 } pa ? pa : Str(cfg, "auth");
+        var cfgLog = Str(profile, "logMode") is { Length: > 0 } pl ? pl : Str(cfg, "logMode");
         var rawCfgToken = Str(profile, "token") is { Length: > 0 } pt ? pt
             : (Str(profile, "bearerToken") is { Length: > 0 } pbt ? pbt
             : (Str(cfg, "token") is { Length: > 0 } ct ? ct : Str(cfg, "bearerToken")));
@@ -343,6 +354,7 @@ Options:
             EnvUrl = NormalizeEnvUrl(rawResolvedUrl),
             Port = cliPort ?? envVarPort ?? Num(profile, "port") ?? Num(cfg, "port") ?? 8787,
             Auth = !string.IsNullOrEmpty(cliAuth) ? cliAuth : (!string.IsNullOrEmpty(envVarAuth) ? envVarAuth : (!string.IsNullOrEmpty(cfgAuth) ? cfgAuth.Trim().ToLowerInvariant() : "auto")),
+            LogMode = !string.IsNullOrEmpty(cliLog) ? cliLog : (!string.IsNullOrEmpty(envVarLog) ? envVarLog : (!string.IsNullOrEmpty(cfgLog) ? cfgLog.Trim().ToLowerInvariant() : "api")),
             LocalOnly = cliLocalOnly ?? Bool(profile, "localOnly") ?? Bool(cfg, "localOnly") ?? false,
             BuildManifest = buildManifest,
             BuildBundle = buildBundle,
@@ -727,10 +739,31 @@ Options:
         await WriteBytesAsync(res, 200, MimeTypeFor(filePath), bytes, "no-store");
     }
 
+    private static string TruncateLogUrl(string? rawUrl, int maxLen = 140)
+    {
+        var s = string.IsNullOrEmpty(rawUrl) ? "/" : rawUrl;
+        return s.Length > maxLen ? s[..(maxLen - 3)] + "..." : s;
+    }
+
+    private static void LogHttpRequest(ProxyOptions opts, string? method, string? rawUrl, int status, long elapsedMs, string category = "static", string note = "")
+    {
+        var mode = (opts.LogMode ?? "api").Trim().ToLowerInvariant();
+        var isError = status >= 500 || category == "error";
+        if (mode == "quiet" && !isError) return;
+        if (mode == "api" && category != "api" && !isError) return;
+        var time = DateTime.Now.ToString("HH:mm:ss");
+        var suffix = string.IsNullOrEmpty(note) ? "" : $" [{note}]";
+        Console.WriteLine($"[{time}] {(method ?? "GET"),-4} {TruncateLogUrl(rawUrl)} -> {status} ({elapsedMs}ms){suffix}");
+    }
+
     private static async Task HandleRequestAsync(HttpListenerContext ctx, string rootDir, string toolsDir, ProxyOptions opts)
     {
         var req = ctx.Request;
         var res = ctx.Response;
+        var sw = Stopwatch.StartNew();
+        var rawUrl = req.RawUrl ?? "/";
+        var category = "static";
+        var note = "";
         try
         {
             ApplyCorsHeaders(req, res);
@@ -742,7 +775,6 @@ Options:
                 return;
             }
 
-            var rawUrl = req.RawUrl ?? "/";
             var reqPath = rawUrl.Split('?')[0];
 
             if (reqPath == "/_proxy/status")
@@ -776,21 +808,24 @@ Options:
             {
                 var wrName = reqPath["/WebResources/".Length..];
                 var localTool = ResolveSafeLocalFile(wrName, toolsDir) ?? ResolveSafeLocalFile(wrName, rootDir);
-                if (localTool is not null) { await ServeFileAsync(res, localTool); return; }
+                if (localTool is not null) { note = "local"; await ServeFileAsync(res, localTool); return; }
 
                 if (!opts.LocalOnly && !string.IsNullOrEmpty(opts.EnvUrl))
                 {
+                    category = "api";
                     var body = await ReadRequestBodyAsync(req);
-                    await ProxyToDataverseAsync(req, res, rawUrl, rootDir, toolsDir, opts, body, retried: false);
+                    note = await ProxyToDataverseAsync(req, res, rawUrl, rootDir, toolsDir, opts, body, retried: false);
                     return;
                 }
             }
 
             if (reqPath.StartsWith("/api/data/", StringComparison.Ordinal))
             {
+                category = "api";
                 var body = await ReadRequestBodyAsync(req);
                 if (opts.LocalOnly || string.IsNullOrEmpty(opts.EnvUrl))
                 {
+                    note = "local-only";
                     if (Regex.IsMatch(reqPath, @"/webresourceset", RegexOptions.IgnoreCase))
                     {
                         var localList = ListLocalToolWebResources(rootDir, toolsDir)
@@ -808,7 +843,7 @@ Options:
                     return;
                 }
 
-                await ProxyToDataverseAsync(req, res, rawUrl, rootDir, toolsDir, opts, body, retried: false);
+                note = await ProxyToDataverseAsync(req, res, rawUrl, rootDir, toolsDir, opts, body, retried: false);
                 return;
             }
 
@@ -819,12 +854,21 @@ Options:
         }
         catch (Exception ex)
         {
+            category = "error";
+            note = ex.Message;
             try
             {
                 var errJson = JsonSerializer.Serialize(new { error = new { message = $"Local .NET proxy error: {ex.Message}" } });
                 await WriteBytesAsync(res, 500, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(errJson));
             }
             catch { }
+        }
+        finally
+        {
+            sw.Stop();
+            int code = 500;
+            try { code = res.StatusCode; } catch { }
+            LogHttpRequest(opts, req.HttpMethod, rawUrl, code, sw.ElapsedMilliseconds, category, note);
         }
     }
 
@@ -836,7 +880,7 @@ Options:
         return ms.ToArray();
     }
 
-    private static async Task ProxyToDataverseAsync(
+    private static async Task<string> ProxyToDataverseAsync(
         HttpListenerRequest req,
         HttpListenerResponse res,
         string rawUrl,
@@ -855,7 +899,7 @@ Options:
         {
             var errJson = JsonSerializer.Serialize(new { error = new { message = $"Local dev-server token error: {ex.Message}" } });
             await WriteBytesAsync(res, 401, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(errJson));
-            return;
+            return "token error";
         }
 
         var targetUri = new Uri(new Uri(opts.EnvUrl), rawUrl);
@@ -888,15 +932,14 @@ Options:
         {
             var errJson = JsonSerializer.Serialize(new { error = new { message = $"Dataverse proxy error: {ex.Message}" } });
             await WriteBytesAsync(res, 502, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(errJson));
-            return;
+            return ex.Message;
         }
 
         using (proxyRes)
         {
             if (proxyRes.StatusCode == HttpStatusCode.Unauthorized && !retried)
             {
-                await ProxyToDataverseAsync(req, res, rawUrl, rootDir, toolsDir, opts, reqBody, retried: true);
-                return;
+                return await ProxyToDataverseAsync(req, res, rawUrl, rootDir, toolsDir, opts, reqBody, retried: true);
             }
 
             var isWebResourceDiscovery = string.Equals(req.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase) &&
@@ -933,7 +976,7 @@ Options:
 
                         var merged = Encoding.UTF8.GetBytes(node.ToJsonString());
                         await WriteBytesAsync(res, 200, "application/json; charset=utf-8", merged);
-                        return;
+                        return retried ? "token refreshed" : "";
                     }
                 }
                 catch { }
@@ -941,6 +984,7 @@ Options:
 
             var contentType = proxyRes.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
             await WriteBytesAsync(res, (int)proxyRes.StatusCode, contentType, respBytes);
+            return retried ? "token refreshed" : "";
         }
     }
 

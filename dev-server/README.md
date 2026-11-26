@@ -86,6 +86,7 @@ Every field is optional:
 | `env` / `envUrl` | Top-level | `""` | Direct Dataverse URL when you only target one environment (no `environments` block needed). |
 | `port` | Top-level or Profile | `8787` | Local HTTP port (`http://127.0.0.1:<port>`). |
 | `auth` | Top-level or Profile | `"auto"` | Bearer token source: `"auto"`, `"pac"`, `"az"`, `"config"`, or `"env"`. |
+| `logMode` | Top-level or Profile | `"api"` | Console request log filter: `"api"` (`/api/data/*` + errors), `"all"` (static files too), or `"quiet"` (errors only). |
 | `localOnly` | Top-level or Profile | `false` | If `true`, serves HTML tools from disk without proxying calls to Dataverse. |
 | `environments` | Top-level | `{}` | Map of named environment profiles (e.g. `"dev"`, `"uat"`) selectable via `--env <name>`. |
 | `url` | Profile | `""` | Dataverse org URL for that profile (aliases: `envUrl`, `env`). |
@@ -114,6 +115,7 @@ Every field is optional:
 | `--config <path>` | `-Config <path>` | Explicit path to JSON config (defaults to `./dev-server.config.json` or `dev-server/dev-server.config.json`) |
 | `--port <num>` | `-Port <num>` | Local HTTP port (default `8787`) |
 | `--auth auto\|pac\|az\|env\|config` | `-Auth auto\|pac\|az\|env\|config` | Bearer token source |
+| `--log api\|all\|quiet` (`--verbose`, `--quiet`) | `-LogMode api\|all\|quiet` (`-Verbose`, `-Quiet`) | Terminal request logging (`api` default skips static/preflight noise; tokens never logged) |
 | `--local-only` | `-LocalOnly` | Serve local HTML tools without proxying Dataverse APIs |
 | `--build-manifest` | `-BuildManifest` | Regenerate `tools/manifest.json` from `tools/dvot_*.html` |
 | `--build-bundle [path]` | `-BuildBundle [-BundleOut path]` | Bundle all tools (without host) into one HTML pack (default `dist/dvot_bundle_all.html`) |
