@@ -98,6 +98,35 @@
       padding: 2px 6px; border-radius: 4px; background: var(--bg-header); border: 1px solid var(--border);
       word-break: break-word;
     }
+    .expr-box {
+      border: 1px solid var(--border); border-radius: 6px; background: var(--bg-header);
+      overflow: hidden;
+    }
+    .expr-human {
+      padding: 6px 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+      color: var(--text);
+    }
+    .expr-pretty {
+      padding: 6px 10px; border-top: 1px dashed var(--border);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+      background: var(--bg-card); color: var(--text);
+    }
+    .expr-raw-toggle {
+      border-top: 1px solid var(--border); padding: 3px 10px; font-size: 10.5px; color: var(--text-sec);
+      background: var(--bg-header);
+    }
+    .expr-raw-toggle summary { cursor: pointer; user-select: none; font-weight: 600; }
+    .expr-raw-toggle pre {
+      margin: 4px 0 2px; font-family: ui-monospace, monospace; font-size: 10.5px;
+      white-space: pre-wrap; word-break: break-word; color: var(--text-sec);
+    }
+    .tok-fn   { color: #7c3aed; font-weight: 700; }
+    .tok-ref  { color: #0078d4; font-weight: 600; }
+    .tok-str  { color: #0f766e; }
+    .tok-num  { color: #b45309; font-weight: 600; }
+    .tok-op   { color: #be185d; font-weight: 700; }
     .chip-err {
       display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 4px;
       background: rgba(209, 52, 56, 0.1); color: var(--err-color, #d13438);
@@ -702,11 +731,418 @@
       return { raw: filterStr, annotations };
     }
 
+    /* ─── Power Automate Expression AST Parser & Prettifier ─── */
+    function parsePaExprTokens(src) {
+      const tokens = [];
+      let i = 0;
+      const n = src.length;
+      while (i < n) {
+        const ch = src[i];
+        if (/\s/.test(ch)) { i++; continue; }
+        if (ch === "'") {
+          let j = i + 1;
+          let strVal = '';
+          while (j < n) {
+            if (src[j] === "'" && src[j + 1] === "'") { strVal += "'"; j += 2; continue; }
+            if (src[j] === "'") { j++; break; }
+            strVal += src[j++];
+          }
+          tokens.push({ t: 'str', v: strVal });
+          i = j; continue;
+        }
+        if ('()[],?.'.includes(ch)) {
+          tokens.push({ t: ch, v: ch });
+          i++; continue;
+        }
+        if (/[0-9-]/.test(ch) && (ch !== '-' || /[0-9]/.test(src[i + 1] || ''))) {
+          let j = i + (ch === '-' ? 1 : 0);
+          while (j < n && /[0-9.]/.test(src[j])) j++;
+          tokens.push({ t: 'num', v: src.slice(i, j) });
+          i = j; continue;
+        }
+        if (/[a-zA-Z_$]/.test(ch)) {
+          let j = i + 1;
+          while (j < n && /[a-zA-Z0-9_$]/.test(src[j])) j++;
+          const word = src.slice(i, j);
+          if (word === 'true' || word === 'false' || word === 'null') tokens.push({ t: 'lit', v: word });
+          else tokens.push({ t: 'id', v: word });
+          i = j; continue;
+        }
+        tokens.push({ t: 'sym', v: ch });
+        i++;
+      }
+      return tokens;
+    }
+
+    function parsePaExprAst(exprCore) {
+      const tokens = parsePaExprTokens(exprCore);
+      let pos = 0;
+      const peek = () => tokens[pos];
+      const next = () => tokens[pos++];
+
+      function parsePrimary() {
+        const tok = peek();
+        if (!tok) return null;
+        if (tok.t === 'str' || tok.t === 'num' || tok.t === 'lit') {
+          next();
+          return { kind: tok.t, value: tok.v };
+        }
+        if (tok.t === 'id') {
+          const name = next().v;
+          if (peek()?.t === '(') {
+            next(); // '('
+            const args = [];
+            while (peek() && peek().t !== ')') {
+              const arg = parseExpression();
+              if (arg) args.push(arg);
+              if (peek()?.t === ',') next();
+              else break;
+            }
+            if (peek()?.t === ')') next();
+            return { kind: 'call', name, args };
+          }
+          return { kind: 'id', value: name };
+        }
+        if (tok.t === '(') {
+          next();
+          const inner = parseExpression();
+          if (peek()?.t === ')') next();
+          return inner;
+        }
+        next();
+        return { kind: 'raw', value: tok.v };
+      }
+
+      function parseExpression() {
+        let base = parsePrimary();
+        if (!base) return null;
+        const accessors = [];
+        while (peek()) {
+          const cur = peek();
+          if (cur.t === '?' && tokens[pos + 1]?.t === '[') {
+            next(); next(); // ? [
+            const key = parseExpression();
+            if (peek()?.t === ']') next();
+            accessors.push({ opt: true, key });
+          } else if (cur.t === '[') {
+            next();
+            const key = parseExpression();
+            if (peek()?.t === ']') next();
+            accessors.push({ opt: false, key });
+          } else if (cur.t === '?' && tokens[pos + 1]?.t === '.') {
+            next(); next();
+            const id = peek()?.t === 'id' ? next().v : '';
+            accessors.push({ opt: true, dot: true, key: { kind: 'str', value: id } });
+          } else if (cur.t === '.') {
+            next();
+            const id = peek()?.t === 'id' ? next().v : '';
+            accessors.push({ opt: false, dot: true, key: { kind: 'str', value: id } });
+          } else {
+            break;
+          }
+        }
+        if (accessors.length) return { kind: 'chain', base, accessors };
+        return base;
+      }
+
+      const ast = parseExpression();
+      return pos === tokens.length ? ast : null;
+    }
+
+    function extractFieldRefMeta(node, actionOutputTables, fallbackEntity) {
+      if (!node || node.kind !== 'chain') return null;
+      const base = node.base;
+      let stepLabel = '';
+      let entity = '';
+      if (base?.kind === 'call') {
+        const fn = base.name.toLowerCase();
+        if (fn === 'triggeroutputs' || fn === 'triggerbody') {
+          stepLabel = 'Trigger';
+          entity = actionOutputTables?.get('__TRIGGER__') || fallbackEntity || '';
+        } else if ((fn === 'outputs' || fn === 'body') && base.args?.[0]?.kind === 'str') {
+          stepLabel = base.args[0].value.replace(/_/g, ' ');
+          entity = actionOutputTables?.get(base.args[0].value) || fallbackEntity || '';
+        } else if ((fn === 'items' || fn === 'item')) {
+          stepLabel = base.args?.[0]?.kind === 'str' ? `Loop:${base.args[0].value.replace(/_/g, ' ')}` : 'Item';
+          entity = fallbackEntity || '';
+        }
+      }
+      if (!stepLabel) return null;
+
+      const pathParts = node.accessors.map(a => a.key?.value ?? '').filter(Boolean);
+      const lastSeg = pathParts[pathParts.length - 1] || '';
+      const col = lastSeg.split('/').pop().replace(/^_/, '').replace(/_value$/i, '');
+      const attrMap = entity ? attrMetaCache.get(resolveLogicalEntityName(entity)) : null;
+      const meta = col ? attrMap?.get(col.toLowerCase()) : null;
+      return {
+        stepLabel,
+        entity,
+        col,
+        colDisplay: meta?.displayName || '',
+        attrMap
+      };
+    }
+
+    function formatAstPrettyLines(ast, indent = 0) {
+      if (!ast) return '';
+      const pad = '  '.repeat(indent);
+      const innerPad = '  '.repeat(indent + 1);
+      if (ast.kind === 'str') return `'${ast.value.replace(/'/g, "''")}'`;
+      if (ast.kind === 'num' || ast.kind === 'lit' || ast.kind === 'id' || ast.kind === 'raw') return String(ast.value);
+      if (ast.kind === 'chain') {
+        const b = formatAstPrettyLines(ast.base, indent);
+        const acc = ast.accessors.map(a => a.dot
+          ? `${a.opt ? '?.' : '.'}${a.key?.value || ''}`
+          : `${a.opt ? '?[' : '['}${formatAstPrettyLines(a.key, indent)}]`
+        ).join('');
+        return `${b}${acc}`;
+      }
+      if (ast.kind === 'call') {
+        const inlineArgs = ast.args.map(a => formatAstPrettyLines(a, 0));
+        const inline = `${ast.name}(${inlineArgs.join(', ')})`;
+        const hasNestedCall = ast.args.some(a => a.kind === 'call' || (a.kind === 'chain' && a.base?.kind === 'call' && (a.base.args?.length || 0) > 0));
+        if (inline.length <= 54 && !hasNestedCall) return inline;
+        if (!ast.args.length) return `${ast.name}()`;
+        const multiArgs = ast.args.map(a => `${innerPad}${formatAstPrettyLines(a, indent + 1)}`);
+        return `${ast.name}(\n${multiArgs.join(',\n')}\n${pad})`;
+      }
+      return '';
+    }
+
+    function humanizeExprAst(ast, actionOutputTables, fallbackEntity, resolvedTokens, indent = 0) {
+      if (!ast) return '';
+      const pad = '  '.repeat(indent);
+      const innerPad = '  '.repeat(indent + 1);
+      if (ast.kind === 'str') return `'${ast.value}'`;
+      if (ast.kind === 'num' || ast.kind === 'lit' || ast.kind === 'id' || ast.kind === 'raw') return String(ast.value);
+
+      if (ast.kind === 'chain') {
+        const ref = extractFieldRefMeta(ast, actionOutputTables, fallbackEntity);
+        if (ref && ref.col) {
+          return `[${ref.stepLabel} → ${ref.colDisplay ? `${ref.colDisplay} (${ref.col})` : ref.col}]`;
+        }
+        if (ref) return `[${ref.stepLabel}]`;
+        return formatAstPrettyLines(ast, indent);
+      }
+
+      if (ast.kind === 'call') {
+        const fn = ast.name.toLowerCase();
+        const binOps = {
+          equals: '==', greater: '>', greaterorequals: '>=', less: '<', lessorequals: '<=',
+          contains: 'CONTAINS', startswith: 'STARTS WITH', endswith: 'ENDS WITH',
+          add: '+', sub: '-', mul: '*', div: '/', mod: '%'
+        };
+
+        if (fn === 'not' && ast.args.length === 1 && ast.args[0]?.kind === 'call' && ast.args[0].name.toLowerCase() === 'equals' && ast.args[0].args.length === 2) {
+          return humanizeBinaryComparison('!=', ast.args[0].args[0], ast.args[0].args[1], actionOutputTables, fallbackEntity, resolvedTokens, indent);
+        }
+        if (binOps[fn] && ast.args.length === 2) {
+          return humanizeBinaryComparison(binOps[fn], ast.args[0], ast.args[1], actionOutputTables, fallbackEntity, resolvedTokens, indent);
+        }
+        if (fn === 'and' || fn === 'or') {
+          const opWord = fn.toUpperCase();
+          const parts = ast.args.map(a => humanizeExprAst(a, actionOutputTables, fallbackEntity, resolvedTokens, indent + 1));
+          const inline = parts.join(` ${opWord} `);
+          if (parts.length <= 2 && inline.length <= 70 && !inline.includes('\n')) return `(${inline})`;
+          return `${opWord} (\n${parts.map(p => `${innerPad}${p}`).join(`\n${innerPad}`)}\n${pad})`;
+        }
+        if (fn === 'not' && ast.args.length === 1) {
+          return `NOT (${humanizeExprAst(ast.args[0], actionOutputTables, fallbackEntity, resolvedTokens, indent)})`;
+        }
+        if (fn === 'if' && ast.args.length === 3) {
+          const c = humanizeExprAst(ast.args[0], actionOutputTables, fallbackEntity, resolvedTokens, indent + 1);
+          const t = humanizeExprAst(ast.args[1], actionOutputTables, fallbackEntity, resolvedTokens, indent + 1);
+          const f = humanizeExprAst(ast.args[2], actionOutputTables, fallbackEntity, resolvedTokens, indent + 1);
+          return `IF (${c})\n${innerPad}THEN ${t}\n${innerPad}ELSE ${f}`;
+        }
+        if (fn === 'coalesce' && ast.args.length >= 2) {
+          return ast.args.map(a => humanizeExprAst(a, actionOutputTables, fallbackEntity, resolvedTokens, indent)).join(' ?? ');
+        }
+        if (fn === 'parameters' && ast.args[0]?.kind === 'str') return `param(${ast.args[0].value})`;
+        if (fn === 'variables' && ast.args[0]?.kind === 'str') return `var(${ast.args[0].value})`;
+
+        const hArgs = ast.args.map(a => humanizeExprAst(a, actionOutputTables, fallbackEntity, resolvedTokens, indent + 1));
+        const inline = `${ast.name}(${hArgs.join(', ')})`;
+        if (inline.length <= 68 && !inline.includes('\n')) return inline;
+        return `${ast.name}(\n${hArgs.map(a => `${innerPad}${a}`).join(',\n')}\n${pad})`;
+      }
+      return '';
+    }
+
+    function humanizeBinaryComparison(op, leftAst, rightAst, actionOutputTables, fallbackEntity, resolvedTokens, indent) {
+      const lStr = humanizeExprAst(leftAst, actionOutputTables, fallbackEntity, resolvedTokens, indent);
+      const rStr = humanizeExprAst(rightAst, actionOutputTables, fallbackEntity, resolvedTokens, indent);
+
+      const checkOpt = (refAst, valAst) => {
+        const ref = extractFieldRefMeta(refAst, actionOutputTables, fallbackEntity);
+        if (!ref?.attrMap || !ref.col) return '';
+        if (valAst?.kind !== 'num' && valAst?.kind !== 'lit' && valAst?.kind !== 'str') return '';
+        const hit = lookupOptionLabel(ref.attrMap, ref.col, valAst.value);
+        if (!hit) return '';
+        if (resolvedTokens) {
+          resolvedTokens.push({ kind: 'OptionSet', context: `Expression (${ref.entity || 'auto'})`, raw: `${ref.col} = ${valAst.value}`, resolved: hit.label });
+        }
+        return ` [🏷️ ${hit.label}]`;
+      };
+
+      const optNote = checkOpt(leftAst, rightAst) || checkOpt(rightAst, leftAst);
+      return `${lStr} ${op} ${rStr}${optNote}`;
+    }
+
+    function prettifyPaExpression(exprStr, actionOutputTables, fallbackEntity, resolvedTokens) {
+      if (typeof exprStr !== 'string') return null;
+      const trimmed = exprStr.trim();
+
+      // Case 1: Pure `@...` expression (strip optional outer `@{...}`)
+      if (trimmed.startsWith('@') && !trimmed.includes('@{')) {
+        const core = trimmed.slice(1).trim();
+        const ast = parsePaExprAst(core);
+        if (ast) {
+          return {
+            isTemplate: false,
+            human: humanizeExprAst(ast, actionOutputTables, fallbackEntity, resolvedTokens, 0),
+            pretty: `@${formatAstPrettyLines(ast, 0)}`
+          };
+        }
+      }
+
+      // Case 2: String containing one or more `@{...}` interpolations
+      if (trimmed.includes('@{')) {
+        let prettyOut = '';
+        let humanOut = '';
+        let i = 0;
+        while (i < exprStr.length) {
+          const idx = exprStr.indexOf('@{', i);
+          if (idx === -1) {
+            prettyOut += exprStr.slice(i);
+            humanOut += exprStr.slice(i);
+            break;
+          }
+          prettyOut += exprStr.slice(i, idx);
+          humanOut += exprStr.slice(i, idx);
+          // Balanced brace scan respecting `'...'`
+          let j = idx + 2;
+          let depth = 1;
+          let inStr = false;
+          while (j < exprStr.length && depth > 0) {
+            const c = exprStr[j];
+            if (c === "'") {
+              if (inStr && exprStr[j + 1] === "'") { j += 2; continue; }
+              inStr = !inStr;
+            } else if (!inStr) {
+              if (c === '{') depth++;
+              else if (c === '}') depth--;
+            }
+            j++;
+          }
+          const inner = exprStr.slice(idx + 2, depth === 0 ? j - 1 : exprStr.length).trim();
+          const ast = parsePaExprAst(inner);
+          if (ast) {
+            prettyOut += `@{${formatAstPrettyLines(ast, 0)}}`;
+            humanOut += humanizeExprAst(ast, actionOutputTables, fallbackEntity, resolvedTokens, 0);
+          } else {
+            prettyOut += exprStr.slice(idx, j);
+            humanOut += exprStr.slice(idx, j);
+          }
+          i = j;
+        }
+        return { isTemplate: true, human: humanOut, pretty: prettyOut };
+      }
+
+      return null;
+    }
+
+    function formatConditionObject(obj, actionOutputTables, fallbackEntity, resolvedTokens, indent = 0) {
+      if (obj === null || typeof obj !== 'object') {
+        if (typeof obj === 'string' && obj.includes('@')) {
+          const res = prettifyPaExpression(obj, actionOutputTables, fallbackEntity, resolvedTokens);
+          return res ? res.human : obj;
+        }
+        return JSON.stringify(obj);
+      }
+      const pad = '  '.repeat(indent);
+      const innerPad = '  '.repeat(indent + 1);
+      const opEntries = Object.entries(obj);
+      if (opEntries.length !== 1) return JSON.stringify(obj, null, 2);
+
+      const [opKey, val] = opEntries[0];
+      const opLow = opKey.toLowerCase();
+      if ((opLow === 'and' || opLow === 'or') && Array.isArray(val)) {
+        const items = val.map(v => formatConditionObject(v, actionOutputTables, fallbackEntity, resolvedTokens, indent + 1));
+        return `${opLow.toUpperCase()} (\n${items.map(x => `${innerPad}${x}`).join('\n')}\n${pad})`;
+      }
+      if (opLow === 'not') {
+        return `NOT (\n${innerPad}${formatConditionObject(val, actionOutputTables, fallbackEntity, resolvedTokens, indent + 1)}\n${pad})`;
+      }
+      const cmpOps = {
+        equals: '==', greater: '>', greaterorderequals: '>=', greaterorequals: '>=',
+        less: '<', lessorequals: '<=', contains: 'CONTAINS', startswith: 'STARTS WITH', endswith: 'ENDS WITH'
+      };
+      if (cmpOps[opLow] && Array.isArray(val) && val.length === 2) {
+        const lAst = typeof val[0] === 'string' && val[0].startsWith('@') ? parsePaExprAst(val[0].slice(1)) : null;
+        const rAst = typeof val[1] === 'string' && val[1].startsWith('@') ? parsePaExprAst(val[1].slice(1))
+          : (typeof val[1] === 'number' || typeof val[1] === 'boolean' || typeof val[1] === 'string') ? { kind: typeof val[1] === 'number' ? 'num' : 'str', value: val[1] } : null;
+        if (lAst && rAst) {
+          return humanizeBinaryComparison(cmpOps[opLow], lAst, rAst, actionOutputTables, fallbackEntity, resolvedTokens, indent);
+        }
+        const aStr = formatConditionObject(val[0], actionOutputTables, fallbackEntity, resolvedTokens, indent);
+        const bStr = formatConditionObject(val[1], actionOutputTables, fallbackEntity, resolvedTokens, indent);
+        return `${aStr} ${cmpOps[opLow]} ${bStr}`;
+      }
+      return JSON.stringify(obj, null, 2);
+    }
+
+    function prettifyODataFilter(filterStr) {
+      if (!filterStr || typeof filterStr !== 'string') return '';
+      let out = '';
+      let inStr = false;
+      let depth = 0;
+      for (let i = 0; i < filterStr.length; i++) {
+        const c = filterStr[i];
+        if (c === "'") {
+          if (inStr && filterStr[i + 1] === "'") { out += "''"; i++; continue; }
+          inStr = !inStr;
+          out += c; continue;
+        }
+        if (!inStr) {
+          if (c === '(') depth++;
+          else if (c === ')') depth = Math.max(0, depth - 1);
+          const rest = filterStr.slice(i);
+          const m = rest.match(/^\s+(and|or)\s+/i);
+          if (m && depth <= 1) {
+            out += `\n${'  '.repeat(depth)}${m[1].toUpperCase()} `;
+            i += m[0].length - 1;
+            continue;
+          }
+        }
+        out += c;
+      }
+      return out.trim();
+    }
+
+    function highlightReadableExpr(text) {
+      const s = String(text || '');
+      const tokenRe = /(\[[^\]]+\]|'[^']*'|\b(?:AND|OR|NOT|IF|THEN|ELSE|CONTAINS|STARTS WITH|ENDS WITH)\b|==|!=|>=|<=|\?\?|\b[a-zA-Z_][a-zA-Z0-9_]*(?=\()|-?\b\d+(?:\.\d+)?\b)/g;
+      let out = '';
+      let last = 0;
+      for (const m of s.matchAll(tokenRe)) {
+        out += DV.esc(s.slice(last, m.index));
+        const tok = m[0];
+        if (tok.startsWith('[')) out += `<span class="tok-ref">${DV.esc(tok)}</span>`;
+        else if (tok.startsWith("'")) out += `<span class="tok-str">${DV.esc(tok)}</span>`;
+        else if (/^-?\d/.test(tok)) out += `<span class="tok-num">${DV.esc(tok)}</span>`;
+        else if (/^(?:AND|OR|NOT|IF|THEN|ELSE|CONTAINS|STARTS WITH|ENDS WITH|==|!=|>=|<=|\?\?)$/.test(tok)) out += `<span class="tok-op">${DV.esc(tok)}</span>`;
+        else out += `<span class="tok-fn">${DV.esc(tok)}</span>`;
+        last = m.index + tok.length;
+      }
+      out += DV.esc(s.slice(last));
+      return out;
+    }
+
     function decodeExpressionText(exprStr, actionOutputTables, fallbackEntity, resolvedTokens) {
       if (typeof exprStr !== 'string' || !exprStr.includes('@')) return null;
       const hints = [];
 
-      // Detect @equals(outputs('Step')?['body/statuscode'], 2) or triggerOutputs()?['body/new_type']
       const eqRe = /(outputs\('([^']+)'\)|triggerOutputs\(\)|triggerBody\(\)|items\('[^']+'\))\??\['(?:body\/)?([a-z0-9_]+)'\]\s*,\s*(-?\d+|true|false|'[0-9a-f-]{36}')/gi;
       for (const m of exprStr.matchAll(eqRe)) {
         const srcStep = m[2];
@@ -717,7 +1153,9 @@
         const hit = lookupOptionLabel(attrMap, col, val);
         if (hit) {
           hints.push({ kind: 'optionset', text: `${hit.attrDisplay} (${col}): ${val} → "${hit.label}"` });
-          resolvedTokens.push({ kind: 'OptionSet', context: `Expression (${ent || 'auto'})`, raw: `${col} = ${val}`, resolved: hit.label });
+          if (resolvedTokens) {
+            resolvedTokens.push({ kind: 'OptionSet', context: `Expression (${ent || 'auto'})`, raw: `${col} = ${val}`, resolved: hit.label });
+          }
         }
       }
 
@@ -811,6 +1249,34 @@
       const resolvedTokens = [];
       let stepsCount = 0;
 
+      const renderExpressionWidget = (rawVal, entity, resolvedTokensOut) => {
+        if (rawVal && typeof rawVal === 'object') {
+          const condToks = [];
+          const humanCond = formatConditionObject(rawVal, actionOutputTables, entity, condToks, 0);
+          condToks.forEach(t => resolvedTokensOut.push(t));
+          const prettyJson = JSON.stringify(rawVal, null, 2);
+          return `<div class="expr-box">
+            <div class="expr-human">${highlightReadableExpr(humanCond)}</div>
+            <details class="expr-raw-toggle"><summary>Show raw condition JSON</summary><pre>${DV.esc(prettyJson)}</pre></details>
+          </div>`;
+        }
+        const exprToks = [];
+        const pRes = prettifyPaExpression(String(rawVal), actionOutputTables, entity, exprToks);
+        // Avoid duplicate OptionSet rows if regex matcher already finds them, or merge cleanly
+        if (exprToks.length) {
+          exprToks.forEach(t => resolvedTokensOut.push(t));
+        } else {
+          decodeExpressionText(String(rawVal), actionOutputTables, entity, resolvedTokensOut);
+        }
+        if (!pRes) return `<code class="chip-expr">${DV.esc(String(rawVal))}</code>`;
+        const showPretty = pRes.pretty && pRes.pretty.replace(/\s+/g, '') !== String(rawVal).replace(/\s+/g, '') && pRes.pretty !== pRes.human;
+        return `<div class="expr-box">
+          <div class="expr-human">${highlightReadableExpr(pRes.human)}</div>
+          ${showPretty ? `<div class="expr-pretty">${highlightReadableExpr(pRes.pretty)}</div>` : ''}
+          <details class="expr-raw-toggle"><summary>Show raw expression</summary><pre>${DV.esc(String(rawVal))}</pre></details>
+        </div>`;
+      };
+
       const renderValueCell = (rawKey, val, entity, resolvedTokensOut) => {
         const cleanKey = normalizeBindKey(rawKey);
         const attrMap = entity ? attrMetaCache.get(entity) : null;
@@ -830,18 +1296,21 @@
           // 2. OData $filter / filterExpression (handles $filter, queries/$filter, subscriptionRequest/filterExpression)
           if (isFilterParamKey(rawKey) || isFilterParamKey(cleanKey)) {
             const dec = decodeODataFilter(val, entity, resolvedTokensOut);
+            const prettyFilter = prettifyODataFilter(val);
+            const exprInsideFilter = val.includes('@{') ? prettifyPaExpression(val, actionOutputTables, entity, resolvedTokensOut) : null;
             const annHtml = dec.annotations.map(a => {
               if (a.type === 'optionset') return `<div style="margin-top:4px;"><span class="chip-opt">🏷️ ${DV.esc(a.text)}</span></div>`;
               return `<div style="margin-top:4px;">${renderRecordChip(`${a.rec.name} (${a.colPath})`, a.rec.entity, a.guid, a.rec.url, a.guid)}</div>`;
             }).join('');
-            return `<code class="chip-expr">${DV.esc(val)}</code>${annHtml}`;
+            return `<div class="expr-box">
+              <div class="expr-human">${highlightReadableExpr(exprInsideFilter ? prettifyODataFilter(exprInsideFilter.human) : prettyFilter)}</div>
+              <details class="expr-raw-toggle"><summary>Show raw $filter</summary><pre>${DV.esc(val)}</pre></details>
+            </div>${annHtml}`;
           }
 
-          // 3. Dataverse Expression (@...)
-          if (val.startsWith('@')) {
-            const hints = decodeExpressionText(val, actionOutputTables, entity, resolvedTokensOut) || [];
-            const hintHtml = hints.map(h => `<div style="margin-top:4px;"><span class="chip-opt">🏷️ ${DV.esc(h.text)}</span></div>`).join('');
-            return `<code class="chip-expr">${DV.esc(val)}</code>${hintHtml}`;
+          // 3. Dataverse Expression (@... or @{...})
+          if (val.includes('@')) {
+            return renderExpressionWidget(val, entity, resolvedTokensOut);
           }
 
           // 4. Bare GUID matching known recordId or workflowId
@@ -866,7 +1335,7 @@
 
         // 6. Nested JSON / object
         if (val !== null && typeof val === 'object') {
-          return `<code class="chip-expr">${DV.esc(JSON.stringify(val))}</code>`;
+          return `<div class="expr-box"><div class="expr-pretty" style="border-top:none;">${DV.esc(JSON.stringify(val, null, 2))}</div></div>`;
         }
 
         return `<span style="font-family:monospace;font-size:11.5px;">${DV.esc(String(val))}</span>`;
@@ -906,15 +1375,18 @@
           }
         }
 
-        // Control expressions (If / Switch / Foreach / Query)
-        if (node.expression) {
-          const expStr = typeof node.expression === 'string' ? node.expression : JSON.stringify(node.expression);
-          const hints = decodeExpressionText(expStr, actionOutputTables, ent, resolvedTokens) || [];
-          const hintHtml = hints.map(h => `<div style="margin-top:4px;"><span class="chip-opt">🏷️ ${DV.esc(h.text)}</span></div>`).join('');
-          kvRows += `<tr><td class="kv-key">Expression<span class="kv-sub">${DV.esc(node.type)}</span></td><td><code class="chip-expr">${DV.esc(expStr)}</code>${hintHtml}</td></tr>`;
+        // Control expressions (If / Switch / Foreach / Filter Array)
+        if (node.expression !== undefined) {
+          kvRows += `<tr><td class="kv-key">Expression<span class="kv-sub">${DV.esc(node.type)}</span></td><td>${renderExpressionWidget(node.expression, ent, resolvedTokens)}</td></tr>`;
+        }
+        if (node.where !== undefined) {
+          kvRows += `<tr><td class="kv-key">Filter Condition<span class="kv-sub">where</span></td><td>${renderExpressionWidget(node.where, ent, resolvedTokens)}</td></tr>`;
         }
         if (node.foreach) {
-          kvRows += `<tr><td class="kv-key">Loop Over<span class="kv-sub">foreach</span></td><td><code class="chip-expr">${DV.esc(node.foreach)}</code></td></tr>`;
+          kvRows += `<tr><td class="kv-key">Loop Over<span class="kv-sub">foreach</span></td><td>${renderExpressionWidget(node.foreach, ent, resolvedTokens)}</td></tr>`;
+        }
+        if (node.from) {
+          kvRows += `<tr><td class="kv-key">Source Collection<span class="kv-sub">from</span></td><td>${renderExpressionWidget(node.from, ent, resolvedTokens)}</td></tr>`;
         }
 
         // Run a Child Flow name lookup
@@ -1035,6 +1507,14 @@
             comments.push(t.resolved);
           }
         }
+        // Annotate inline Power Automate expressions (@... / @{...}) in JSON view
+        const strExprM = line.match(/:\s*"([^"]*@[^"]+)"/);
+        if (strExprM) {
+          const decodedLine = prettifyPaExpression(strExprM[1], actionOutputTables, '', null);
+          if (decodedLine?.human) {
+            comments.push(decodedLine.human.replace(/\s*\n\s*/g, ' ').slice(0, 120));
+          }
+        }
         const uniqueComments = [...new Set(comments)];
         return uniqueComments.length
           ? `${escaped}  <span class="annot-cmt">// ${DV.esc(uniqueComments.join(' | '))}</span>`
@@ -1128,7 +1608,12 @@
             actions: {
               Check_Status_and_Sync: {
                 type: 'If',
-                expression: "@equals(triggerOutputs()?['body/statuscode'], 2)",
+                expression: {
+                  and: [
+                    { equals: ["@triggerOutputs()?['body/statuscode']", 2] },
+                    { not: { equals: ["@triggerOutputs()?['body/new_erpsyncstatus']", 100000001] } }
+                  ]
+                },
                 actions: {
                   Update_Invoice_as_Synced: {
                     type: 'OpenApiConnection',
@@ -1138,6 +1623,7 @@
                         entityName: 'invoice',
                         recordId: "@triggerOutputs()?['body/invoiceid']",
                         'item/new_erpsyncstatus': 100000001,
+                        'item/description': "@if(equals(triggerOutputs()?['body/statecode'], 0), concat('Synced at ', utcNow()), 'Closed Invoice')",
                         'item/customerid_account@odata.bind': '/accounts(8f7a1122-3344-5566-7788-99aabbccddee)',
                         'item/primarycontactid@odata.bind': '/contacts(c3a12233-4455-6677-8899-001122334455)'
                       }
