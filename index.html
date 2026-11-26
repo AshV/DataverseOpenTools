@@ -185,8 +185,16 @@
     .card p { font-size: 13.5px; color: var(--text-sec); }
 
     /* Code Box */
+    .proxy-runner { margin-top: 18px; }
+    .proxy-tabs { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+    .proxy-tab {
+      padding: 6px 12px; border-radius: 7px; font-size: 12.5px; font-weight: 600;
+      border: 1px solid var(--border); background: var(--bg-elev); color: var(--text-sec);
+      cursor: pointer; transition: all 0.12s ease;
+    }
+    .proxy-tab:hover { border-color: var(--brand); color: var(--text); }
+    .proxy-tab.active { background: var(--brand); border-color: var(--brand); color: #fff; }
     .code-box {
-      margin-top: 18px;
       background: var(--code-bg); color: var(--code-fg);
       border-radius: 10px; padding: 14px 16px;
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -296,7 +304,7 @@
           <div class="pill">⚡ Open, Single-File Dataverse Developer Workbench</div>
           <h1>Zero-dependency tools for Microsoft Dataverse &amp; Power Platform.</h1>
           <p class="hero-sub">
-            28 self-contained HTML developer tools inside one unified tabbed workbench. Run natively inside Dynamics 365 as Web Resources, or connect from this page via your local <code>dev-server.js</code> proxy — with zero build steps and zero tokens stored in the browser.
+            28 self-contained HTML developer tools inside one unified tabbed workbench. Run natively inside Dynamics 365 as Web Resources, or connect from this page via a local proxy (PowerShell, C# .NET, or Node.js) — with zero build steps and zero tokens stored in the browser.
           </p>
           <div class="hero-cta">
             <a href="dvopentools_host.html" class="btn btn-primary btn-lg">Launch DV Open Tools Host →</a>
@@ -323,7 +331,7 @@
             </div>
             <div class="preview-row">
               <span><strong>GitHub Pages / Local File</strong><br><small style="color:var(--text-sec)">Auto-detects external host &rarr; Proxy URL only</small></span>
-              <span class="preview-tag">dev-server.js</span>
+              <span class="preview-tag">dev-server/</span>
             </div>
             <div class="preview-row">
               <span><strong>Security Gateway + Audit Log</strong><br><small style="color:var(--text-sec)">Audit, Safe Mode (confirm writes), or Zero Trust</small></span>
@@ -356,18 +364,25 @@
           <div class="card">
             <div class="card-icon">🔌</div>
             <h3>2. External / GitHub Pages + Proxy</h3>
-            <p>Click <strong>Open Host →</strong> right from this page. Outside <code>*.dynamics.com</code>, the host asks only for your local <code>dev-server.js</code> Proxy URL (default <code>http://127.0.0.1:8787</code>).</p>
+            <p>Click <strong>Open Host →</strong> right from this page. Outside <code>*.dynamics.com</code>, the host asks only for your local proxy URL (default <code>http://127.0.0.1:8787</code>) backed by PowerShell, C# <code>.NET</code>, or Node.js.</p>
           </div>
           <div class="card">
             <div class="card-icon">🛡️</div>
             <h3>3. Local Auth Security</h3>
-            <p>Environment URL and OAuth Bearer token acquisition (<code>pac auth token</code> or <code>az</code>) stay strictly inside Node memory in <code>dev-server.js</code> — never saved in browser storage.</p>
+            <p>Environment URL and OAuth Bearer token acquisition (<code>pac auth token</code> or <code>az</code>) stay strictly inside your local <code>dev-server/</code> process memory — never saved in browser storage.</p>
           </div>
         </div>
 
-        <div id="local-proxy" class="code-box" role="region" aria-label="Local proxy start command">
-          <code id="proxy-cmd">node dev-server.js --env https://yourorg.crm.dynamics.com</code>
-          <button class="copy-btn" data-copy="proxy-cmd">Copy Command</button>
+        <div id="local-proxy" class="proxy-runner" role="region" aria-label="Local proxy start commands">
+          <div class="proxy-tabs" role="tablist">
+            <button type="button" class="proxy-tab active" data-proxy-cmd=".\dev-server\dev-server.ps1 -Env https://yourorg.crm.dynamics.com">PowerShell (Windows)</button>
+            <button type="button" class="proxy-tab" data-proxy-cmd="dotnet run --project dev-server -- --env https://yourorg.crm.dynamics.com">C# (.NET 8+)</button>
+            <button type="button" class="proxy-tab" data-proxy-cmd="node dev-server/dev-server.js --env https://yourorg.crm.dynamics.com">Node.js</button>
+          </div>
+          <div class="code-box">
+            <code id="proxy-cmd">.\dev-server\dev-server.ps1 -Env https://yourorg.crm.dynamics.com</code>
+            <button class="copy-btn" data-copy="proxy-cmd">Copy Command</button>
+          </div>
         </div>
       </div>
     </section>
@@ -401,7 +416,7 @@
       <div class="footer-links">
         <a href="dvopentools_host.html">Host Workbench</a>
         <a href="tools/dvopentools_template.html">Tool Template</a>
-        <a href="dev-server.js">Local Proxy Server</a>
+        <a href="dev-server/README.md">Local Proxy Servers</a>
         <a href="DV-Open-Tools-Developer-Guide.md">Developer Guide</a>
       </div>
     </div>
@@ -504,6 +519,15 @@
     document.getElementById('tool-search').addEventListener('input', e => {
       searchQuery = e.target.value;
       renderTools();
+    });
+
+    document.querySelectorAll('[data-proxy-cmd]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('[data-proxy-cmd]').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const cmdEl = document.getElementById('proxy-cmd');
+        if (cmdEl) cmdEl.textContent = tab.dataset.proxyCmd;
+      });
     });
 
     document.querySelectorAll('[data-copy]').forEach(btn => {

@@ -24,6 +24,8 @@ tmp/
 temp/
 dist/
 coverage/
+bin/
+obj/
 
 # Editors & IDEs
 .vscode/*

@@ -1153,12 +1153,19 @@ Add `class="dv-app"` on `<body>` to activate the host's full design system:
 
 ---
 
-## 16. Local Development Server (`dev-server.js`)
+## 16. Local Development Servers (`dev-server/`)
 
-To develop and test tools locally (or run `dvopentools_host.html` directly from `file://` or an external domain) against a live Dataverse environment **without** putting Environment URLs or Bearer tokens into the browser, run the zero-dependency local Node.js proxy:
+To develop and test tools locally (or run `dvopentools_host.html` directly from `file://` or an external domain) against a live Dataverse environment **without** putting Environment URLs or Bearer tokens into the browser, run any of the three equivalent local proxies in [`dev-server/`](dev-server/README.md):
 
-```bash
-node dev-server.js --env https://yourorg.crm.dynamics.com
+```powershell
+# PowerShell (Windows zero-install)
+.\dev-server\dev-server.ps1 -Env https://yourorg.crm.dynamics.com
+
+# C# / .NET 8+
+dotnet run --project dev-server -- --env https://yourorg.crm.dynamics.com
+
+# Node.js
+node dev-server/dev-server.js --env https://yourorg.crm.dynamics.com
 ```
 
 Then either:
@@ -1167,7 +1174,7 @@ Then either:
 
 How it works:
 - Serves `index.html` at `/` (and `dvopentools_host.html` at `/dvopentools_host.html`) plus all `tools/dvopentools_*.html` files straight from disk (`/WebResources/*`) with no upload step and no browser caching.
-- Static hosts like GitHub Pages use `tools/manifest.json` so `dvopentools_host.html` discovers tools inside `./tools/` even before connecting `dev-server.js` (regenerate after adding a new tool with `node dev-server.js --build-manifest`).
+- Static hosts like GitHub Pages use `tools/manifest.json` so `dvopentools_host.html` discovers tools inside `./tools/` even before connecting a local proxy (regenerate after adding a new tool with `node dev-server/dev-server.js --build-manifest`, `dotnet run --project dev-server -- --build-manifest`, or `.\dev-server\dev-server.ps1 -BuildManifest`).
 - Merges un-uploaded local tools into `/api/data/*/webresourceset` discovery automatically.
 - Acquires and caches OAuth Bearer tokens **strictly server-side** via `pac auth token` or `az account get-access-token` (`DV_TOKEN` env var optional) — Environment URL and Bearer tokens never touch browser JS or storage.
 - Enables CORS + Chrome Private Network Access headers (`Access-Control-Allow-Origin: *`, `Access-Control-Allow-Private-Network: true`) and exposes `GET /_proxy/status` (metadata only) so external/local-file hosts connect cleanly.

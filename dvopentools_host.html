@@ -704,17 +704,19 @@
 
   <!-- ══════════════ LOCAL PROXY URL MODAL ══════════════ -->
   <div class="overlay" id="proxy-modal">
-    <div class="modal" style="width:480px;">
+    <div class="modal" style="width:520px;">
       <h2>🔌 Local Proxy Server</h2>
       <div class="warn-box" id="proxy-mode-banner" style="margin-bottom:14px;">
-        Running outside Power Platform. Point the host to your running local <code>dev-server.js</code> proxy.
+        Running outside Power Platform. Point the host to your running local proxy server.
       </div>
       <div class="form-row">
         <label>Local Proxy URL</label>
         <input type="url" id="proxy-url-input" placeholder="http://127.0.0.1:8787">
-        <div class="form-hint">
-          Your Dataverse Environment URL and Bearer token stay strictly inside your local server:<br>
-          <code>node dev-server.js --env https://yourorg.crm.dynamics.com</code>
+        <div class="form-hint" style="line-height:1.65;">
+          Dataverse Environment URL and Bearer token stay strictly inside your local proxy:<br>
+          <strong>PowerShell:</strong> <code>.\dev-server\dev-server.ps1 -Env https://yourorg.crm.dynamics.com</code><br>
+          <strong>C# (.NET):</strong> <code>dotnet run --project dev-server -- --env https://yourorg.crm.dynamics.com</code><br>
+          <strong>Node.js:</strong> <code>node dev-server/dev-server.js --env https://yourorg.crm.dynamics.com</code>
         </div>
       </div>
       <div class="modal-footer" style="justify-content:space-between;">
@@ -1293,9 +1295,9 @@
       const el = document.getElementById('sidebar-list');
       if (!S.tools.length) {
         if (S.isExternalMode && !getApiBaseUrl()) {
-          el.innerHTML = `<div class="sb-empty">Local proxy not configured.<br>Set your <code>dev-server.js</code> Proxy URL to load tools.</div>`;
+          el.innerHTML = `<div class="sb-empty">Local proxy not configured.<br>Set your local <code>dev-server</code> Proxy URL to load tools.</div>`;
         } else if (S.isExternalMode) {
-          el.innerHTML = `<div class="sb-empty">No tools found from proxy.<br>Ensure <code>dev-server.js</code> is running at<br><code>${esc(getApiBaseUrl())}</code></div>`;
+          el.innerHTML = `<div class="sb-empty">No tools found from proxy.<br>Ensure your local proxy is running at<br><code>${esc(getApiBaseUrl())}</code></div>`;
         } else {
           el.innerHTML = `<div class="sb-empty">No tools found.<br>Upload web resources named<br><code>${esc(S.cfg.prefix)}*.html</code></div>`;
         }
@@ -1809,7 +1811,7 @@
             let fetchArgs = arguments;
             const apiBase = getApiBaseUrl();
             if (S.isExternalMode && !apiBase) {
-              const errMsg = 'Local dev-server.js Proxy URL is not configured. Click "🔌 Proxy URL" in the header to connect to Dataverse.';
+              const errMsg = 'Local Proxy URL is not configured. Click "🔌 Proxy URL" in the header to connect to Dataverse.';
               recordNetworkLog({
                 id: uid(), tabId, toolName, toolIcon,
                 method: methUpper, path: displayPath, url: urlStr,
@@ -1956,7 +1958,7 @@
       if (S.isExternalMode && !getApiBaseUrl()) {
         postToTool(frame, 'API_RESPONSE', {
           reqId, ok: false, status: 503, statusText: 'Proxy URL Not Configured',
-          error: 'Local dev-server.js Proxy URL is not configured. Click "🔌 Proxy URL" in the header to connect.'
+          error: 'Local Proxy URL is not configured. Click "🔌 Proxy URL" in the header to connect.'
         });
         return;
       }
@@ -2278,8 +2280,8 @@
       const banner = document.getElementById('proxy-mode-banner');
       if (banner) {
         banner.innerHTML = S.runtimeMode === 'local_file'
-          ? '<strong>Local File Mode (<code>file://</code>):</strong> Direct browser calls to Dataverse are blocked by CORS. Point this host to your running local <code>dev-server.js</code> Proxy URL. Environment URL and Bearer token stay strictly inside <code>dev-server.js</code>.'
-          : `<strong>External Domain Mode (<code>${esc(location.host || location.origin)}</code>):</strong> Dataverse blocks cross-origin calls from non-Power Platform domains. Point this host to your local <code>dev-server.js</code> Proxy URL (Environment URL and auth stay local on your machine).`;
+          ? '<strong>Local File Mode (<code>file://</code>):</strong> Direct browser calls to Dataverse are blocked by CORS. Point this host to your running local proxy URL (PowerShell, C# .NET, or Node.js). Environment URL and Bearer token stay strictly inside your local server.'
+          : `<strong>External Domain Mode (<code>${esc(location.host || location.origin)}</code>):</strong> Dataverse blocks cross-origin calls from non-Power Platform domains. Point this host to your local proxy URL (Environment URL and auth stay local on your machine).`;
       }
       const inp = document.getElementById('proxy-url-input');
       if (inp) {
@@ -2699,7 +2701,7 @@
           const targetTool = S.pendingLaunchToolId;
           S.pendingLaunchToolId = '';
           await openTool(targetTool);
-          toast('Previewing tool from ./tools/ — click "🔌 Proxy URL" in the header to connect dev-server.js.', 'info', 6000);
+          toast('Previewing tool from ./tools/ — click "🔌 Proxy URL" in the header to connect your local proxy.', 'info', 6000);
         } else {
           openProxyModal();
         }
@@ -2719,7 +2721,7 @@
         setStatus(false);
         toast(
           S.isExternalMode
-            ? `Could not connect to local proxy at ${getApiBaseUrl()}. Make sure dev-server.js is running.`
+            ? `Could not connect to local proxy at ${getApiBaseUrl()}. Make sure your dev-server proxy is running.`
             : 'Could not connect to Dataverse API. Running in limited mode.',
           'error', 7000
         );

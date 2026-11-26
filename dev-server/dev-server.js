@@ -9,9 +9,9 @@
  * No credentials or tokens are ever passed to or stored in the browser.
  *
  * Usage:
- *   node dev-server.js --env https://yourorg.crm.dynamics.com
- *   node dev-server.js --env https://yourorg.crm.dynamics.com --port 8787 --auth pac
- *   node dev-server.js --local-only
+ *   node dev-server/dev-server.js --env https://yourorg.crm.dynamics.com
+ *   node dev-server/dev-server.js --env https://yourorg.crm.dynamics.com --port 8787 --auth pac
+ *   node dev-server/dev-server.js --local-only
  */
 
 'use strict';
@@ -22,7 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const ROOT_DIR = path.resolve(__dirname);
+const ROOT_DIR = path.resolve(__dirname, '..');
 const TOOLS_DIR = path.join(ROOT_DIR, 'tools');
 const TOKEN_TTL_MS = 40 * 60 * 1000;
 
@@ -377,7 +377,7 @@ if (require.main === module) {
 DV Open Tools — Local Dev Server & Auth Proxy
 
 Usage:
-  node dev-server.js [--env https://yourorg.crm.dynamics.com] [--port 8787] [--auth auto|pac|az|env] [--local-only]
+  node dev-server/dev-server.js [--env https://yourorg.crm.dynamics.com] [--port 8787] [--auth auto|pac|az|env] [--local-only]
 
 Options:
   --env <url>       Target Dataverse org URL (auto-detected via \`pac org who\` if omitted)
