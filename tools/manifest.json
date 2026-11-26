@@ -120,6 +120,16 @@
     "description": "Visualise Power Automate cloud flow run history across a 7-day hourly timeline with response headers inspection."
   },
   {
+    "wrName": "dvopentools_flowschedules.html",
+    "id": "flow-schedules",
+    "name": "Scheduled Flows",
+    "icon": "⏰",
+    "category": "Flow",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "List all Scheduled Power Automate Cloud Flows with decoded recurrence frequency, interval, days/times schedule, time zone, start time, and state."
+  },
+  {
     "wrName": "dvopentools_erd.html",
     "id": "erd-visualizer",
     "name": "ERD Visualizer",

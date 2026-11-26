@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scheduled Cloud Flows</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "flow-schedules",
+    "name":           "Scheduled Flows",
+    "version":        "1.0.0",
+    "description":    "List all Scheduled Power Automate Cloud Flows with decoded recurrence frequency, interval, days/times schedule, time zone, start time, and state.",
+    "icon":           "⏰",
+    "category":       "Flow",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+
+  <style>
+    .sched-main { font-weight: 600; color: var(--text); }
+    .sched-sub { font-size: 11px; color: var(--text-sec); margin-top: 2px; }
+    .tz-chip {
+      display: inline-block; font-family: ui-monospace, monospace; font-size: 11px;
+      padding: 2px 6px; border-radius: 4px; background: var(--bg-header); border: 1px solid var(--border);
+    }
+    .row-click { cursor: pointer; }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <strong>⏰ Scheduled Cloud Flows</strong>
+    <input type="text" id="f-search" placeholder="Filter by flow name, timing, timezone, owner…" style="min-width:250px;">
+    <select id="f-state">
+      <option value="ALL">All States</option>
+      <option value="1">Activated (On)</option>
+      <option value="0">Draft (Off)</option>
+      <option value="2">Suspended</option>
+    </select>
+    <select id="f-freq">
+      <option value="ALL">All Frequencies</option>
+      <option value="Minute">Minute</option>
+      <option value="Hour">Hour</option>
+      <option value="Day">Day</option>
+      <option value="Week">Week</option>
+      <option value="Month">Month</option>
+      <option value="Second">Second</option>
+    </select>
+    <select id="f-tz" style="max-width:190px;">
+      <option value="ALL">All Time Zones</option>
+    </select>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-sample" title="Load sample scheduled flows">🧪 Sample</button>
+    <button class="dv-btn" id="btn-refresh">↻ Refresh</button>
+    <button class="dv-btn dv-btn-primary" id="btn-export">📥 Export CSV</button>
+  </div>
+
+  <div class="dv-strip">
+    <span>Scheduled Flows: <strong id="st-total">0</strong></span>
+    <span>Active (On): <strong id="st-on" style="color:var(--ok-color)">0</strong></span>
+    <span>Draft / Off: <strong id="st-off" style="color:var(--warn-color)">0</strong></span>
+    <span>High-Freq (&lt; Hourly): <strong id="st-high" style="color:var(--err-color)">0</strong></span>
+    <span>Total Cloud Flows Scanned: <strong id="st-all">0</strong></span>
+    <div class="dv-spacer"></div>
+    <span style="font-size:11px;color:var(--text-sec);">Click any row to inspect raw recurrence JSON</span>
+  </div>
+
+  <div class="dv-scroll">
+    <table class="dv-table">
+      <thead>
+        <tr>
+          <th style="min-width:220px;">Flow Name</th>
+          <th style="width:90px;">State</th>
+          <th style="width:105px;">Frequency</th>
+          <th style="min-width:240px;">Recurrence Timing</th>
+          <th style="width:185px;">Time Zone</th>
+          <th style="width:165px;">Start Time</th>
+          <th style="width:140px;">Owner</th>
+          <th style="width:95px;text-align:center;">Open</th>
+        </tr>
+      </thead>
+      <tbody id="sched-tbody">
+        <tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">Connecting to Dataverse…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Scheduled Cloud Flows Inspector</span>
+  </footer>
+
+  <div class="dv-overlay" id="detail-modal">
+    <div class="dv-modal">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <strong id="md-title" style="font-size:14px;">Flow Schedule Details</strong>
+        <button class="dv-btn dv-btn-sm" id="md-close">✕</button>
+      </div>
+      <div id="md-meta" style="font-size:12px;color:var(--text-sec);line-height:1.6;"></div>
+      <div style="font-size:11px;font-weight:600;color:var(--text-sec);">Trigger Recurrence Definition (`clientdata`):</div>
+      <pre class="dv-code" id="md-json" style="max-height:280px;overflow:auto;"></pre>
+      <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+        <button class="dv-btn" id="md-copy-id">📋 Copy Flow ID</button>
+        <button class="dv-btn" id="md-open-cal">📅 Open in Flow Calendar</button>
+        <a href="#" target="_blank" rel="noopener noreferrer" class="dv-btn dv-btn-primary" id="md-open-pa" style="text-decoration:none;">🚀 Open in Power Automate ↗</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let context = null;
+    let flows = [];
+    let totalScanned = 0;
+
+    function toHost(type, payload = {}) {
+      window.parent?.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
+    }
+
+    toHost('TOOL_READY');
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') {
+        context = e.data.payload;
+        loadScheduledFlows();
+      }
+    });
+
+    async function fetchAllPages(path) {
+      const all = [];
+      let next = path;
+      while (next && all.length < 3000) {
+        const res = await DV.fetch(next);
+        all.push(...(res.value || []));
+        next = res['@odata.nextLink'] || '';
+      }
+      return all;
+    }
+
+    function pad2(n) {
+      return String(n).padStart(2, '0');
+    }
+
+    function formatClockList(hours, minutes) {
+      const hList = Array.isArray(hours) ? hours.map(Number).filter(n => !isNaN(n)) : [];
+      const mList = Array.isArray(minutes) ? minutes.map(Number).filter(n => !isNaN(n)) : [];
+      if (hList.length && mList.length) {
+        const combos = [];
+        for (const h of hList) {
+          for (const m of mList) combos.push(`${pad2(h)}:${pad2(m)}`);
+        }
+        return combos.slice(0, 6).join(', ') + (combos.length > 6 ? ` (+${combos.length - 6} more)` : '');
+      }
+      if (hList.length) return hList.map(h => `${pad2(h)}:00`).join(', ');
+      if (mList.length) return mList.map(m => `:${pad2(m)}`).join(', ');
+      return '';
+    }
+
+    function ordinal(n) {
+      const num = Number(n);
+      if (num === -1) return 'Last';
+      const mod100 = Math.abs(num) % 100;
+      if (mod100 >= 11 && mod100 <= 13) return `${num}th`;
+      const mod10 = Math.abs(num) % 10;
+      if (mod10 === 1) return `${num}st`;
+      if (mod10 === 2) return `${num}nd`;
+      if (mod10 === 3) return `${num}rd`;
+      return `${num}th`;
+    }
+
+    function extractRecurrenceTrigger(clientdata) {
+      if (!clientdata) return null;
+      let cd;
+      try { cd = typeof clientdata === 'string' ? JSON.parse(clientdata) : clientdata; } catch { return null; }
+      const triggers = cd?.properties?.definition?.triggers;
+      if (!triggers || typeof triggers !== 'object') return null;
+
+      for (const [triggerName, tr] of Object.entries(triggers)) {
+        if (!tr || typeof tr !== 'object') continue;
+        const isRecurrenceType = String(tr.type || '').toLowerCase() === 'recurrence';
+        if (tr.recurrence || isRecurrenceType) {
+          return { triggerName, trigger: tr, recurrence: tr.recurrence || {} };
+        }
+      }
+      return null;
+    }
+
+    function formatRecurrenceTiming(rec) {
+      if (!rec || typeof rec !== 'object') {
+        return { frequency: 'Unknown', interval: 1, summary: 'Recurrence details unavailable', details: '', timeZone: 'UTC (default)', startTime: '' };
+      }
+
+      const rawFreq = String(rec.frequency || 'Unknown');
+      const freq = rawFreq.charAt(0).toUpperCase() + rawFreq.slice(1).toLowerCase();
+      const interval = Math.max(1, Number(rec.interval) || 1);
+      const unitLabel = interval === 1 ? freq : `${freq}s`;
+      const base = interval === 1 ? `Every ${freq}` : `Every ${interval} ${unitLabel}`;
+
+      const sched = rec.schedule && typeof rec.schedule === 'object' ? rec.schedule : {};
+      const parts = [];
+      const detailParts = [];
+
+      if (Array.isArray(sched.weekDays) && sched.weekDays.length) {
+        const days = sched.weekDays.map(d => String(d).slice(0, 3)).join(', ');
+        parts.push(`on ${days}`);
+        detailParts.push(`Days: ${sched.weekDays.join(', ')}`);
+      }
+      if (Array.isArray(sched.monthDays) && sched.monthDays.length) {
+        const mDays = sched.monthDays.map(d => (Number(d) === -1 ? 'Last' : String(d))).join(', ');
+        parts.push(`on day ${mDays}`);
+        detailParts.push(`Month days: ${mDays}`);
+      }
+      if (Array.isArray(sched.monthlyOccurrences) && sched.monthlyOccurrences.length) {
+        const occ = sched.monthlyOccurrences.map(o => `${ordinal(o.occurrence)} ${o.day || ''}`.trim()).join(', ');
+        parts.push(`on ${occ}`);
+        detailParts.push(`Monthly: ${occ}`);
+      }
+
+      const clock = formatClockList(sched.hours, sched.minutes);
+      if (clock) {
+        parts.push(`at ${clock}`);
+        if (Array.isArray(sched.hours) && sched.hours.length) detailParts.push(`Hours: ${sched.hours.join(', ')}`);
+        if (Array.isArray(sched.minutes) && sched.minutes.length) detailParts.push(`Minutes: ${sched.minutes.join(', ')}`);
+      }
+
+      return {
+        frequency: freq,
+        interval,
+        summary: parts.length ? `${base} ${parts.join(' ')}` : base,
+        details: detailParts.join(' · '),
+        timeZone: rec.timeZone || 'UTC (default)',
+        startTime: rec.startTime || '',
+        endTime: rec.endTime || ''
+      };
+    }
+
+    function getFlowUrl(workflowId) {
+      const envId = context?.environmentId || context?.organizationId || 'Default';
+      return `https://make.powerautomate.com/environments/${encodeURIComponent(envId)}/flows/${encodeURIComponent(workflowId)}/details`;
+    }
+
+    function stateInfo(statecode) {
+      const s = Number(statecode);
+      if (s === 1) return { label: 'Activated', type: 'ok' };
+      if (s === 2) return { label: 'Suspended', type: 'warn' };
+      return { label: 'Draft', type: 'warn' };
+    }
+
+    function freqBadgeType(freq) {
+      if (freq === 'Second' || freq === 'Minute') return 'warn';
+      if (freq === 'Hour' || freq === 'Day') return 'ok';
+      return 'info';
+    }
+
+    function formatStartTime(val) {
+      if (!val) return '—';
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return String(val);
+      return `${d.toLocaleDateString()} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+    }
+
+    async function loadScheduledFlows() {
+      document.getElementById('sched-tbody').innerHTML =
+        '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">Querying Cloud Flows and parsing recurrence triggers…</td></tr>';
+      try {
+        const rawFlows = await fetchAllPages(
+          '/workflows?$select=workflowid,name,statecode,statuscode,_ownerid_value,modifiedon,ismanaged,description,clientdata&$filter=category eq 5 and type eq 1&$orderby=name asc'
+        );
+        totalScanned = rawFlows.length;
+        const parsed = [];
+        for (const f of rawFlows) {
+          const trig = extractRecurrenceTrigger(f.clientdata);
+          if (!trig) continue;
+          const timing = formatRecurrenceTiming(trig.recurrence);
+          parsed.push({
+            id: f.workflowid,
+            name: f.name || 'Unnamed Flow',
+            statecode: Number(f.statecode),
+            stateText: stateInfo(f.statecode).label,
+            owner: f['_ownerid_value@OData.Community.Display.V1.FormattedValue'] || f._ownerid_value || '—',
+            modifiedon: f.modifiedon || '',
+            ismanaged: !!f.ismanaged,
+            description: f.description || '',
+            triggerName: trig.triggerName,
+            recurrence: trig.recurrence,
+            frequency: timing.frequency,
+            interval: timing.interval,
+            summary: timing.summary,
+            details: timing.details,
+            timeZone: timing.timeZone,
+            startTime: timing.startTime,
+            endTime: timing.endTime
+          });
+        }
+        flows = parsed;
+        populateTzFilter();
+        renderTable();
+        DV.notify(`Found ${flows.length} scheduled flows out of ${totalScanned} Cloud Flows.`, 'success');
+      } catch (err) {
+        document.getElementById('sched-tbody').innerHTML =
+          `<tr><td colspan="8" style="color:var(--err-color);padding:20px;">❌ ${DV.esc(err.message)}</td></tr>`;
+        DV.notify(err.message, 'error');
+      }
+    }
+
+    function loadSampleData() {
+      totalScanned = 24;
+      const sampleDefs = [
+        { id: '11111111-1111-1111-1111-111111111101', name: 'Sync Inventory Stock Levels', statecode: 1, owner: 'Integration Svc', ismanaged: true, description: 'Polls ERP warehouse delta every 5 minutes.', recurrence: { frequency: 'Minute', interval: 5, timeZone: 'UTC', startTime: '2026-01-01T00:00:00Z' } },
+        { id: '11111111-1111-1111-1111-111111111102', name: 'Daily Executive Pipeline Digest', statecode: 1, owner: 'Ashish V.', ismanaged: false, description: 'Sends Teams + Email digest each morning.', recurrence: { frequency: 'Day', interval: 1, timeZone: 'India Standard Time', startTime: '2026-02-10T03:30:00Z', schedule: { hours: [9], minutes: [0] } } },
+        { id: '11111111-1111-1111-1111-111111111103', name: 'Mon/Wed/Fri Stale Lead Cleanup', statecode: 1, owner: 'CRM Ops', ismanaged: false, description: 'Archives untouched leads older than 90 days.', recurrence: { frequency: 'Week', interval: 1, timeZone: 'Eastern Standard Time', schedule: { weekDays: ['Monday', 'Wednesday', 'Friday'], hours: [2], minutes: [30] } } },
+        { id: '11111111-1111-1111-1111-111111111104', name: 'Monthly Billing Rollup (1st Monday)', statecode: 1, owner: 'Finance Bot', ismanaged: true, description: 'Generates monthly invoice batch.', recurrence: { frequency: 'Month', interval: 1, timeZone: 'Pacific Standard Time', schedule: { monthlyOccurrences: [{ day: 'Monday', occurrence: 1 }], hours: [6], minutes: [0] } } },
+        { id: '11111111-1111-1111-1111-111111111105', name: 'Hourly Sandbox Data Anonymizer', statecode: 0, owner: 'Ashish V.', ismanaged: false, description: 'Turned off in production.', recurrence: { frequency: 'Hour', interval: 2, timeZone: 'UTC', schedule: { minutes: [15] } } }
+      ];
+      flows = sampleDefs.map(s => {
+        const timing = formatRecurrenceTiming(s.recurrence);
+        return {
+          ...s,
+          stateText: stateInfo(s.statecode).label,
+          triggerName: 'Recurrence',
+          modifiedon: new Date().toISOString(),
+          frequency: timing.frequency,
+          interval: timing.interval,
+          summary: timing.summary,
+          details: timing.details,
+          timeZone: timing.timeZone,
+          startTime: timing.startTime,
+          endTime: timing.endTime
+        };
+      });
+      populateTzFilter();
+      renderTable();
+      DV.notify(`Loaded ${flows.length} sample scheduled flows.`, 'info');
+    }
+
+    function populateTzFilter() {
+      const sel = document.getElementById('f-tz');
+      const prev = sel.value;
+      const tzs = [...new Set(flows.map(f => f.timeZone))].sort();
+      sel.innerHTML = '<option value="ALL">All Time Zones</option>' +
+        tzs.map(z => `<option value="${DV.esc(z)}">${DV.esc(z)}</option>`).join('');
+      if (tzs.includes(prev)) sel.value = prev;
+    }
+
+    function getFiltered() {
+      const q = document.getElementById('f-search').value.trim().toLowerCase();
+      const st = document.getElementById('f-state').value;
+      const fr = document.getElementById('f-freq').value;
+      const tz = document.getElementById('f-tz').value;
+
+      return flows.filter(f => {
+        if (st !== 'ALL' && String(f.statecode) !== st) return false;
+        if (fr !== 'ALL' && f.frequency !== fr) return false;
+        if (tz !== 'ALL' && f.timeZone !== tz) return false;
+        if (!q) return true;
+        return `${f.name} ${f.summary} ${f.details} ${f.timeZone} ${f.owner} ${f.description}`.toLowerCase().includes(q);
+      });
+    }
+
+    function renderTable() {
+      document.getElementById('st-total').textContent = flows.length;
+      document.getElementById('st-on').textContent = flows.filter(f => f.statecode === 1).length;
+      document.getElementById('st-off').textContent = flows.filter(f => f.statecode !== 1).length;
+      document.getElementById('st-high').textContent = flows.filter(f => f.frequency === 'Minute' || f.frequency === 'Second').length;
+      document.getElementById('st-all').textContent = totalScanned;
+      DV.setTitle(`Scheduled Flows (${flows.length})`);
+
+      const rows = getFiltered();
+      const tbody = document.getElementById('sched-tbody');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">No matching scheduled Cloud Flows found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = rows.map((f, idx) => {
+        const st = stateInfo(f.statecode);
+        const fType = freqBadgeType(f.frequency);
+        const paUrl = getFlowUrl(f.id);
+        return `<tr class="row-click" data-idx="${idx}">
+          <td>
+            <div class="sched-main">${DV.esc(f.name)}</div>
+            <div class="sched-sub">${f.ismanaged ? 'Managed' : 'Unmanaged'}${f.description ? ` · ${DV.esc(f.description.slice(0, 60))}` : ''}</div>
+          </td>
+          <td>${DV.ui.badge(st.label, st.type)}</td>
+          <td>${DV.ui.badge(f.frequency, fType)}</td>
+          <td>
+            <div class="sched-main">${DV.esc(f.summary)}</div>
+            ${f.details ? `<div class="sched-sub">${DV.esc(f.details)}</div>` : ''}
+          </td>
+          <td><span class="tz-chip">${DV.esc(f.timeZone)}</span></td>
+          <td style="font-family:monospace;font-size:11px;">${DV.esc(formatStartTime(f.startTime))}</td>
+          <td>${DV.esc(f.owner)}</td>
+          <td style="text-align:center;white-space:nowrap;">
+            <a href="${DV.esc(paUrl)}" target="_blank" rel="noopener noreferrer" class="dv-btn dv-btn-sm" title="Open in Power Automate" onclick="event.stopPropagation();" style="text-decoration:none;">🚀↗</a>
+          </td>
+        </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('tr.row-click').forEach(tr => {
+        tr.addEventListener('click', () => {
+          const item = rows[Number(tr.dataset.idx)];
+          if (item) openDetailModal(item);
+        });
+      });
+    }
+
+    function openDetailModal(f) {
+      document.getElementById('md-title').textContent = `⏰ ${f.name}`;
+      document.getElementById('md-meta').innerHTML = `
+        <strong>State:</strong> ${DV.esc(f.stateText)} &nbsp;|&nbsp;
+        <strong>Timing:</strong> ${DV.esc(f.summary)} &nbsp;|&nbsp;
+        <strong>Time Zone:</strong> <code>${DV.esc(f.timeZone)}</code><br>
+        <strong>Trigger:</strong> <code>${DV.esc(f.triggerName)}</code> &nbsp;|&nbsp;
+        <strong>Start:</strong> <code>${DV.esc(f.startTime || 'Not set')}</code>${f.endTime ? ` &nbsp;|&nbsp; <strong>End:</strong> <code>${DV.esc(f.endTime)}</code>` : ''}
+      `;
+      document.getElementById('md-json').textContent = JSON.stringify(f.recurrence, null, 2);
+      document.getElementById('md-open-pa').href = getFlowUrl(f.id);
+      document.getElementById('md-copy-id').onclick = () => {
+        navigator.clipboard?.writeText(f.id).then(() => DV.notify('Copied Flow ID', 'success'));
+      };
+      document.getElementById('md-open-cal').onclick = () => {
+        DV.openTool('flow-calendar', { flowId: f.id, flowName: f.name });
+      };
+      document.getElementById('detail-modal').classList.add('open');
+    }
+
+    document.getElementById('md-close').addEventListener('click', () => document.getElementById('detail-modal').classList.remove('open'));
+    document.getElementById('detail-modal').addEventListener('click', e => {
+      if (e.target === document.getElementById('detail-modal')) document.getElementById('detail-modal').classList.remove('open');
+    });
+
+    ['f-search', 'f-state', 'f-freq', 'f-tz'].forEach(id => {
+      document.getElementById(id).addEventListener(id === 'f-search' ? 'input' : 'change', renderTable);
+    });
+    document.getElementById('btn-refresh').addEventListener('click', () => {
+      if (context) loadScheduledFlows();
+      else loadSampleData();
+    });
+    document.getElementById('btn-sample').addEventListener('click', loadSampleData);
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const rows = getFiltered();
+      DV.exportCsv(
+        `scheduled_cloud_flows_${new Date().toISOString().slice(0, 10)}.csv`,
+        ['Name', 'State', 'Frequency', 'Interval', 'RecurrenceTiming', 'ScheduleDetails', 'TimeZone', 'StartTime', 'Owner', 'Managed', 'FlowId'],
+        rows.map(f => [f.name, f.stateText, f.frequency, f.interval, f.summary, f.details, f.timeZone, f.startTime, f.owner, f.ismanaged ? 'Yes' : 'No', f.id])
+      );
+    });
+  </script>
+</body>
+</html>
