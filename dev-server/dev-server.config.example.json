@@ -6,11 +6,13 @@
   "environments": {
     "dev": {
       "url": "https://yourorg-dev.crm.dynamics.com",
-      "auth": "pac"
+      "auth": "pac",
+      "token": ""
     },
     "uat": {
       "url": "https://yourorg-uat.crm.dynamics.com",
-      "auth": "az"
+      "auth": "az",
+      "bearerToken": ""
     }
   }
 }

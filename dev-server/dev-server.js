@@ -121,9 +121,16 @@ function parseArgs(argv) {
     ? (profile.url || profile.envUrl || profile.env || '')
     : (requestedEnv || cfg.envUrl || cfg.env || '');
 
+  const rawCfgToken = (profile?.token || profile?.bearerToken || cfg.token || cfg.bearerToken || '')
+    .toString()
+    .trim()
+    .replace(/^Bearer\s+/i, '');
+
   return {
     configFile: loadedCfg ? path.relative(ROOT_DIR, loadedCfg.path) : '',
+    configFullPath: loadedCfg ? loadedCfg.path : '',
     activeEnvName,
+    configToken: rawCfgToken,
     envUrl: rawResolvedEnv ? normalizeEnvUrl(rawResolvedEnv) : '',
     port: cli.port || envVarPort || (profile && parseInt(profile.port, 10)) || parseInt(cfg.port, 10) || 8787,
     auth: cli.auth || envVarAuth || (profile && String(profile.auth || '').toLowerCase()) || String(cfg.auth || 'auto').toLowerCase(),
@@ -155,10 +162,31 @@ function detectPacOrgUrl() {
 /* ─── Server-Side Token Acquisition ────────────────────────── */
 let cachedToken = null; // { value, source, fetchedAt }
 
-function acquireTokenFromCli(envUrl, authMode) {
+function reloadConfigTokenFromDisk(opts) {
+  if (!opts.configFullPath || !fs.existsSync(opts.configFullPath)) return opts.configToken || '';
+  try {
+    const cfg = JSON.parse(fs.readFileSync(opts.configFullPath, 'utf8'));
+    const prof = opts.activeEnvName ? findNamedEnvironment(cfg.environments, opts.activeEnvName)?.profile : null;
+    return String(prof?.token || prof?.bearerToken || cfg.token || cfg.bearerToken || '')
+      .trim()
+      .replace(/^Bearer\s+/i, '');
+  } catch {
+    return opts.configToken || '';
+  }
+}
+
+function acquireToken(opts, forceRefresh = false) {
+  const { envUrl, auth: authMode } = opts;
+
   const tryEnv = () => {
     const t = (process.env.DV_TOKEN || '').trim().replace(/^Bearer\s+/i, '');
     return t ? { value: t, source: 'DV_TOKEN env' } : null;
+  };
+
+  const tryConfig = () => {
+    const raw = forceRefresh ? reloadConfigTokenFromDisk(opts) : (opts.configToken || '');
+    const t = String(raw || '').trim().replace(/^Bearer\s+/i, '');
+    return t ? { value: t, source: `${opts.configFile || 'dev-server.config.json'} token` } : null;
   };
 
   const tryPac = () => {
@@ -178,13 +206,24 @@ function acquireTokenFromCli(envUrl, authMode) {
     return { value: out, source: 'az account get-access-token' };
   };
 
-  if (authMode === 'env') return tryEnv();
+  if (authMode === 'env') {
+    const t = tryEnv();
+    if (!t) throw new Error('DV_TOKEN env var is not set.');
+    return t;
+  }
+  if (authMode === 'config') {
+    const t = tryConfig();
+    if (!t) throw new Error('No token/bearerToken found in JSON config.');
+    return t;
+  }
   if (authMode === 'pac') return tryPac();
   if (authMode === 'az') return tryAz();
 
-  // Auto order: DV_TOKEN -> pac -> az
+  // Auto order: DV_TOKEN -> config JSON token -> pac -> az
   const envTok = tryEnv();
   if (envTok) return envTok;
+  const cfgTok = tryConfig();
+  if (cfgTok) return cfgTok;
 
   const errs = [];
   for (const fn of [tryPac, tryAz]) {
@@ -198,7 +237,7 @@ function getBearerToken(opts, forceRefresh = false) {
   if (!forceRefresh && cachedToken && Date.now() - cachedToken.fetchedAt < TOKEN_TTL_MS) {
     return cachedToken.value;
   }
-  const acquired = acquireTokenFromCli(opts.envUrl, opts.auth);
+  const acquired = acquireToken(opts, forceRefresh);
   if (!acquired) return null;
   cachedToken = { ...acquired, fetchedAt: Date.now() };
   return cachedToken.value;
@@ -520,13 +559,13 @@ if (require.main === module) {
 DV Open Tools — Local Dev Server & Auth Proxy
 
 Usage:
-  node dev-server/dev-server.js [--env <url|profile>] [--config dev-server.config.json] [--port 8787] [--auth auto|pac|az|env] [--local-only]
+  node dev-server/dev-server.js [--env <url|profile>] [--config dev-server.config.json] [--port 8787] [--auth auto|pac|az|env|config] [--local-only]
 
 Options:
   --env <val>       Target Dataverse org URL or named environment in dev-server.config.json (auto-detected via \`pac org who\` if omitted)
   --config <path>   Path to JSON environment config (default: ./dev-server.config.json or dev-server/dev-server.config.json)
   --port <num>      Local HTTP port (default: 8787)
-  --auth <mode>     Token source: auto (default), pac (\`pac auth token\`), az (\`az account get-access-token\`), or env (DV_TOKEN)
+  --auth <mode>     Token source: auto (default), config (JSON token), pac (\`pac auth token\`), az (\`az account get-access-token\`), or env (DV_TOKEN)
   --local-only      Serve local HTML tools without proxying Dataverse API calls
   --build-manifest  Regenerate tools/manifest.json from tools/dvot_*.html and exit
   --build-bundle    Generate a single-file tool bundle HTML (default: dist/dvot_bundle_all.html)

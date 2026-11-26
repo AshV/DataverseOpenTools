@@ -35,11 +35,12 @@ Copy [`dev-server.config.example.json`](dev-server.config.example.json) to `dev-
   "port": 8787,
   "auth": "auto",
   "environments": {
-    "dev": { "url": "https://yourorg-dev.crm.dynamics.com", "auth": "pac" },
-    "uat": { "url": "https://yourorg-uat.crm.dynamics.com", "auth": "az" }
+    "dev": { "url": "https://yourorg-dev.crm.dynamics.com", "auth": "pac", "token": "" },
+    "uat": { "url": "https://yourorg-uat.crm.dynamics.com", "auth": "az", "bearerToken": "" }
   }
 }
 ```
+*(Optional: set `"token"` / `"bearerToken"` either per-profile or at the top level instead of `pac`/`az`. Tokens remain strictly in local server memory and `dev-server.config.json` is `.gitignore`d.)*
 Then run with no URL needed (or switch profiles by name):
 ```powershell
 dotnet run --project dev-server                # uses defaultEnvironment ("dev")
@@ -52,7 +53,7 @@ dotnet run --project dev-server -- --env uat   # switches to "uat" profile
 | `--env <url\|profile>` | `-Env <url\|profile>` | Target Dataverse org URL or named profile in config JSON (auto-detected via `pac org who` if omitted) |
 | `--config <path>` | `-Config <path>` | Explicit path to JSON config (defaults to `./dev-server.config.json` or `dev-server/dev-server.config.json`) |
 | `--port <num>` | `-Port <num>` | Local HTTP port (default `8787`) |
-| `--auth auto\|pac\|az\|env` | `-Auth auto\|pac\|az\|env` | Bearer token source |
+| `--auth auto\|pac\|az\|env\|config` | `-Auth auto\|pac\|az\|env\|config` | Bearer token source (`config` forces JSON token; `auto` checks `DV_TOKEN` → JSON token → `pac` → `az`) |
 | `--local-only` | `-LocalOnly` | Serve local HTML tools without proxying Dataverse APIs |
 | `--build-manifest` | `-BuildManifest` | Regenerate `tools/manifest.json` from `tools/dvot_*.html` |
 | `--build-bundle [path]` | `-BuildBundle [-BundleOut path]` | Bundle all tools (without host) into one HTML pack (default `dist/dvot_bundle_all.html`) |

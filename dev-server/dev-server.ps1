@@ -16,7 +16,7 @@ param(
     [string]$Env = '',
     [string]$Config = $(if ($env:DV_CONFIG) { $env:DV_CONFIG } else { '' }),
     [int]$Port = 0,
-    [ValidateSet('', 'auto', 'pac', 'az', 'env')]
+    [ValidateSet('', 'auto', 'pac', 'az', 'env', 'config')]
     [string]$Auth = '',
     [switch]$LocalOnly,
     [switch]$BuildManifest,
@@ -58,13 +58,13 @@ if ($Help) {
 DV Open Tools — PowerShell Local Dev Server & Auth Proxy
 
 Usage:
-  .\dev-server\dev-server.ps1 [-Env <url|profile>] [-Config dev-server.config.json] [-Port 8787] [-Auth auto|pac|az|env] [-LocalOnly]
+  .\dev-server\dev-server.ps1 [-Env <url|profile>] [-Config dev-server.config.json] [-Port 8787] [-Auth auto|pac|az|env|config] [-LocalOnly]
 
 Options:
   -Env <val>        Target Dataverse org URL or named environment in dev-server.config.json (auto-detected via ``pac org who`` if omitted)
   -Config <path>    Path to JSON environment config (default: ./dev-server.config.json or dev-server/dev-server.config.json)
   -Port <num>       Local HTTP port (default: 8787)
-  -Auth <mode>      Token source: auto (default), pac (``pac auth token``), az (``az account get-access-token``), or env (DV_TOKEN)
+  -Auth <mode>      Token source: auto (default), config (JSON token), pac (``pac auth token``), az (``az account get-access-token``), or env (DV_TOKEN)
   -LocalOnly        Serve local HTML tools without proxying Dataverse API calls
   -BuildManifest    Regenerate tools/manifest.json from tools/dvot_*.html and exit
   -BuildBundle      Generate a single-file tool bundle HTML (default: dist/dvot_bundle_all.html)
@@ -81,6 +81,9 @@ $RootDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $ToolsDir = Join-Path $RootDir 'tools'
 $Script:TokenTtlSeconds = 40 * 60
 $Script:CachedToken = $null
+$Script:ConfigToken = ''
+$Script:LoadedConfigPath = ''
+$Script:ActiveEnvName = ''
 
 function Normalize-EnvUrl([string]$Raw) {
     $s = if ($Raw) { $Raw.Trim() } else { '' }
@@ -103,10 +106,41 @@ function Detect-PacOrgUrl {
     return ''
 }
 
-function Acquire-TokenFromCli([string]$EnvUrl, [string]$AuthMode) {
+function Clean-BearerToken([string]$Raw) {
+    if (-not $Raw) { return '' }
+    return ($Raw.Trim() -replace '^(?i)Bearer\s+', '')
+}
+
+function Reload-ConfigTokenFromDisk {
+    if (-not $Script:LoadedConfigPath -or -not [System.IO.File]::Exists($Script:LoadedConfigPath)) { return $Script:ConfigToken }
+    try {
+        $c = ([System.IO.File]::ReadAllText($Script:LoadedConfigPath, [System.Text.Encoding]::UTF8)) | ConvertFrom-Json
+        $prof = $null
+        if ($Script:ActiveEnvName -and $c.PSObject.Properties['environments']) {
+            $found = Find-NamedEnvironment $c.environments $Script:ActiveEnvName
+            if ($found) { $prof = $found.Profile }
+        }
+        $tok = Get-ObjProp $prof 'token'
+        if (-not $tok) { $tok = Get-ObjProp $prof 'bearerToken' }
+        if (-not $tok) { $tok = Get-ObjProp $c 'token' }
+        if (-not $tok) { $tok = Get-ObjProp $c 'bearerToken' }
+        return (Clean-BearerToken ([string]$tok))
+    } catch {
+        return $Script:ConfigToken
+    }
+}
+
+function Acquire-TokenFromCli([string]$EnvUrl, [string]$AuthMode, [bool]$ForceRefresh = $false) {
     $tryEnv = {
-        $t = if ($env:DV_TOKEN) { $env:DV_TOKEN.Trim() -replace '^Bearer\s+', '' } else { '' }
+        $t = Clean-BearerToken $env:DV_TOKEN
         if ($t) { return @{ Value = $t; Source = 'DV_TOKEN env' } }
+        return $null
+    }
+
+    $tryConfig = {
+        $raw = if ($ForceRefresh) { Reload-ConfigTokenFromDisk } else { $Script:ConfigToken }
+        $t = Clean-BearerToken $raw
+        if ($t) { return @{ Value = $t; Source = 'dev-server.config.json token' } }
         return $null
     }
 
@@ -131,12 +165,23 @@ function Acquire-TokenFromCli([string]$EnvUrl, [string]$AuthMode) {
         return @{ Value = $tok; Source = 'az account get-access-token' }
     }
 
-    if ($AuthMode -eq 'env') { return (& $tryEnv) }
+    if ($AuthMode -eq 'env') {
+        $t = & $tryEnv
+        if (-not $t) { throw 'DV_TOKEN env var is not set.' }
+        return $t
+    }
+    if ($AuthMode -eq 'config') {
+        $t = & $tryConfig
+        if (-not $t) { throw 'No token/bearerToken found in JSON config.' }
+        return $t
+    }
     if ($AuthMode -eq 'pac') { return (& $tryPac) }
     if ($AuthMode -eq 'az') { return (& $tryAz) }
 
     $envTok = & $tryEnv
     if ($envTok) { return $envTok }
+    $cfgTok = & $tryConfig
+    if ($cfgTok) { return $cfgTok }
 
     $errs = @()
     foreach ($fn in @($tryPac, $tryAz)) {
@@ -151,7 +196,7 @@ function Get-BearerToken([string]$EnvUrl, [string]$AuthMode, [bool]$IsLocalOnly,
         $age = ([DateTimeOffset]::UtcNow - $Script:CachedToken.FetchedAt).TotalSeconds
         if ($age -lt $Script:TokenTtlSeconds) { return $Script:CachedToken.Value }
     }
-    $acq = Acquire-TokenFromCli $EnvUrl $AuthMode
+    $acq = Acquire-TokenFromCli $EnvUrl $AuthMode $ForceRefresh
     if (-not $acq) { return $null }
     $Script:CachedToken = @{
         Value     = $acq.Value
@@ -533,6 +578,14 @@ if (-not $PSBoundParameters.ContainsKey('LocalOnly') -and -not $LocalOnly) {
     if ($null -ne $pLocal) { $LocalOnly = [bool]$pLocal }
     elseif ($null -ne $cLocal) { $LocalOnly = [bool]$cLocal }
 }
+
+$rawCfgTok = Get-ObjProp $profileObj 'token'
+if (-not $rawCfgTok) { $rawCfgTok = Get-ObjProp $profileObj 'bearerToken' }
+if (-not $rawCfgTok) { $rawCfgTok = Get-ObjProp $cfg 'token' }
+if (-not $rawCfgTok) { $rawCfgTok = Get-ObjProp $cfg 'bearerToken' }
+$Script:ConfigToken = Clean-BearerToken ([string]$rawCfgTok)
+$Script:LoadedConfigPath = if ($loadedCfg) { $loadedCfg.Path } else { '' }
+$Script:ActiveEnvName = $activeEnvName
 
 if ($loadedCfg) {
     $profSuffix = if ($activeEnvName) { " (profile: $activeEnvName)" } else { '' }

@@ -43,7 +43,9 @@ internal static class Program
     private sealed class ProxyOptions
     {
         public string ConfigFile { get; set; } = "";
+        public string ConfigFullPath { get; set; } = "";
         public string ActiveEnvName { get; set; } = "";
+        public string ConfigToken { get; set; } = "";
         public string EnvUrl { get; set; } = "";
         public int Port { get; set; } = 8787;
         public string Auth { get; set; } = "auto";
@@ -167,13 +169,13 @@ internal static class Program
 DV Open Tools — Local C# (.NET) Dev Server & Auth Proxy
 
 Usage:
-  dotnet run --project dev-server -- [--env <url|profile>] [--config dev-server.config.json] [--port 8787] [--auth auto|pac|az|env] [--local-only]
+  dotnet run --project dev-server -- [--env <url|profile>] [--config dev-server.config.json] [--port 8787] [--auth auto|pac|az|env|config] [--local-only]
 
 Options:
   --env <val>       Target Dataverse org URL or named environment in dev-server.config.json (auto-detected via `pac org who` if omitted)
   --config <path>   Path to JSON environment config (default: ./dev-server.config.json or dev-server/dev-server.config.json)
   --port <num>      Local HTTP port (default: 8787)
-  --auth <mode>     Token source: auto (default), pac (`pac auth token`), az (`az account get-access-token`), or env (DV_TOKEN)
+  --auth <mode>     Token source: auto (default), config (JSON token), pac (`pac auth token`), az (`az account get-access-token`), or env (DV_TOKEN)
   --local-only      Serve local HTML tools without proxying Dataverse API calls
   --build-manifest  Regenerate tools/manifest.json from tools/dvot_*.html and exit
   --build-bundle    Generate a single-file tool bundle HTML (default: dist/dvot_bundle_all.html)
@@ -328,11 +330,16 @@ Options:
             : (!string.IsNullOrEmpty(requestedEnv) ? requestedEnv : (Str(cfg, "envUrl") is { Length: > 0 } ceu ? ceu : Str(cfg, "env")));
 
         var cfgAuth = Str(profile, "auth") is { Length: > 0 } pa ? pa : Str(cfg, "auth");
+        var rawCfgToken = Str(profile, "token") is { Length: > 0 } pt ? pt
+            : (Str(profile, "bearerToken") is { Length: > 0 } pbt ? pbt
+            : (Str(cfg, "token") is { Length: > 0 } ct ? ct : Str(cfg, "bearerToken")));
 
         return new ProxyOptions
         {
             ConfigFile = loadedCfg is not null ? Path.GetRelativePath(rootDir, loadedCfg.Value.Path) : "",
+            ConfigFullPath = loadedCfg is not null ? loadedCfg.Value.Path : "",
             ActiveEnvName = activeEnvName,
+            ConfigToken = CleanBearer(rawCfgToken),
             EnvUrl = NormalizeEnvUrl(rawResolvedUrl),
             Port = cliPort ?? envVarPort ?? Num(profile, "port") ?? Num(cfg, "port") ?? 8787,
             Auth = !string.IsNullOrEmpty(cliAuth) ? cliAuth : (!string.IsNullOrEmpty(envVarAuth) ? envVarAuth : (!string.IsNullOrEmpty(cfgAuth) ? cfgAuth.Trim().ToLowerInvariant() : "auto")),
@@ -342,6 +349,14 @@ Options:
             BundleOut = bundleOut,
             Help = help
         };
+    }
+
+    private static string CleanBearer(string? raw)
+    {
+        var s = (raw ?? "").Trim();
+        if (s.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            s = s[7..].Trim();
+        return s;
     }
 
     private static string NormalizeEnvUrl(string raw)
@@ -415,14 +430,51 @@ Options:
         }
     }
 
-    private static (string Value, string Source)? AcquireTokenFromCli(string envUrl, string authMode)
+    private static string ReloadConfigTokenFromDisk(ProxyOptions opts)
     {
+        if (string.IsNullOrEmpty(opts.ConfigFullPath) || !File.Exists(opts.ConfigFullPath))
+            return opts.ConfigToken;
+        try
+        {
+            var raw = File.ReadAllText(opts.ConfigFullPath, Encoding.UTF8);
+            var cfg = JsonNode.Parse(raw, new JsonNodeOptions(), new JsonDocumentOptions
+            {
+                CommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true
+            }) as JsonObject;
+            if (cfg is null) return opts.ConfigToken;
+            var prof = !string.IsNullOrEmpty(opts.ActiveEnvName)
+                ? FindNamedEnvironment(cfg["environments"] as JsonObject, opts.ActiveEnvName)?.Profile
+                : null;
+            static string S(JsonObject? o, string k) => o?[k]?.GetValueKind() == JsonValueKind.String ? o[k]!.GetValue<string>() : "";
+            var tok = S(prof, "token") is { Length: > 0 } pt ? pt
+                : (S(prof, "bearerToken") is { Length: > 0 } pbt ? pbt
+                : (S(cfg, "token") is { Length: > 0 } ct ? ct : S(cfg, "bearerToken")));
+            return CleanBearer(tok);
+        }
+        catch
+        {
+            return opts.ConfigToken;
+        }
+    }
+
+    private static (string Value, string Source)? AcquireToken(ProxyOptions opts, bool forceRefresh)
+    {
+        var envUrl = opts.EnvUrl;
+        var authMode = opts.Auth;
+
         static (string Value, string Source)? TryEnv()
         {
-            var raw = (Environment.GetEnvironmentVariable("DV_TOKEN") ?? "").Trim();
-            if (raw.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                raw = raw[7..].Trim();
+            var raw = CleanBearer(Environment.GetEnvironmentVariable("DV_TOKEN"));
             return string.IsNullOrEmpty(raw) ? null : (raw, "DV_TOKEN env");
+        }
+
+        (string Value, string Source)? TryConfig()
+        {
+            var raw = CleanBearer(forceRefresh ? ReloadConfigTokenFromDisk(opts) : opts.ConfigToken);
+            if (string.IsNullOrEmpty(raw)) return null;
+            var srcName = string.IsNullOrEmpty(opts.ConfigFile) ? "dev-server.config.json" : opts.ConfigFile;
+            return (raw, $"{srcName} token");
         }
 
         static (string Value, string Source) TryPac()
@@ -447,12 +499,15 @@ Options:
             return (output, "az account get-access-token");
         }
 
-        if (authMode == "env") return TryEnv();
+        if (authMode == "env") return TryEnv() ?? throw new InvalidOperationException("DV_TOKEN env var is not set.");
+        if (authMode == "config") return TryConfig() ?? throw new InvalidOperationException("No token/bearerToken found in JSON config.");
         if (authMode == "pac") return TryPac();
         if (authMode == "az") return TryAz();
 
         var envTok = TryEnv();
         if (envTok is not null) return envTok;
+        var cfgTok = TryConfig();
+        if (cfgTok is not null) return cfgTok;
 
         var errs = new List<string>();
         try { return TryPac(); } catch (Exception ex) { errs.Add(ex.Message); }
@@ -471,7 +526,7 @@ Options:
             {
                 return _cachedToken.Value;
             }
-            var acquired = AcquireTokenFromCli(opts.EnvUrl, opts.Auth);
+            var acquired = AcquireToken(opts, forceRefresh);
             if (acquired is null) return null;
             _cachedToken = new CachedToken(acquired.Value.Value, acquired.Value.Source, DateTimeOffset.UtcNow);
             return _cachedToken.Value;
