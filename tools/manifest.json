@@ -1,6 +1,6 @@
 [
   {
-    "wrName": "dvopentools_envvars.html",
+    "wrName": "dvot_envvars.html",
     "id": "env-vars",
     "name": "Environment Variables",
     "icon": "⚙️",
@@ -11,7 +11,7 @@
     "sizeBytes": 12195
   },
   {
-    "wrName": "dvopentools_usersettings.html",
+    "wrName": "dvot_usersettings.html",
     "id": "user-settings",
     "name": "User Settings & Views",
     "icon": "👤",
@@ -22,7 +22,7 @@
     "sizeBytes": 21382
   },
   {
-    "wrName": "dvopentools_bulkops.html",
+    "wrName": "dvot_bulkops.html",
     "id": "bulk-ops",
     "name": "Bulk Operations",
     "icon": "♻️",
@@ -33,7 +33,7 @@
     "sizeBytes": 10957
   },
   {
-    "wrName": "dvopentools_duprules.html",
+    "wrName": "dvot_duprules.html",
     "id": "dup-rules",
     "name": "Duplicate Rules Auditor",
     "icon": "👯",
@@ -44,7 +44,7 @@
     "sizeBytes": 14289
   },
   {
-    "wrName": "dvopentools_recordinspector.html",
+    "wrName": "dvot_recordinspector.html",
     "id": "record-inspector",
     "name": "Record Inspector",
     "icon": "🔎",
@@ -55,7 +55,7 @@
     "sizeBytes": 13710
   },
   {
-    "wrName": "dvopentools_rowcounter.html",
+    "wrName": "dvot_rowcounter.html",
     "id": "row-counter",
     "name": "Row Counter",
     "icon": "📊",
@@ -63,10 +63,10 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.0",
     "description": "Count records across Dataverse tables (Total, Active, Inactive, Custom Filter) with HTTP headers inspection & CSV export.",
-    "sizeBytes": 49614
+    "sizeBytes": 49607
   },
   {
-    "wrName": "dvopentools_storage.html",
+    "wrName": "dvot_storage.html",
     "id": "storage-analyzer",
     "name": "Storage Analyzer",
     "icon": "💾",
@@ -77,7 +77,7 @@
     "sizeBytes": 6393
   },
   {
-    "wrName": "dvopentools_envtimeline.html",
+    "wrName": "dvot_envtimeline.html",
     "id": "env-timeline",
     "name": "Environment Timeline",
     "icon": "🕒",
@@ -85,10 +85,10 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.0",
     "description": "Unified chronological activity and event timeline across Dataverse: Audits, Plugin Traces, Flow Runs, System Jobs, Solution Operations, and Sync Logs.",
-    "sizeBytes": 161530
+    "sizeBytes": 161523
   },
   {
-    "wrName": "dvopentools_plugintraces.html",
+    "wrName": "dvot_plugintraces.html",
     "id": "plugin-traces",
     "name": "Plugin Trace Logs",
     "icon": "📜",
@@ -99,7 +99,7 @@
     "sizeBytes": 13886
   },
   {
-    "wrName": "dvopentools_processchain.html",
+    "wrName": "dvot_processchain.html",
     "id": "process-chain",
     "name": "Process Cascade Tracer",
     "icon": "🕸️",
@@ -110,7 +110,7 @@
     "sizeBytes": 61238
   },
   {
-    "wrName": "dvopentools_tablemap.html",
+    "wrName": "dvot_tablemap.html",
     "id": "table-map",
     "name": "Table Automation Map",
     "icon": "⚡",
@@ -121,7 +121,7 @@
     "sizeBytes": 10200
   },
   {
-    "wrName": "dvopentools_ribbon.html",
+    "wrName": "dvot_ribbon.html",
     "id": "ribbon-inspector",
     "name": "Command Bar & Ribbon",
     "icon": "🎀",
@@ -132,7 +132,7 @@
     "sizeBytes": 17647
   },
   {
-    "wrName": "dvopentools_plugins.html",
+    "wrName": "dvot_plugins.html",
     "id": "plugin-manager",
     "name": "Plugin Step Manager",
     "icon": "🧩",
@@ -143,7 +143,7 @@
     "sizeBytes": 10148
   },
   {
-    "wrName": "dvopentools_wrsearch.html",
+    "wrName": "dvot_wrsearch.html",
     "id": "wr-code-search",
     "name": "Web Resource Search",
     "icon": "💻",
@@ -154,7 +154,7 @@
     "sizeBytes": 18314
   },
   {
-    "wrName": "dvopentools_webhooks.html",
+    "wrName": "dvot_webhooks.html",
     "id": "webhook-inspector",
     "name": "Webhook Inspector",
     "icon": "🪝",
@@ -165,7 +165,7 @@
     "sizeBytes": 11600
   },
   {
-    "wrName": "dvopentools_connrefs.html",
+    "wrName": "dvot_connrefs.html",
     "id": "conn-refs",
     "name": "Connection Audit",
     "icon": "🔗",
@@ -176,7 +176,7 @@
     "sizeBytes": 8094
   },
   {
-    "wrName": "dvopentools_flowcalendar.html",
+    "wrName": "dvot_flowcalendar.html",
     "id": "flow-calendar",
     "name": "Flow Calendar",
     "icon": "📅",
@@ -184,10 +184,10 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.0",
     "description": "Visualise Power Automate cloud flow run history across a 7-day hourly timeline with response headers inspection.",
-    "sizeBytes": 69463
+    "sizeBytes": 69456
   },
   {
-    "wrName": "dvopentools_flowcodeview.html",
+    "wrName": "dvot_flowcodeview.html",
     "id": "flow-codeview",
     "name": "Flow CodeView Reader",
     "icon": "🧬",
@@ -198,7 +198,7 @@
     "sizeBytes": 84022
   },
   {
-    "wrName": "dvopentools_flowschedules.html",
+    "wrName": "dvot_flowschedules.html",
     "id": "flow-schedules",
     "name": "Scheduled Flows",
     "icon": "⏰",
@@ -209,7 +209,7 @@
     "sizeBytes": 51634
   },
   {
-    "wrName": "dvopentools_erd.html",
+    "wrName": "dvot_erd.html",
     "id": "erd-visualizer",
     "name": "ERD Visualizer",
     "icon": "📐",
@@ -220,7 +220,7 @@
     "sizeBytes": 11026
   },
   {
-    "wrName": "dvopentools_formview.html",
+    "wrName": "dvot_formview.html",
     "id": "form-view",
     "name": "Form & View XML",
     "icon": "📋",
@@ -231,7 +231,7 @@
     "sizeBytes": 11191
   },
   {
-    "wrName": "dvopentools_labels.html",
+    "wrName": "dvot_labels.html",
     "id": "label-explorer",
     "name": "Label Explorer",
     "icon": "🌍",
@@ -242,7 +242,7 @@
     "sizeBytes": 6767
   },
   {
-    "wrName": "dvopentools_schemabrowser.html",
+    "wrName": "dvot_schemabrowser.html",
     "id": "schema-browser",
     "name": "Schema Browser",
     "icon": "📖",
@@ -253,7 +253,7 @@
     "sizeBytes": 21232
   },
   {
-    "wrName": "dvopentools_fetchxml.html",
+    "wrName": "dvot_fetchxml.html",
     "id": "fetchxml-playground",
     "name": "FetchXML & Web API",
     "icon": "🔍",
@@ -264,7 +264,7 @@
     "sizeBytes": 26872
   },
   {
-    "wrName": "dvopentools_accesschecker.html",
+    "wrName": "dvot_accesschecker.html",
     "id": "access-checker",
     "name": "Access Diagnostics",
     "icon": "🛡️",
@@ -275,7 +275,7 @@
     "sizeBytes": 15402
   },
   {
-    "wrName": "dvopentools_buqueues.html",
+    "wrName": "dvot_buqueues.html",
     "id": "bu-queues",
     "name": "BU & Queue Explorer",
     "icon": "🏢",
@@ -286,7 +286,7 @@
     "sizeBytes": 16503
   },
   {
-    "wrName": "dvopentools_rolematrix.html",
+    "wrName": "dvot_rolematrix.html",
     "id": "role-matrix",
     "name": "Role Matrix",
     "icon": "🎭",
@@ -297,7 +297,7 @@
     "sizeBytes": 8470
   },
   {
-    "wrName": "dvopentools_solutionlayers.html",
+    "wrName": "dvot_solutionlayers.html",
     "id": "solution-layers",
     "name": "Solution Layers",
     "icon": "📦",

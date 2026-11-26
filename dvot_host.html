@@ -658,7 +658,7 @@
       <h2>⚙️ Settings</h2>
       <div class="form-row">
         <label>Tool Web Resource Prefix</label>
-        <input type="text" id="cfg-prefix" placeholder="dvopentools_">
+        <input type="text" id="cfg-prefix" placeholder="dvot_">
         <div class="form-hint">Web resources matching this prefix (HTML type) appear in the sidebar. The host itself is excluded automatically.</div>
       </div>
       <div class="form-row">
@@ -738,7 +738,7 @@
         Loading an HTML file executes its JavaScript inside this page.
       </div>
       <p style="font-size:13px;color:var(--text-secondary);line-height:1.65">
-        Select a single <code>.html</code> tool file or a <strong>multi-tool bundle</strong> (<code>dvopentools_bundle_*.html</code> / <code>.json</code>).
+        Select a single <code>.html</code> tool file or a <strong>multi-tool bundle</strong> (<code>dvot_bundle_*.html</code> / <code>.json</code>).
         All tools inside a bundle will be unpacked into your sidebar immediately.
       </p>
       <div class="modal-footer">
@@ -955,7 +955,7 @@
 
     /* ─── State ──────────────────────────────────────────────── */
     const S = {
-      cfg: { prefix: 'dvopentools_', apiVersion: '9.2', tabLimit: 5, theme: 'light', securityPolicy: 'AUDIT', proxyUrl: '' },
+      cfg: { prefix: 'dvot_', apiVersion: '9.2', tabLimit: 5, theme: 'light', securityPolicy: 'AUDIT', proxyUrl: '' },
       runtimeMode: HOST_RUNTIME,
       isExternalMode: IS_EXTERNAL_MODE,
       proxyTargetHost: '',
@@ -2500,7 +2500,7 @@
     }
 
     function saveSettings() {
-      const prefix = document.getElementById('cfg-prefix').value.trim() || 'dvopentools_';
+      const prefix = document.getElementById('cfg-prefix').value.trim() || 'dvot_';
       const api    = document.getElementById('cfg-api').value;
       const tabs   = Math.min(10, Math.max(1, parseInt(document.getElementById('cfg-tabs').value) || 5));
       const theme  = document.getElementById('cfg-theme').value;

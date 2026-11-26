@@ -1,7 +1,7 @@
 # DV Open Tools — Tool Developer Guide
 
 > **Audience:** Human developers and coding agents building tools for the DV Open Tools host.  
-> **Host file:** `dvopentools_host.html` (Power Platform web resource)  
+> **Host file:** `dvot_host.html` (Power Platform web resource)  
 > **Host version:** `2025.11.0`
 
 ---
@@ -43,12 +43,12 @@ A **tool** is a single, self-contained `.html` file that:
 ## 2. Three-Step Quick Start
 
 ```
-1. Copy tools/dvopentools_template.html
+1. Copy tools/dvot_template.html
 2. Fill in the manifest block (name, id, icon, category)
 3. Build your UI + logic using context.environmentUrl for API calls
 ```
 
-Upload the file as a web resource named `dvopentools_{your-tool-name}.html`.  
+Upload the file as a web resource named `dvot_{your-tool-name}.html`.  
 The host discovers it automatically on the next sidebar refresh.
 
 ---
@@ -58,24 +58,24 @@ The host discovers it automatically on the next sidebar refresh.
 ### Naming Rule
 
 ```
-dvopentools_{tool-name}.html
+dvot_{tool-name}.html
 ```
 
 | Part | Rule | Example |
 |---|---|---|
-| Prefix | Must match the host's configured prefix (default: `dvopentools_`) | `dvopentools_` |
+| Prefix | Must match the host's configured prefix (default: `dvot_`) | `dvot_` |
 | Tool name | Lowercase letters, digits, hyphens. No spaces. | `fetchxml-tester` |
 | Extension | Always `.html` | `.html` |
 
-**Valid names:** `dvopentools_fetchxml-tester.html`, `dvopentools_row-counter.html`, `dvopentools_flow-calendar.html`  
-**Invalid names:** `dvopentools_FetchXML.html` *(uppercase)*, `dvopentools_host.html` *(reserved)*
+**Valid names:** `dvot_fetchxml-tester.html`, `dvot_row-counter.html`, `dvot_flow-calendar.html`  
+**Invalid names:** `dvot_FetchXML.html` *(uppercase)*, `dvot_host.html` *(reserved)*
 
 ### Uploading in Power Platform
 
 1. Open **Power Apps** → **Solutions** → open your solution
 2. **New** → **Other** → **Web Resource**
 3. Set **Type** to `HTML (htm, html)`
-4. **Name:** `dvopentools_{your-tool-name}.html` (no publisher prefix needed here, but add one if your org requires it)
+4. **Name:** `dvot_{your-tool-name}.html` (no publisher prefix needed here, but add one if your org requires it)
 5. Upload the file → **Save** → **Publish**
 
 > [!NOTE]
@@ -135,7 +135,7 @@ sequenceDiagram
     participant H as Host
     participant T as Tool iframe
 
-    H->>T: Creates iframe (src = /WebResources/dvopentools_x.html)
+    H->>T: Creates iframe (src = /WebResources/dvot_x.html)
     Note over T: Page loads, script runs
     T->>H: TOOL_READY
     Note over H: Clears 2-second fallback timer
@@ -985,7 +985,7 @@ GENERAL
   [ ] No external stylesheets or scripts
   [ ] No alert() / confirm() / prompt()
   [ ] No innerHTML with unsanitized user input
-  [ ] File named dvopentools_{name}.html
+  [ ] File named dvot_{name}.html
   [ ] Uploaded as HTML web resource type
   [ ] Published in Power Platform
 ```
@@ -1006,7 +1006,7 @@ The user will describe a tool they want. Extract:
 
 ### Output you must produce
 
-A **single self-contained `.html` file** named `dvopentools_{id}.html`.
+A **single self-contained `.html` file** named `dvot_{id}.html`.
 
 ### Non-negotiable structural rules
 
@@ -1048,7 +1048,7 @@ A **single self-contained `.html` file** named `dvopentools_{id}.html`.
 [ ] applyTheme called in CONTEXT_INIT and THEME_CHANGE handlers
 [ ] localStorage uses TOOL_STORE prefix
 [ ] No external dependencies
-[ ] File name matches manifest id: dvopentools_{id}.html
+[ ] File name matches manifest id: dvot_{id}.html
 ```
 
 ### Minimal valid skeleton (reference)
@@ -1119,7 +1119,7 @@ A **single self-contained `.html` file** named `dvopentools_{id}.html`.
 
 ## 15. Host Shared UI/UX Kit & `window.DV` SDK (`v2025.11.1+`)
 
-To keep tools ultra-lightweight without duplicating CSS resets, dark-mode tokens, table/card styling, or Dataverse fetch/CSV boilerplate, `dvopentools_host.html` automatically injects:
+To keep tools ultra-lightweight without duplicating CSS resets, dark-mode tokens, table/card styling, or Dataverse fetch/CSV boilerplate, `dvot_host.html` automatically injects:
 
 1. **`#dvopentools-shared-css`** into `<head>` (prepended so tool-specific CSS overrides cleanly).
 2. **`window.DV`** into the iframe before `CONTEXT_INIT`.
@@ -1149,13 +1149,13 @@ Add `class="dv-app"` on `<body>` to activate the host's full design system:
 | `DV.esc(str)` | HTML-escapes strings safely. |
 | `DV.ui.empty / error / badge` | Ready-to-render HTML fragments for empty states, error banners, and badges. |
 
-*(See `tools/dvopentools_template.html` for the minimal `<body class="dv-app">` starter.)*
+*(See `tools/dvot_template.html` for the minimal `<body class="dv-app">` starter.)*
 
 ---
 
 ## 16. Local Development Servers (`dev-server/`)
 
-To develop and test tools locally (or run `dvopentools_host.html` directly from `file://` or an external domain) against a live Dataverse environment **without** putting Environment URLs or Bearer tokens into the browser, run any of the three equivalent local proxies in [`dev-server/`](dev-server/README.md):
+To develop and test tools locally (or run `dvot_host.html` directly from `file://` or an external domain) against a live Dataverse environment **without** putting Environment URLs or Bearer tokens into the browser, run any of the three equivalent local proxies in [`dev-server/`](dev-server/README.md):
 
 ```powershell
 # PowerShell (Windows zero-install)
@@ -1169,13 +1169,13 @@ node dev-server/dev-server.js --env https://yourorg.crm.dynamics.com
 ```
 
 Then either:
-- **Recommended:** Open **http://127.0.0.1:8787/dvopentools_host.html** directly (same-origin, zero CORS, zero Mixed Content — Proxy URL auto-defaults to `http://127.0.0.1:8787`), **OR**
-- **External / `file://` Host Mode:** Open `dvopentools_host.html` directly from disk (`file:///.../dvopentools_host.html`) or an external static domain. The host automatically detects that it is running outside Power Platform (`*.dynamics.com`) and asks **only for your local Proxy URL** (e.g. `http://127.0.0.1:8787`).
+- **Recommended:** Open **http://127.0.0.1:8787/dvot_host.html** directly (same-origin, zero CORS, zero Mixed Content — Proxy URL auto-defaults to `http://127.0.0.1:8787`), **OR**
+- **External / `file://` Host Mode:** Open `dvot_host.html` directly from disk (`file:///.../dvot_host.html`) or an external static domain. The host automatically detects that it is running outside Power Platform (`*.dynamics.com`) and asks **only for your local Proxy URL** (e.g. `http://127.0.0.1:8787`).
 
 How it works:
-- Serves `index.html` at `/` (and `dvopentools_host.html` at `/dvopentools_host.html`) plus all `tools/dvopentools_*.html` files straight from disk (`/WebResources/*`) with no upload step and no browser caching.
-- Static hosts like GitHub Pages use `tools/manifest.json` so `dvopentools_host.html` discovers tools inside `./tools/` even before connecting a local proxy (regenerate after adding a new tool with `node dev-server/dev-server.js --build-manifest`, `dotnet run --project dev-server -- --build-manifest`, or `.\dev-server\dev-server.ps1 -BuildManifest`).
-- **Multi-tool Web Resource Bundles**: Keeps `dvopentools_host.html` independent while packing any subset or all tools into a single `dvopentools_bundle_*.html` file via the Bundle Builder on `index.html` or `--build-bundle` (`node dev-server/dev-server.js --build-bundle`). `dvopentools_host.html` unpacks `#dvopentools-bundle` automatically from both Dataverse Web Resources and local file import (`Load Tool from File`).
+- Serves `index.html` at `/` (and `dvot_host.html` at `/dvot_host.html`) plus all `tools/dvot_*.html` files straight from disk (`/WebResources/*`) with no upload step and no browser caching.
+- Static hosts like GitHub Pages use `tools/manifest.json` so `dvot_host.html` discovers tools inside `./tools/` even before connecting a local proxy (regenerate after adding a new tool with `node dev-server/dev-server.js --build-manifest`, `dotnet run --project dev-server -- --build-manifest`, or `.\dev-server\dev-server.ps1 -BuildManifest`).
+- **Multi-tool Web Resource Bundles**: Keeps `dvot_host.html` independent while packing any subset or all tools into a single `dvot_bundle_*.html` file via the Bundle Builder on `index.html` or `--build-bundle` (`node dev-server/dev-server.js --build-bundle`). `dvot_host.html` unpacks `#dvopentools-bundle` automatically from both Dataverse Web Resources and local file import (`Load Tool from File`).
 - Merges un-uploaded local tools into `/api/data/*/webresourceset` discovery automatically.
 - Acquires and caches OAuth Bearer tokens **strictly server-side** via `pac auth token` or `az account get-access-token` (`DV_TOKEN` env var optional) — Environment URL and Bearer tokens never touch browser JS or storage.
 - Enables CORS + Chrome Private Network Access headers (`Access-Control-Allow-Origin: *`, `Access-Control-Allow-Private-Network: true`) and exposes `GET /_proxy/status` (metadata only) so external/local-file hosts connect cleanly.

@@ -2,7 +2,7 @@
 /**
  * DV Open Tools — Zero-Dependency Local Development Server & Dataverse Auth Proxy
  *
- * Serves dvopentools_host.html and local dvopentools_*.html files on http://127.0.0.1:8787
+ * Serves dvot_host.html and local dvot_*.html files on http://127.0.0.1:8787
  * and proxies /api/data/* requests server-side to Dataverse using a locally acquired
  * OAuth Bearer token (via `pac auth token`, `az account get-access-token`, or DV_TOKEN).
  *
@@ -137,7 +137,7 @@ function resolveSafeLocalFile(relName, baseDir = ROOT_DIR) {
   return resolved;
 }
 
-function listLocalToolWebResources(prefix = 'dvopentools_') {
+function listLocalToolWebResources(prefix = 'dvot_') {
   const dirs = [TOOLS_DIR, ROOT_DIR].filter(d => fs.existsSync(d) && fs.statSync(d).isDirectory());
   const seen = new Set();
   for (const dir of dirs) {
@@ -153,7 +153,7 @@ function listLocalToolWebResources(prefix = 'dvopentools_') {
   }));
 }
 
-function buildToolsManifest(prefix = 'dvopentools_') {
+function buildToolsManifest(prefix = 'dvot_') {
   const dir = fs.existsSync(TOOLS_DIR) && fs.statSync(TOOLS_DIR).isDirectory() ? TOOLS_DIR : ROOT_DIR;
   const items = [];
   for (const wrName of listLocalToolWebResources(prefix).map(x => x.name)) {
@@ -188,7 +188,7 @@ function escapeHtmlText(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function buildToolsBundle(outPath = '', prefix = 'dvopentools_') {
+function buildToolsBundle(outPath = '', prefix = 'dvot_') {
   const manifest = buildToolsManifest(prefix);
   const bundledTools = [];
   for (const item of manifest) {
@@ -226,7 +226,7 @@ function buildToolsBundle(outPath = '', prefix = 'dvopentools_') {
 </head>
 <body>
   <h1>📦 DV Open Tools — Bundled Tool Pack (${bundledTools.length} tools)</h1>
-  <p>Upload this single HTML Web Resource alongside <code>dvopentools_host.html</code> (name starting with <code>dvopentools_</code>), or import it in the Host via <strong>Load Tool from File</strong>.</p>
+  <p>Upload this single HTML Web Resource alongside <code>dvot_host.html</code> (name starting with <code>dvot_</code>), or import it in the Host via <strong>Load Tool from File</strong>.</p>
   <table>
     <thead><tr><th>Tool</th><th>Source File</th><th>Category</th><th>Version</th><th>Size</th></tr></thead>
     <tbody>
@@ -237,7 +237,7 @@ function buildToolsBundle(outPath = '', prefix = 'dvopentools_') {
 </body>
 </html>\n`;
 
-  const resolvedOut = outPath ? path.resolve(ROOT_DIR, outPath) : path.join(ROOT_DIR, 'dist', 'dvopentools_bundle_all.html');
+  const resolvedOut = outPath ? path.resolve(ROOT_DIR, outPath) : path.join(ROOT_DIR, 'dist', 'dvot_bundle_all.html');
   fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
   fs.writeFileSync(resolvedOut, html, 'utf8');
   return { outPath: resolvedOut, count: bundledTools.length, bytes: Buffer.byteLength(html, 'utf8') };
@@ -309,7 +309,7 @@ function proxyToDataverse(req, res, opts, reqBodyBuffer, retried = false) {
         try {
           const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
           const prefixMatch = decodeURIComponent(req.url).match(/startswith\(name,'([^']+)'\)/i);
-          const prefix = prefixMatch ? prefixMatch[1] : 'dvopentools_';
+          const prefix = prefixMatch ? prefixMatch[1] : 'dvot_';
           const localWrs = listLocalToolWebResources(prefix);
           const seen = new Set((parsed.value || []).map(x => x.name.toLowerCase()));
           for (const wr of localWrs) {
@@ -383,11 +383,11 @@ function createDevServer(opts) {
 
     // 1. Home page & Host HTML
     if (reqUrl === '/' || reqUrl === '/index.html') {
-      const homeFile = resolveSafeLocalFile('index.html') || resolveSafeLocalFile('dvopentools_host.html');
+      const homeFile = resolveSafeLocalFile('index.html') || resolveSafeLocalFile('dvot_host.html');
       if (homeFile) { serveFile(res, homeFile); return; }
     }
-    if (reqUrl === '/dvopentools_host.html') {
-      const hostFile = resolveSafeLocalFile('dvopentools_host.html');
+    if (reqUrl === '/dvot_host.html') {
+      const hostFile = resolveSafeLocalFile('dvot_host.html');
       if (hostFile) { serveFile(res, hostFile); return; }
     }
 
@@ -451,8 +451,8 @@ Options:
   --port <num>      Local HTTP port (default: 8787)
   --auth <mode>     Token source: auto (default), pac (\`pac auth token\`), az (\`az account get-access-token\`), or env (DV_TOKEN)
   --local-only      Serve local HTML tools without proxying Dataverse API calls
-  --build-manifest  Regenerate tools/manifest.json from tools/dvopentools_*.html and exit
-  --build-bundle    Generate a single-file tool bundle HTML (default: dist/dvopentools_bundle_all.html)
+  --build-manifest  Regenerate tools/manifest.json from tools/dvot_*.html and exit
+  --build-bundle    Generate a single-file tool bundle HTML (default: dist/dvot_bundle_all.html)
 `);
     process.exit(0);
   }
@@ -491,7 +491,7 @@ Options:
 
   const server = createDevServer(opts);
   server.listen(opts.port, '127.0.0.1', () => {
-    console.log(`\n⚡ DV Open Tools Local Server running at: http://127.0.0.1:${opts.port}/dvopentools_host.html`);
+    console.log(`\n⚡ DV Open Tools Local Server running at: http://127.0.0.1:${opts.port}/dvot_host.html`);
     console.log(`   Mode: ${opts.localOnly ? 'Local UI only (no Dataverse proxy)' : `Proxying /api/data/* -> ${opts.envUrl}`}`);
     console.log(`   Local tools auto-discovered: ${listLocalToolWebResources().length}\n`);
   });

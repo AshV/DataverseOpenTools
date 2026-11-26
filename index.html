@@ -339,11 +339,11 @@
         <a href="#how-it-works">How It Works</a>
         <a href="#tools">Tools Catalog</a>
         <a href="DV-Open-Tools-Developer-Guide.md">Developer Guide</a>
-        <a href="tools/dvopentools_template.html">Tool Template</a>
+        <a href="tools/dvot_template.html">Tool Template</a>
       </nav>
       <div class="nav-actions">
         <button id="theme-toggle" class="btn icon-btn" title="Toggle light/dark theme" aria-label="Toggle theme">🌙</button>
-        <a href="dvopentools_host.html" class="btn btn-primary">Open Host →</a>
+        <a href="dvot_host.html" class="btn btn-primary">Open Host →</a>
       </div>
     </div>
   </header>
@@ -358,7 +358,7 @@
             28 self-contained HTML developer tools inside one unified tabbed workbench. Run natively inside Dynamics 365 as Web Resources, or connect from this page via a local proxy (PowerShell, C# .NET, or Node.js) — with zero build steps and zero tokens stored in the browser.
           </p>
           <div class="hero-cta">
-            <a href="dvopentools_host.html" class="btn btn-primary btn-lg">Launch DV Open Tools Host →</a>
+            <a href="dvot_host.html" class="btn btn-primary btn-lg">Launch DV Open Tools Host →</a>
             <a href="#tools" class="btn btn-lg">Explore 28 Tools</a>
             <a href="#local-proxy" class="btn btn-lg">Local Proxy Setup</a>
           </div>
@@ -372,7 +372,7 @@
 
         <div class="preview-card" aria-label="Architecture summary">
           <div class="preview-bar">
-            <span>⚡ dvopentools_host.html</span>
+            <span>⚡ dvot_host.html</span>
             <div class="preview-dots"><span></span><span></span><span></span></div>
           </div>
           <div class="preview-body">
@@ -410,7 +410,7 @@
           <div class="card">
             <div class="card-icon">☁️</div>
             <h3>1. Inside Power Platform</h3>
-            <p>Upload independent <code>dvopentools_host.html</code> plus either individual tool files or a single <strong>bundled tool pack</strong> (<code>dvopentools_bundle_*.html</code>) as HTML Web Resources. The host auto-discovers and unpacks them using your active Dynamics session.</p>
+            <p>Upload independent <code>dvot_host.html</code> plus either individual tool files or a single <strong>bundled tool pack</strong> (<code>dvot_bundle_*.html</code>) as HTML Web Resources. The host auto-discovers and unpacks them using your active Dynamics session.</p>
           </div>
           <div class="card">
             <div class="card-icon">🔌</div>
@@ -443,11 +443,11 @@
         <div class="section-head">
           <div>
             <h2>Included Tools (<span id="tools-count">28</span>)</h2>
-            <p>Download any single tool HTML, select tools to pack into a single bundle Web Resource, or download all 28 tools together alongside independent <code>dvopentools_host.html</code>.</p>
+            <p>Download any single tool HTML, select tools to pack into a single bundle Web Resource, or download all 28 tools together alongside independent <code>dvot_host.html</code>.</p>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <a id="download-host-btn" href="dvopentools_host.html" download="dvopentools_host.html" class="btn">⬇️ Download Host (<span id="host-size-lbl">124.9 KB</span>)</a>
-            <a href="dvopentools_host.html" class="btn btn-primary">Launch Host Workbench →</a>
+            <a id="download-host-btn" href="dvot_host.html" download="dvot_host.html" class="btn">⬇️ Download Host (<span id="host-size-lbl">130.0 KB</span>)</a>
+            <a href="dvot_host.html" class="btn btn-primary">Launch Host Workbench →</a>
           </div>
         </div>
 
@@ -469,7 +469,7 @@
               <span id="bundle-size-pill" class="size-pill">0 selected · 0 KB</span>
             </div>
             <div class="bundle-right">
-              <input id="bundle-name" class="bundle-name-input" type="text" value="dvopentools_bundle_custom" title="Web Resource filename prefix (saved as .html)" aria-label="Bundle filename" />
+              <input id="bundle-name" class="bundle-name-input" type="text" value="dvot_bundle_custom" title="Web Resource filename prefix (saved as .html)" aria-label="Bundle filename" />
               <button type="button" id="btn-dl-selected" class="btn btn-sm btn-primary" disabled>📦 Download Selected (<span id="btn-sel-size">0 KB</span>)</button>
               <button type="button" id="btn-dl-all" class="btn btn-sm btn-primary">📥 Download Complete Bundle (<span id="all-size-lbl">~766 KB</span>)</button>
             </div>
@@ -477,7 +477,7 @@
           <div class="size-meter" title="Estimated bundle size vs Dataverse 5 MB default Web Resource limit">
             <div id="bundle-meter-fill" class="size-meter-fill" style="width:0%"></div>
           </div>
-          <div id="bundle-status" class="bundle-status">Tip: Upload independent <code>dvopentools_host.html</code> + one <code>dvopentools_bundle_*.html</code> file into Dataverse (or import the bundle directly in Host via <strong>Load Tool from File</strong>).</div>
+          <div id="bundle-status" class="bundle-status">Tip: Upload independent <code>dvot_host.html</code> + one <code>dvot_bundle_*.html</code> file into Dataverse (or import the bundle directly in Host via <strong>Load Tool from File</strong>).</div>
         </div>
 
         <div id="tools-grid" class="tools-grid"></div>
@@ -489,8 +489,8 @@
     <div class="container footer-inner">
       <div>⚡ <strong>DV Open Tools</strong> · Zero-dependency open workbench for Dataverse</div>
       <div class="footer-links">
-        <a href="dvopentools_host.html">Host Workbench</a>
-        <a href="tools/dvopentools_template.html">Tool Template</a>
+        <a href="dvot_host.html">Host Workbench</a>
+        <a href="tools/dvot_template.html">Tool Template</a>
         <a href="dev-server/README.md">Local Proxy Servers</a>
         <a href="DV-Open-Tools-Developer-Guide.md">Developer Guide</a>
       </div>
@@ -498,37 +498,37 @@
   </footer>
 
   <script>
-    const HOST_SIZE_BYTES = 127851;
+    const HOST_SIZE_BYTES = 133155;
     const DATAVERSE_DEFAULT_WR_LIMIT = 5 * 1024 * 1024;
     const TOOLS = [
-      { id: 'fetchxml-playground', file: 'tools/dvopentools_fetchxml.html', name: 'FetchXML & Web API', icon: '🔍', category: 'Query', version: '1.1.0', sizeBytes: 26872, description: 'Execute FetchXML queries (with paging & batch fallback) and OData Web API requests with table inspection, code generation, and CSV/JSON export.' },
-      { id: 'schema-browser', file: 'tools/dvopentools_schemabrowser.html', name: 'Schema Browser', icon: '📖', category: 'Metadata', version: '1.1.0', sizeBytes: 21232, description: 'Explore Dataverse EntityDefinitions, columns, OptionSet integer mappings, relationships, keys, and Global Option Sets.' },
-      { id: 'erd-visualizer', file: 'tools/dvopentools_erd.html', name: 'ERD Visualizer', icon: '📐', category: 'Metadata', version: '1.0.0', sizeBytes: 11026, description: 'Select Dataverse tables to render an interactive pure-SVG Entity-Relationship diagram (1:N, N:1, N:N), export SVG, or copy Mermaid erDiagram.' },
-      { id: 'plugin-traces', file: 'tools/dvopentools_plugintraces.html', name: 'Plugin Trace Logs', icon: '📜', category: 'Diagnostics', version: '1.1.0', sizeBytes: 13886, description: 'Stream and filter Dataverse plugintracelog entries, trace full correlation cascades by depth, inspect stack traces, and spot slow plugins.' },
-      { id: 'access-checker', file: 'tools/dvopentools_accesschecker.html', name: 'Access Diagnostics', icon: '🛡️', category: 'Security', version: '1.1.0', sizeBytes: 15402, description: 'Diagnose effective record permissions via RetrievePrincipalAccess and inspect Security Roles, Team memberships, and record ownership.' },
-      { id: 'role-matrix', file: 'tools/dvopentools_rolematrix.html', name: 'Role Matrix', icon: '🎭', category: 'Security', version: '1.0.0', sizeBytes: 8470, description: 'Compare Dataverse Security Role table privileges side-by-side (Create, Read, Write, Delete, Append, Assign, Share) and export security audit CSVs.' },
-      { id: 'bu-queues', file: 'tools/dvopentools_buqueues.html', name: 'BU & Queue Explorer', icon: '🏢', category: 'Security', version: '1.0.0', sizeBytes: 16503, description: 'Visualize Business Unit hierarchy trees, default teams & divisions, plus inspect Public/Private Queues, email routing, and queue members.' },
-      { id: 'solution-layers', file: 'tools/dvopentools_solutionlayers.html', name: 'Solution Layers', icon: '📦', category: 'Solutions', version: '1.1.0', sizeBytes: 14973, description: 'Inspect managed vs Active unmanaged solution component layers (msdyn_componentlayer) and diagnose delete blockers via RetrieveDependenciesForDelete.' },
-      { id: 'env-vars', file: 'tools/dvopentools_envvars.html', name: 'Environment Variables', icon: '⚙️', category: 'Configuration', version: '1.1.0', sizeBytes: 12195, description: 'Inspect Default vs Current Environment Variable values, validate JSON configs, spot missing values, and safely update overrides.' },
-      { id: 'user-settings', file: 'tools/dvopentools_usersettings.html', name: 'User Settings & Views', icon: '👤', category: 'Configuration', version: '1.0.0', sizeBytes: 21382, description: 'Inspect and bulk-update User Settings (paging limit, timezone, UI language) and manage or reassign user-owned Personal Views and Personal Dashboards.' },
-      { id: 'record-inspector', file: 'tools/dvopentools_recordinspector.html', name: 'Record Inspector', icon: '🔎', category: 'Data', version: '1.0.0', sizeBytes: 13710, description: 'Inspect all fields (including hidden attributes) on any Dataverse record by pasting a URL or GUID, edit updatable values, or jump to Access Diagnostics.' },
-      { id: 'bulk-ops', file: 'tools/dvopentools_bulkops.html', name: 'Bulk Operations', icon: '♻️', category: 'Data', version: '1.0.0', sizeBytes: 10957, description: 'Preview records with FetchXML and execute throttled bulk PATCH, state activation/deactivation, or DELETE operations safely under Host Security Gateway.' },
-      { id: 'row-counter', file: 'tools/dvopentools_rowcounter.html', name: 'Row Counter', icon: '📊', category: 'Data', version: '1.0.0', sizeBytes: 49614, description: 'Count records across Dataverse tables (Total, Active, Inactive, Custom Filter) with HTTP headers inspection & CSV export.' },
-      { id: 'storage-analyzer', file: 'tools/dvopentools_storage.html', name: 'Storage Analyzer', icon: '💾', category: 'Data', version: '1.0.0', sizeBytes: 6393, description: 'Identify Dataverse log and file storage bloat across AsyncOperations, Plugin Traces, Audits, Notes/Attachments, and Bulk Delete jobs.' },
-      { id: 'dup-rules', file: 'tools/dvopentools_duprules.html', name: 'Duplicate Rules Auditor', icon: '👯', category: 'Data', version: '1.0.0', sizeBytes: 14289, description: 'Inspect all Dataverse Duplicate Detection Rules, match conditions, operator parameters, case-sensitivity, and test records via RetrieveDuplicates.' },
-      { id: 'table-map', file: 'tools/dvopentools_tablemap.html', name: 'Table Automation Map', icon: '⚡', category: 'Diagnostics', version: '1.0.0', sizeBytes: 10200, description: 'Unified view of every Plugin Step, Business Rule, Classic Workflow, Business Process Flow, Cloud Flow trigger, and Bound Custom API on any Dataverse table.' },
-      { id: 'process-chain', file: 'tools/dvopentools_processchain.html', name: 'Process Cascade Tracer', icon: '🕸️', category: 'Diagnostics', version: '1.1.0', sizeBytes: 61238, description: 'Trace multi-hop automation chains across Cloud Flows, Plugins, Webhooks, Classic Workflows, and Business Rules with an interactive Flowchart, Cascade Tree, Edge Table, and loop detection.' },
-      { id: 'env-timeline', file: 'tools/dvopentools_envtimeline.html', name: 'Environment Timeline', icon: '🕒', category: 'Diagnostics', version: '1.0.0', sizeBytes: 161530, description: 'Unified chronological activity and event timeline across Dataverse: Audits, Plugin Traces, Flow Runs, System Jobs, Solution Operations, and Sync Logs.' },
-      { id: 'flow-calendar', file: 'tools/dvopentools_flowcalendar.html', name: 'Flow Calendar', icon: '📅', category: 'Flow', version: '1.0.0', sizeBytes: 69463, description: 'Visualise Power Automate cloud flow run history across a 7-day hourly timeline with response headers inspection.' },
-      { id: 'flow-schedules', file: 'tools/dvopentools_flowschedules.html', name: 'Scheduled Flows', icon: '⏰', category: 'Flow', version: '1.1.0', sizeBytes: 51634, description: 'List all Scheduled Power Automate Cloud Flows by Solution with decoded recurrence timing, time zone, state, and a chronological Timeline view of upcoming runs.' },
-      { id: 'flow-codeview', file: 'tools/dvopentools_flowcodeview.html', name: 'Flow CodeView Reader', icon: '🧬', category: 'Flow', version: '1.0.0', sizeBytes: 84022, description: 'Decode Cloud Flow clientdata or Peek-Code JSON into a readable action tree by resolving OptionSet integer codes to labels and GUIDs to actual Dataverse record names.' },
-      { id: 'conn-refs', file: 'tools/dvopentools_connrefs.html', name: 'Connection Audit', icon: '🔗', category: 'Flow', version: '1.0.0', sizeBytes: 8094, description: 'Audit Connection References, map which Cloud Flows depend on each connection, and flag disconnected references or turned-off flows.' },
-      { id: 'plugin-manager', file: 'tools/dvopentools_plugins.html', name: 'Plugin Step Manager', icon: '🧩', category: 'Extensibility', version: '1.0.0', sizeBytes: 10148, description: 'Browse registered Plugin Assemblies, Types, SDK Message Processing Steps, and Pre/Post Images, with 1-click step Enable/Disable.' },
-      { id: 'webhook-inspector', file: 'tools/dvopentools_webhooks.html', name: 'Webhook Inspector', icon: '🪝', category: 'Extensibility', version: '1.1.0', sizeBytes: 11600, description: 'Inspect Dataverse Service Endpoints and Webhooks, linked SDK Message Processing Steps, recent Async delivery failures, and build sample RemoteExecutionContext payloads.' },
-      { id: 'wr-code-search', file: 'tools/dvopentools_wrsearch.html', name: 'Web Resource Search', icon: '💻', category: 'Extensibility', version: '1.0.0', sizeBytes: 18314, description: 'Decode and full-text / regex search across all JavaScript, HTML, CSS, XML, and ResX Web Resources to spot legacy Xrm.Page calls, hardcoded URLs/GUIDs, or field usage.' },
-      { id: 'ribbon-inspector', file: 'tools/dvopentools_ribbon.html', name: 'Command Bar & Ribbon', icon: '🎀', category: 'Extensibility', version: '1.0.0', sizeBytes: 17647, description: 'Inspect Modern Command Bar buttons (appactions Power Fx & JavaScript) and Classic RibbonDiffXml diffs (ribbondiffs) per table.' },
-      { id: 'form-view', file: 'tools/dvopentools_formview.html', name: 'Form & View XML', icon: '📋', category: 'Metadata', version: '1.0.0', sizeBytes: 11191, description: 'Audit FormXML JavaScript libraries, OnLoad/OnSave/OnChange handlers, tabs & fields, plus SavedQuery view layouts and FetchXML.' },
-      { id: 'label-explorer', file: 'tools/dvopentools_labels.html', name: 'Label Explorer', icon: '🌍', category: 'Metadata', version: '1.0.0', sizeBytes: 6767, description: 'Inspect localized Display Labels across all provisioned Dataverse languages (RetrieveProvisionedLanguages) for Tables and Columns, and export translation CSVs.' }
+      { id: 'fetchxml-playground', file: 'tools/dvot_fetchxml.html', name: 'FetchXML & Web API', icon: '🔍', category: 'Query', version: '1.1.0', sizeBytes: 26872, description: 'Execute FetchXML queries (with paging & batch fallback) and OData Web API requests with table inspection, code generation, and CSV/JSON export.' },
+      { id: 'schema-browser', file: 'tools/dvot_schemabrowser.html', name: 'Schema Browser', icon: '📖', category: 'Metadata', version: '1.1.0', sizeBytes: 21232, description: 'Explore Dataverse EntityDefinitions, columns, OptionSet integer mappings, relationships, keys, and Global Option Sets.' },
+      { id: 'erd-visualizer', file: 'tools/dvot_erd.html', name: 'ERD Visualizer', icon: '📐', category: 'Metadata', version: '1.0.0', sizeBytes: 11026, description: 'Select Dataverse tables to render an interactive pure-SVG Entity-Relationship diagram (1:N, N:1, N:N), export SVG, or copy Mermaid erDiagram.' },
+      { id: 'plugin-traces', file: 'tools/dvot_plugintraces.html', name: 'Plugin Trace Logs', icon: '📜', category: 'Diagnostics', version: '1.1.0', sizeBytes: 13886, description: 'Stream and filter Dataverse plugintracelog entries, trace full correlation cascades by depth, inspect stack traces, and spot slow plugins.' },
+      { id: 'access-checker', file: 'tools/dvot_accesschecker.html', name: 'Access Diagnostics', icon: '🛡️', category: 'Security', version: '1.1.0', sizeBytes: 15402, description: 'Diagnose effective record permissions via RetrievePrincipalAccess and inspect Security Roles, Team memberships, and record ownership.' },
+      { id: 'role-matrix', file: 'tools/dvot_rolematrix.html', name: 'Role Matrix', icon: '🎭', category: 'Security', version: '1.0.0', sizeBytes: 8470, description: 'Compare Dataverse Security Role table privileges side-by-side (Create, Read, Write, Delete, Append, Assign, Share) and export security audit CSVs.' },
+      { id: 'bu-queues', file: 'tools/dvot_buqueues.html', name: 'BU & Queue Explorer', icon: '🏢', category: 'Security', version: '1.0.0', sizeBytes: 16503, description: 'Visualize Business Unit hierarchy trees, default teams & divisions, plus inspect Public/Private Queues, email routing, and queue members.' },
+      { id: 'solution-layers', file: 'tools/dvot_solutionlayers.html', name: 'Solution Layers', icon: '📦', category: 'Solutions', version: '1.1.0', sizeBytes: 14973, description: 'Inspect managed vs Active unmanaged solution component layers (msdyn_componentlayer) and diagnose delete blockers via RetrieveDependenciesForDelete.' },
+      { id: 'env-vars', file: 'tools/dvot_envvars.html', name: 'Environment Variables', icon: '⚙️', category: 'Configuration', version: '1.1.0', sizeBytes: 12195, description: 'Inspect Default vs Current Environment Variable values, validate JSON configs, spot missing values, and safely update overrides.' },
+      { id: 'user-settings', file: 'tools/dvot_usersettings.html', name: 'User Settings & Views', icon: '👤', category: 'Configuration', version: '1.0.0', sizeBytes: 21382, description: 'Inspect and bulk-update User Settings (paging limit, timezone, UI language) and manage or reassign user-owned Personal Views and Personal Dashboards.' },
+      { id: 'record-inspector', file: 'tools/dvot_recordinspector.html', name: 'Record Inspector', icon: '🔎', category: 'Data', version: '1.0.0', sizeBytes: 13710, description: 'Inspect all fields (including hidden attributes) on any Dataverse record by pasting a URL or GUID, edit updatable values, or jump to Access Diagnostics.' },
+      { id: 'bulk-ops', file: 'tools/dvot_bulkops.html', name: 'Bulk Operations', icon: '♻️', category: 'Data', version: '1.0.0', sizeBytes: 10957, description: 'Preview records with FetchXML and execute throttled bulk PATCH, state activation/deactivation, or DELETE operations safely under Host Security Gateway.' },
+      { id: 'row-counter', file: 'tools/dvot_rowcounter.html', name: 'Row Counter', icon: '📊', category: 'Data', version: '1.0.0', sizeBytes: 49607, description: 'Count records across Dataverse tables (Total, Active, Inactive, Custom Filter) with HTTP headers inspection & CSV export.' },
+      { id: 'storage-analyzer', file: 'tools/dvot_storage.html', name: 'Storage Analyzer', icon: '💾', category: 'Data', version: '1.0.0', sizeBytes: 6393, description: 'Identify Dataverse log and file storage bloat across AsyncOperations, Plugin Traces, Audits, Notes/Attachments, and Bulk Delete jobs.' },
+      { id: 'dup-rules', file: 'tools/dvot_duprules.html', name: 'Duplicate Rules Auditor', icon: '👯', category: 'Data', version: '1.0.0', sizeBytes: 14289, description: 'Inspect all Dataverse Duplicate Detection Rules, match conditions, operator parameters, case-sensitivity, and test records via RetrieveDuplicates.' },
+      { id: 'table-map', file: 'tools/dvot_tablemap.html', name: 'Table Automation Map', icon: '⚡', category: 'Diagnostics', version: '1.0.0', sizeBytes: 10200, description: 'Unified view of every Plugin Step, Business Rule, Classic Workflow, Business Process Flow, Cloud Flow trigger, and Bound Custom API on any Dataverse table.' },
+      { id: 'process-chain', file: 'tools/dvot_processchain.html', name: 'Process Cascade Tracer', icon: '🕸️', category: 'Diagnostics', version: '1.1.0', sizeBytes: 61238, description: 'Trace multi-hop automation chains across Cloud Flows, Plugins, Webhooks, Classic Workflows, and Business Rules with an interactive Flowchart, Cascade Tree, Edge Table, and loop detection.' },
+      { id: 'env-timeline', file: 'tools/dvot_envtimeline.html', name: 'Environment Timeline', icon: '🕒', category: 'Diagnostics', version: '1.0.0', sizeBytes: 161523, description: 'Unified chronological activity and event timeline across Dataverse: Audits, Plugin Traces, Flow Runs, System Jobs, Solution Operations, and Sync Logs.' },
+      { id: 'flow-calendar', file: 'tools/dvot_flowcalendar.html', name: 'Flow Calendar', icon: '📅', category: 'Flow', version: '1.0.0', sizeBytes: 69456, description: 'Visualise Power Automate cloud flow run history across a 7-day hourly timeline with response headers inspection.' },
+      { id: 'flow-schedules', file: 'tools/dvot_flowschedules.html', name: 'Scheduled Flows', icon: '⏰', category: 'Flow', version: '1.1.0', sizeBytes: 51634, description: 'List all Scheduled Power Automate Cloud Flows by Solution with decoded recurrence timing, time zone, state, and a chronological Timeline view of upcoming runs.' },
+      { id: 'flow-codeview', file: 'tools/dvot_flowcodeview.html', name: 'Flow CodeView Reader', icon: '🧬', category: 'Flow', version: '1.0.0', sizeBytes: 84022, description: 'Decode Cloud Flow clientdata or Peek-Code JSON into a readable action tree by resolving OptionSet integer codes to labels and GUIDs to actual Dataverse record names.' },
+      { id: 'conn-refs', file: 'tools/dvot_connrefs.html', name: 'Connection Audit', icon: '🔗', category: 'Flow', version: '1.0.0', sizeBytes: 8094, description: 'Audit Connection References, map which Cloud Flows depend on each connection, and flag disconnected references or turned-off flows.' },
+      { id: 'plugin-manager', file: 'tools/dvot_plugins.html', name: 'Plugin Step Manager', icon: '🧩', category: 'Extensibility', version: '1.0.0', sizeBytes: 10148, description: 'Browse registered Plugin Assemblies, Types, SDK Message Processing Steps, and Pre/Post Images, with 1-click step Enable/Disable.' },
+      { id: 'webhook-inspector', file: 'tools/dvot_webhooks.html', name: 'Webhook Inspector', icon: '🪝', category: 'Extensibility', version: '1.1.0', sizeBytes: 11600, description: 'Inspect Dataverse Service Endpoints and Webhooks, linked SDK Message Processing Steps, recent Async delivery failures, and build sample RemoteExecutionContext payloads.' },
+      { id: 'wr-code-search', file: 'tools/dvot_wrsearch.html', name: 'Web Resource Search', icon: '💻', category: 'Extensibility', version: '1.0.0', sizeBytes: 18314, description: 'Decode and full-text / regex search across all JavaScript, HTML, CSS, XML, and ResX Web Resources to spot legacy Xrm.Page calls, hardcoded URLs/GUIDs, or field usage.' },
+      { id: 'ribbon-inspector', file: 'tools/dvot_ribbon.html', name: 'Command Bar & Ribbon', icon: '🎀', category: 'Extensibility', version: '1.0.0', sizeBytes: 17647, description: 'Inspect Modern Command Bar buttons (appactions Power Fx & JavaScript) and Classic RibbonDiffXml diffs (ribbondiffs) per table.' },
+      { id: 'form-view', file: 'tools/dvot_formview.html', name: 'Form & View XML', icon: '📋', category: 'Metadata', version: '1.0.0', sizeBytes: 11191, description: 'Audit FormXML JavaScript libraries, OnLoad/OnSave/OnChange handlers, tabs & fields, plus SavedQuery view layouts and FetchXML.' },
+      { id: 'label-explorer', file: 'tools/dvot_labels.html', name: 'Label Explorer', icon: '🌍', category: 'Metadata', version: '1.0.0', sizeBytes: 6767, description: 'Inspect localized Display Labels across all provisioned Dataverse languages (RetrieveProvisionedLanguages) for Tables and Columns, and export translation CSVs.' }
     ];
 
     let activeCat = 'All';
@@ -640,7 +640,7 @@
             <div class="tool-links">
               <a class="btn btn-sm" href="${esc(t.file)}" download="${esc(fileName)}" title="Download single HTML file (${esc(sizeLbl)})">⬇ Save</a>
               <a class="btn btn-sm" href="${esc(t.file)}" title="Open raw HTML file">HTML</a>
-              <a class="btn btn-sm btn-primary" href="dvopentools_host.html?tool=${encodeURIComponent(t.id)}">Open →</a>
+              <a class="btn btn-sm btn-primary" href="dvot_host.html?tool=${encodeURIComponent(t.id)}">Open →</a>
             </div>
           </div>
         </article>`;
@@ -660,12 +660,12 @@
     }
 
     function normalizeBundleFilename(raw) {
-      let clean = String(raw || 'dvopentools_bundle_custom')
+      let clean = String(raw || 'dvot_bundle_custom')
         .trim()
         .replace(/[^a-zA-Z0-9._-]+/g, '_')
         .replace(/\.html?$/i, '');
-      if (!clean) clean = 'dvopentools_bundle_custom';
-      if (!clean.toLowerCase().startsWith('dvopentools_')) clean = 'dvopentools_' + clean;
+      if (!clean) clean = 'dvot_bundle_custom';
+      if (!clean.toLowerCase().startsWith('dvot_')) clean = 'dvot_' + clean;
       return `${clean}.html`;
     }
 
@@ -727,7 +727,7 @@
           '</head>',
           '<body>',
           `  <h1>📦 DV Open Tools — Bundled Tool Pack (${bundled.length} tools)</h1>`,
-          '  <p>Upload this single HTML Web Resource alongside independent <code>dvopentools_host.html</code> (name starting with <code>dvopentools_</code>), or import it in Host via <strong>Load Tool from File</strong>.</p>',
+          '  <p>Upload this single HTML Web Resource alongside independent <code>dvot_host.html</code> (name starting with <code>dvot_</code>), or import it in Host via <strong>Load Tool from File</strong>.</p>',
           '  <table>',
           '    <thead><tr><th>Tool</th><th>Source File</th><th>Category</th><th>Version</th><th>Size</th></tr></thead>',
           `    <tbody>\n      ${rowsHtml}\n    </tbody>`,
@@ -748,7 +748,7 @@
         setTimeout(() => URL.revokeObjectURL(url), 5000);
 
         statusEl.className = 'bundle-status ok';
-        statusEl.textContent = `Downloaded ${fileName} (${bundled.length} tools · actual size: ${formatBytes(blob.size)}). Upload alongside independent dvopentools_host.html or load in Host.`;
+        statusEl.textContent = `Downloaded ${fileName} (${bundled.length} tools · actual size: ${formatBytes(blob.size)}). Upload alongside independent dvot_host.html or load in Host.`;
       } catch (err) {
         statusEl.className = 'bundle-status err';
         statusEl.textContent = location.protocol === 'file:'
@@ -778,7 +778,7 @@
       downloadToolBundle(target, customName);
     });
     document.getElementById('btn-dl-all').addEventListener('click', () => {
-      downloadToolBundle(TOOLS, 'dvopentools_bundle_all');
+      downloadToolBundle(TOOLS, 'dvot_bundle_all');
     });
 
     // Live-sync file sizes & metadata from tools/manifest.json when served via HTTP(S)

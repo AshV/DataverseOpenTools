@@ -2,7 +2,7 @@
 .SYNOPSIS
     DV Open Tools — Zero-Install PowerShell Local Dev Server & Dataverse Auth Proxy
 .DESCRIPTION
-    Serves index.html, dvopentools_host.html, and tools/dvopentools_*.html on http://127.0.0.1:8787
+    Serves index.html, dvot_host.html, and tools/dvot_*.html on http://127.0.0.1:8787
     and proxies /api/data/* requests to Dataverse using locally acquired OAuth Bearer tokens
     (`pac auth token`, `az account get-access-token`, or $env:DV_TOKEN).
 .EXAMPLE
@@ -62,7 +62,7 @@ Options:
   -Port <num>       Local HTTP port (default: 8787)
   -Auth <mode>      Token source: auto (default), pac (``pac auth token``), az (``az account get-access-token``), or env (DV_TOKEN)
   -LocalOnly        Serve local HTML tools without proxying Dataverse API calls
-  -BuildManifest    Regenerate tools/manifest.json from tools/dvopentools_*.html and exit
+  -BuildManifest    Regenerate tools/manifest.json from tools/dvot_*.html and exit
 "@
     exit 0
 }
@@ -169,7 +169,7 @@ function Resolve-SafeLocalFile([string]$RelName, [string]$BaseDir) {
     return $null
 }
 
-function Get-LocalToolWebResources([string]$Prefix = 'dvopentools_') {
+function Get-LocalToolWebResources([string]$Prefix = 'dvot_') {
     $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
     foreach ($dir in @($ToolsDir, $RootDir)) {
         if (-not [System.IO.Directory]::Exists($dir)) { continue }
@@ -193,7 +193,7 @@ function Get-LocalToolWebResources([string]$Prefix = 'dvopentools_') {
     return $list
 }
 
-function Build-ToolsManifest([string]$Prefix = 'dvopentools_') {
+function Build-ToolsManifest([string]$Prefix = 'dvot_') {
     $items = @()
     foreach ($wr in (Get-LocalToolWebResources $Prefix)) {
         $wrName = $wr.name
@@ -226,7 +226,7 @@ function Build-ToolsManifest([string]$Prefix = 'dvopentools_') {
     return $sorted
 }
 
-function Build-ToolsBundle([string]$OutPath = '', [string]$Prefix = 'dvopentools_') {
+function Build-ToolsBundle([string]$OutPath = '', [string]$Prefix = 'dvot_') {
     $manifest = Build-ToolsManifest $Prefix
     $bundleTools = @()
     $rows = New-Object System.Text.StringBuilder
@@ -272,7 +272,7 @@ function Build-ToolsBundle([string]$OutPath = '', [string]$Prefix = 'dvopentools
 </head>
 <body>
   <h1>📦 DV Open Tools — Bundled Tool Pack ($($bundleTools.Count) tools)</h1>
-  <p>Upload this single HTML Web Resource alongside <code>dvopentools_host.html</code> (name starting with <code>dvopentools_</code>), or import it in the Host via <strong>Load Tool from File</strong>.</p>
+  <p>Upload this single HTML Web Resource alongside <code>dvot_host.html</code> (name starting with <code>dvot_</code>), or import it in the Host via <strong>Load Tool from File</strong>.</p>
   <table>
     <thead><tr><th>Tool</th><th>Source File</th><th>Category</th><th>Version</th><th>Size</th></tr></thead>
     <tbody>
@@ -282,7 +282,7 @@ $($rows.ToString())    </tbody>
 </body>
 </html>
 "@
-    $resolvedOut = if ($OutPath) { [System.IO.Path]::GetFullPath((Join-Path $RootDir $OutPath)) } else { Join-Path (Join-Path $RootDir 'dist') 'dvopentools_bundle_all.html' }
+    $resolvedOut = if ($OutPath) { [System.IO.Path]::GetFullPath((Join-Path $RootDir $OutPath)) } else { Join-Path (Join-Path $RootDir 'dist') 'dvot_bundle_all.html' }
     $outDir = [System.IO.Path]::GetDirectoryName($resolvedOut)
     if (-not [System.IO.Directory]::Exists($outDir)) { [void][System.IO.Directory]::CreateDirectory($outDir) }
     $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($html)
@@ -395,7 +395,7 @@ function Invoke-DataverseProxy($Req, $Res, [string]$RawUrl, [string]$EnvUrl, [st
             if ($isWrDisc -and $status -eq 200) {
                 try {
                     $parsed = ([System.Text.Encoding]::UTF8.GetString($respBytes)) | ConvertFrom-Json
-                    $prefix = 'dvopentools_'
+                    $prefix = 'dvot_'
                     $decodedUrl = [System.Uri]::UnescapeDataString($RawUrl)
                     if ($decodedUrl -match "startswith\(name,'([^']+)'\)") { $prefix = $Matches[1] }
                     $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
@@ -468,7 +468,7 @@ $listener.Prefixes.Add($prefixUrl)
 $listener.Start()
 
 try {
-    Write-Host "`n⚡ DV Open Tools Local Server (PowerShell) running at: ${prefixUrl}dvopentools_host.html"
+    Write-Host "`n⚡ DV Open Tools Local Server (PowerShell) running at: ${prefixUrl}dvot_host.html"
     Write-Host "   Mode: $(if ($LocalOnly) { 'Local UI only (no Dataverse proxy)' } else { "Proxying /api/data/* -> $Env" })"
     Write-Host "   Local tools auto-discovered: $((Get-LocalToolWebResources).Count)"
     Write-Host "   Press Ctrl+C to stop.`n"
@@ -504,12 +504,12 @@ try {
 
             if ($reqPath -eq '/' -or $reqPath -eq '/index.html') {
                 $homeFile = Resolve-SafeLocalFile 'index.html' $RootDir
-                if (-not $homeFile) { $homeFile = Resolve-SafeLocalFile 'dvopentools_host.html' $RootDir }
+                if (-not $homeFile) { $homeFile = Resolve-SafeLocalFile 'dvot_host.html' $RootDir }
                 if ($homeFile) { Serve-LocalFile $res $homeFile; continue }
             }
 
-            if ($reqPath -eq '/dvopentools_host.html') {
-                $hostFile = Resolve-SafeLocalFile 'dvopentools_host.html' $RootDir
+            if ($reqPath -eq '/dvot_host.html') {
+                $hostFile = Resolve-SafeLocalFile 'dvot_host.html' $RootDir
                 if ($hostFile) { Serve-LocalFile $res $hostFile; continue }
             }
 

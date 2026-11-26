@@ -11,7 +11,7 @@ namespace DvOpenTools.Proxy;
 
 internal static class Program
 {
-    private const string ToolPrefix = "dvopentools_";
+    private const string ToolPrefix = "dvot_";
     private static readonly TimeSpan TokenTtl = TimeSpan.FromMinutes(40);
     private static readonly Regex ManifestScriptRegex = new(
         @"<script[^>]+id=[""']dvopentools-manifest[""'][^>]*>([\s\S]*?)<\/script>",
@@ -112,7 +112,7 @@ internal static class Program
         listener.Start();
 
         Console.WriteLine();
-        Console.WriteLine($"⚡ DV Open Tools Local Server (.NET) running at: {prefix}dvopentools_host.html");
+        Console.WriteLine($"⚡ DV Open Tools Local Server (.NET) running at: {prefix}dvot_host.html");
         Console.WriteLine($"   Workspace root: {rootDir}");
         Console.WriteLine($"   Mode: {(opts.LocalOnly ? "Local UI only (no Dataverse proxy)" : $"Proxying /api/data/* -> {opts.EnvUrl}")}");
         Console.WriteLine($"   Local tools auto-discovered: {ListLocalToolWebResources(rootDir, toolsDir).Count}");
@@ -166,8 +166,8 @@ Options:
   --port <num>      Local HTTP port (default: 8787)
   --auth <mode>     Token source: auto (default), pac (`pac auth token`), az (`az account get-access-token`), or env (DV_TOKEN)
   --local-only      Serve local HTML tools without proxying Dataverse API calls
-  --build-manifest  Regenerate tools/manifest.json from tools/dvopentools_*.html and exit
-  --build-bundle    Generate a single-file tool bundle HTML (default: dist/dvopentools_bundle_all.html)
+  --build-manifest  Regenerate tools/manifest.json from tools/dvot_*.html and exit
+  --build-bundle    Generate a single-file tool bundle HTML (default: dist/dvot_bundle_all.html)
 """);
     }
 
@@ -186,7 +186,7 @@ Options:
             var dir = c;
             for (var i = 0; i < 6 && !string.IsNullOrEmpty(dir); i++)
             {
-                if (File.Exists(Path.Combine(dir, "dvopentools_host.html")) &&
+                if (File.Exists(Path.Combine(dir, "dvot_host.html")) &&
                     Directory.Exists(Path.Combine(dir, "tools")))
                 {
                     return Path.GetFullPath(dir);
@@ -500,7 +500,7 @@ Options:
 </head>
 <body>
   <h1>📦 DV Open Tools — Bundled Tool Pack ({{bundleTools.Count}} tools)</h1>
-  <p>Upload this single HTML Web Resource alongside <code>dvopentools_host.html</code> (name starting with <code>dvopentools_</code>), or import it in the Host via <strong>Load Tool from File</strong>.</p>
+  <p>Upload this single HTML Web Resource alongside <code>dvot_host.html</code> (name starting with <code>dvot_</code>), or import it in the Host via <strong>Load Tool from File</strong>.</p>
   <table>
     <thead><tr><th>Tool</th><th>Source File</th><th>Category</th><th>Version</th><th>Size</th></tr></thead>
     <tbody>
@@ -511,7 +511,7 @@ Options:
 </html>
 """;
         var resolvedOut = string.IsNullOrWhiteSpace(outPath)
-            ? Path.Combine(rootDir, "dist", "dvopentools_bundle_all.html")
+            ? Path.Combine(rootDir, "dist", "dvot_bundle_all.html")
             : Path.GetFullPath(Path.Combine(rootDir, outPath));
         Directory.CreateDirectory(Path.GetDirectoryName(resolvedOut)!);
         var bytes = Encoding.UTF8.GetBytes(html);
@@ -591,13 +591,13 @@ Options:
 
             if (reqPath is "/" or "/index.html")
             {
-                var homeFile = ResolveSafeLocalFile("index.html", rootDir) ?? ResolveSafeLocalFile("dvopentools_host.html", rootDir);
+                var homeFile = ResolveSafeLocalFile("index.html", rootDir) ?? ResolveSafeLocalFile("dvot_host.html", rootDir);
                 if (homeFile is not null) { await ServeFileAsync(res, homeFile); return; }
             }
 
-            if (reqPath == "/dvopentools_host.html")
+            if (reqPath == "/dvot_host.html")
             {
-                var hostFile = ResolveSafeLocalFile("dvopentools_host.html", rootDir);
+                var hostFile = ResolveSafeLocalFile("dvot_host.html", rootDir);
                 if (hostFile is not null) { await ServeFileAsync(res, hostFile); return; }
             }
 
