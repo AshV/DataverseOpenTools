@@ -736,9 +736,9 @@
       background: var(--bg-card);
       border-radius: 8px;
       box-shadow: var(--shadow-md);
-      width: 650px;
+      width: 980px;
       max-width: 95vw;
-      max-height: 85vh;
+      max-height: 92vh;
       display: flex;
       flex-direction: column;
       border: 1px solid var(--border);
@@ -750,6 +750,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 10px;
       background: var(--bg-alt);
     }
     .modal-body {
@@ -772,12 +773,107 @@
 
     .detail-grid {
       display: grid;
-      grid-template-columns: 110px 1fr;
-      gap: 6px 12px;
+      grid-template-columns: 105px 1fr 105px 1fr;
+      gap: 6px 14px;
       font-size: 12px;
     }
+    @media (max-width: 720px) {
+      .detail-grid { grid-template-columns: 105px 1fr; }
+    }
     .detail-label { font-weight: 600; color: var(--text-sec); }
-    .detail-val { color: var(--text); user-select: text; }
+    .detail-val { color: var(--text); user-select: text; word-break: break-word; }
+
+    /* Scope Banner above main table */
+    .scope-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 8px 14px;
+      background: rgba(0, 120, 212, 0.08);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    /* Concurrent Activity Drill-Down inside Modal */
+    .dd-box {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-card);
+      overflow: hidden;
+    }
+    .dd-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 10px 12px;
+      background: var(--bg-alt);
+      border-bottom: 1px solid var(--border);
+    }
+    .dd-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+      font-size: 11px;
+    }
+    .dd-pill-group { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    .dd-pill {
+      border: 1px solid var(--border);
+      background: var(--bg-alt);
+      color: var(--text-sec);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .dd-pill:hover { border-color: var(--primary); color: var(--text); }
+    .dd-pill.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .dd-list-wrap {
+      max-height: 290px;
+      overflow-y: auto;
+    }
+    .dd-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11.5px;
+    }
+    .dd-table th {
+      position: sticky; top: 0; z-index: 2;
+      background: var(--bg-alt);
+      text-align: left;
+      padding: 6px 10px;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--text-sec);
+      border-bottom: 1px solid var(--border);
+    }
+    .dd-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .dd-row { cursor: pointer; }
+    .dd-row:hover td { background: var(--row-hover); }
+    .dd-offset {
+      font-family: ui-monospace, monospace;
+      font-size: 10.5px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      white-space: nowrap;
+      display: inline-block;
+    }
 
     .code-block {
       background: var(--bg-alt);
@@ -852,10 +948,10 @@
 
         <div class="dt-range-picker">
           <label class="dt-label" for="dt-from">From:
-            <input type="datetime-local" class="dt-input" id="dt-from" title="Start date & time (local)">
+            <input type="datetime-local" step="1" class="dt-input" id="dt-from" title="Start date & time (local)">
           </label>
           <label class="dt-label" for="dt-to">To:
-            <input type="datetime-local" class="dt-input" id="dt-to" title="End date & time (local)">
+            <input type="datetime-local" step="1" class="dt-input" id="dt-to" title="End date & time (local)">
           </label>
           <button class="btn btn-sm primary" id="btn-apply-range" title="Query Dataverse for this custom window">Apply</button>
           <button class="btn btn-sm" id="btn-set-now" title="Set 'To' time to current time">⏱️ Now</button>
@@ -1016,6 +1112,10 @@
 
   <!-- ══════════════ TIMELINE TABLE ══════════════ -->
   <main class="content-area">
+    <div id="scope-banner" class="scope-banner" style="display:none;">
+      <div id="scope-banner-text">Scoped to execution window</div>
+      <button class="btn btn-sm" id="btn-restore-scope">← Restore Full Window</button>
+    </div>
     <table class="timeline-table">
       <thead>
         <tr>
@@ -1042,7 +1142,8 @@
   <div class="modal-overlay" id="detail-modal">
     <div class="modal-card">
       <div class="modal-header">
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;">
+          <button class="btn btn-sm" id="md-back-btn" style="display:none;">← Back</button>
           <span id="md-cat-badge" class="badge-cat cat-plugin">Plugin</span>
           <span id="md-sev-badge" class="badge-sev error">Error</span>
           <strong id="md-title" style="font-size:14px;color:var(--text);">Event Title</strong>
@@ -1051,8 +1152,17 @@
       </div>
       <div class="modal-body">
         <div class="detail-grid">
+          <div class="detail-label">Start Time:</div>
+          <div class="detail-val" id="md-start">—</div>
+
+          <div class="detail-label">End Time:</div>
+          <div class="detail-val" id="md-end">—</div>
+
           <div class="detail-label">Timestamp:</div>
           <div class="detail-val" id="md-time">—</div>
+
+          <div class="detail-label">Duration:</div>
+          <div class="detail-val" id="md-duration">—</div>
 
           <div class="detail-label">Entity / Scope:</div>
           <div class="detail-val" id="md-entity">—</div>
@@ -1061,10 +1171,7 @@
           <div class="detail-val" id="md-user">—</div>
 
           <div class="detail-label">Event ID:</div>
-          <div class="detail-val" id="md-id" style="font-family:monospace;font-size:11px;">—</div>
-
-          <div class="detail-label">Duration:</div>
-          <div class="detail-val" id="md-duration">—</div>
+          <div class="detail-val" id="md-id" style="font-family:monospace;font-size:11px;grid-column:span 1;">—</div>
         </div>
 
         <!-- Error Section -->
@@ -1115,6 +1222,53 @@
             <div><strong id="md-flow-id-label">Flow ID:</strong> <span id="md-flow-id-val">—</span></div>
             <div id="md-flow-runid-box"><strong>Run ID:</strong> <span id="md-flow-runid-val">—</span></div>
             <div id="md-flow-history-box"><a href="#" target="_blank" rel="noopener noreferrer" id="md-flow-history-link" style="color:var(--primary);text-decoration:underline;">View All Runs for this Flow ↗</a></div>
+          </div>
+        </div>
+
+        <!-- Concurrent Activity Drill-Down Section -->
+        <div id="md-drilldown-sec" class="dd-box" style="display:none;">
+          <div class="dd-header">
+            <div>
+              <div style="font-weight:700;font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px;">
+                <span>🔀</span> What Else Happened During This Execution Window
+              </div>
+              <div id="md-drilldown-status" style="font-size:11px;color:var(--text-sec);margin-top:2px;">—</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <button class="btn btn-sm" id="md-drilldown-refresh" title="Re-query Dataverse for this exact time window">↻ Re-query Window</button>
+              <button class="btn btn-sm primary" id="md-scope-btn" title="Filter the main timeline table to this exact execution window">🔍 Scope Main Timeline</button>
+            </div>
+          </div>
+          <div class="dd-controls">
+            <div class="dd-pill-group" id="dd-buffer-pills">
+              <span style="color:var(--text-sec);font-weight:600;">Buffer:</span>
+              <button type="button" class="dd-pill" data-buf="0">0s</button>
+              <button type="button" class="dd-pill active" data-buf="2">±2s</button>
+              <button type="button" class="dd-pill" data-buf="10">±10s</button>
+              <button type="button" class="dd-pill" data-buf="30">±30s</button>
+            </div>
+            <div class="dd-pill-group" id="dd-cat-pills">
+              <button type="button" class="dd-pill active" data-ddcat="all">All</button>
+              <button type="button" class="dd-pill" data-ddcat="audit">Audits</button>
+              <button type="button" class="dd-pill" data-ddcat="plugin">Plugins</button>
+              <button type="button" class="dd-pill" data-ddcat="process">Flows / Jobs</button>
+              <button type="button" class="dd-pill" data-ddcat="other">Solutions / Sync</button>
+            </div>
+          </div>
+          <div class="dd-list-wrap">
+            <table class="dd-table">
+              <thead>
+                <tr>
+                  <th style="width:95px;">Offset</th>
+                  <th style="width:90px;">Start Time</th>
+                  <th style="width:110px;">Category</th>
+                  <th style="width:85px;">Status</th>
+                  <th>Event</th>
+                  <th style="width:130px;">Entity / By</th>
+                </tr>
+              </thead>
+              <tbody id="md-drilldown-tbody"></tbody>
+            </table>
           </div>
         </div>
 
@@ -1189,6 +1343,16 @@
 
     // In-memory window cache for zero-roundtrip sub-range zoom-ins
     let cachedServerWindow = null;
+
+    // Concurrent activity drill-down & modal navigation state
+    let currentModalEvent = null;
+    let modalHistoryStack = [];
+    let drilldownBufferSec = 2;
+    let drilldownCatFilter = 'all';
+    let drilldownServerEvents = [];
+    let drilldownServerFetchedWindow = null;
+    let drilldownReqSeq = 0;
+    let savedScopeBackup = null;
 
     const ALL_CATEGORIES = ['audit', 'plugin', 'flow', 'workflow', 'action', 'job', 'solution', 'sync'];
 
@@ -1517,7 +1681,8 @@
       const da  = pad(date.getDate());
       const hr  = pad(date.getHours());
       const mi  = pad(date.getMinutes());
-      return `${yr}-${mo}-${da}T${hr}:${mi}`;
+      const se  = pad(date.getSeconds());
+      return `${yr}-${mo}-${da}T${hr}:${mi}:${se}`;
     }
 
     function syncDatetimeInputs(rangeKey) {
@@ -1602,6 +1767,121 @@
       };
     }
 
+    function deduplicateEvents(events) {
+      const seenIds = new Set();
+      const unique = [];
+      for (const ev of events) {
+        if (!ev.id || !seenIds.has(ev.id)) {
+          if (ev.id) seenIds.add(ev.id);
+          unique.push(ev);
+        }
+      }
+      return unique;
+    }
+
+    async function fetchEventsForWindow(fromIso, toIso, includeIntervalOverlap = false) {
+      const events = [];
+      await loadCloudFlowsMap().catch(() => {});
+
+      const lookbackIso = includeIntervalOverlap
+        ? new Date(new Date(fromIso).getTime() - 60 * 60 * 1000).toISOString()
+        : fromIso;
+
+      const asyncFilter = includeIntervalOverlap
+        ? `createdon ge ${lookbackIso} and createdon le ${toIso} and (startedon ge ${fromIso} or completedon ge ${fromIso} or createdon ge ${fromIso})`
+        : `createdon ge ${fromIso} and createdon le ${toIso}`;
+
+      const solFilter = includeIntervalOverlap
+        ? `msdyn_starttime ge ${lookbackIso} and msdyn_starttime le ${toIso} and (msdyn_starttime ge ${fromIso} or msdyn_endtime ge ${fromIso})`
+        : `msdyn_starttime ge ${fromIso} and msdyn_starttime le ${toIso}`;
+
+      await Promise.allSettled([
+        // 1. Audits
+        dvFetchWithHeaders(`/audits?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=auditid,createdon,action,operation,objecttypecode,_userid_value,_objectid_value&$orderby=createdon desc&$top=150`)
+          .then(data => {
+            (data.value || []).forEach(r => events.push(normalizeAuditEvent(r)));
+          }).catch(e => console.warn('[EnvTimeline] Audits query:', e.message)),
+
+        // 2. Plugin Trace Logs (performanceexecutionduration is the official Dataverse Web API property name)
+        dvFetchWithHeaders(`/plugintracelogs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=plugintracelogid,createdon,typename,messagename,primaryentity,mode,operationtype,performanceexecutionduration,correlationid,messageblock,exceptiondetails&$orderby=createdon desc&$top=150`)
+          .then(data => {
+            (data.value || []).forEach(r => events.push(normalizePluginEvent(r)));
+          }).catch(e => console.warn('[EnvTimeline] PluginTraces query:', e.message)),
+
+        // 3. System Jobs (Async Operations: createdon is universal; _workflowactivationid_value & _regardingobjectid_value link to workflow)
+        dvFetchWithHeaders(`/asyncoperations?$filter=${encodeURIComponent(asyncFilter)}&$select=asyncoperationid,name,operationtype,statuscode,statecode,startedon,completedon,createdon,message,_ownerid_value,_regardingobjectid_value,_workflowactivationid_value&$orderby=createdon desc&$top=150`)
+          .catch(() => dvFetchWithHeaders(`/asyncoperations?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=asyncoperationid,name,operationtype,statuscode,statecode,startedon,completedon,createdon,message,_ownerid_value,_regardingobjectid_value,_workflowactivationid_value&$orderby=createdon desc&$top=150`))
+          .catch(() => dvFetchWithHeaders(`/asyncoperations?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=asyncoperationid,name,operationtype,statuscode,statecode,startedon,completedon,createdon,message,_ownerid_value,_regardingobjectid_value&$orderby=createdon desc&$top=150`))
+          .then(data => {
+            (data.value || []).forEach(r => events.push(normalizeJobEvent(r)));
+          }).catch(e => console.warn('[EnvTimeline] AsyncOps query:', e.message)),
+
+        // 4. Cloud Flow Runs (Modern elastic table flowruns; elastic tables may restrict OR filters so fall back cleanly)
+        (includeIntervalOverlap
+          ? dvFetchWithHeaders(`/flowruns?$filter=${encodeURIComponent(`starttime ge ${lookbackIso} and starttime le ${toIso} and (starttime ge ${fromIso} or endtime ge ${fromIso})`)}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage,workflowid&$orderby=starttime desc&$top=100`)
+              .catch(() => dvFetchWithHeaders(`/flowruns?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage,workflowid&$orderby=starttime desc&$top=100`))
+          : dvFetchWithHeaders(`/flowruns?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage,workflowid&$orderby=starttime desc&$top=100`)
+        )
+          .then(data => {
+            (data.value || []).forEach(r => events.push(normalizeFlowEvent(r)));
+          }).catch(e => {
+            console.warn('[EnvTimeline] FlowRuns table query not available (elastic table), captured via asyncoperations:', e.message);
+          }),
+
+        // 5. Solution History (msdyn_solutionhistories) + Import Jobs (importjobs exists in all orgs)
+        dvFetchWithHeaders(`/msdyn_solutionhistories?$filter=${encodeURIComponent(solFilter)}&$select=msdyn_solutionhistoryid,msdyn_name,msdyn_solutionversion,msdyn_operation,msdyn_status,msdyn_result,msdyn_starttime,msdyn_endtime,msdyn_errorcode,msdyn_exceptionmessage,msdyn_publishername&$orderby=msdyn_starttime desc&$top=80`)
+          .catch(() => dvFetchWithHeaders(`/msdyn_solutionhistories?$filter=msdyn_starttime ge ${fromIso} and msdyn_starttime le ${toIso}&$select=msdyn_solutionhistoryid,msdyn_name,msdyn_solutionversion,msdyn_operation,msdyn_status,msdyn_result,msdyn_starttime,msdyn_endtime,msdyn_errorcode,msdyn_exceptionmessage,msdyn_publishername&$orderby=msdyn_starttime desc&$top=80`))
+          .then(data => {
+            (data.value || []).forEach(r => events.push(normalizeSolutionHistoryEvent(r)));
+          }).catch(() => {
+            return dvFetchWithHeaders(`/importjobs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=importjobid,solutionname,createdon,completedon,progress,_createdby_value&$orderby=createdon desc&$top=50`)
+              .then(data => {
+                (data.value || []).forEach(r => events.push(normalizeImportJobEvent(r)));
+              }).catch(e => console.warn('[EnvTimeline] Solution imports query:', e.message));
+          }),
+
+        // 6. Trace Logs (Mailbox Sync / SSS) & Sync Errors
+        dvFetchWithHeaders(`/tracelogs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=tracelogid,createdon,text,level,machinename,errordetails&$orderby=createdon desc&$top=80`)
+          .then(data => {
+            (data.value || []).forEach(r => events.push(normalizeSyncEvent(r)));
+          }).catch(() => {
+            return dvFetchWithHeaders(`/syncerrors?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=syncerrorid,name,errorcode,errormessage,createdon,_regardingobjectid_value&$orderby=createdon desc&$top=50`)
+              .then(data => {
+                (data.value || []).forEach(r => events.push(normalizeSyncErrorEvent(r)));
+              }).catch(e => console.warn('[EnvTimeline] Sync logs query:', e.message));
+          })
+      ]);
+
+      return deduplicateEvents(events);
+    }
+
+    function resolveEventFlowNames(eventsList, onResolved) {
+      const unresolvedFlowIds = new Set();
+      eventsList.forEach(ev => {
+        if ((ev.category === 'flow' || ev.category === 'workflow' || ev.category === 'action') && ev.flowId) {
+          const fid = ev.flowId.toLowerCase();
+          if (!workflowsMap[fid] && (!ev.title || ev.title === 'Cloud Flow' || ev.title === 'Classic Workflow' || ev.title === 'Action Process')) {
+            unresolvedFlowIds.add(fid);
+          }
+        }
+      });
+      if (unresolvedFlowIds.size === 0) return;
+      Promise.allSettled(Array.from(unresolvedFlowIds).slice(0, 25).map(id => resolveFlowMetadata(id)))
+        .then(() => {
+          let changed = false;
+          eventsList.forEach(ev => {
+            if (ev.flowId && (ev.title === 'Cloud Flow' || ev.title === 'Classic Workflow' || ev.title === 'Action Process')) {
+              const meta = workflowsMap[ev.flowId.toLowerCase()];
+              if (meta?.name) {
+                ev.title = meta.name;
+                changed = true;
+              }
+            }
+          });
+          if (changed && typeof onResolved === 'function') onResolved();
+        });
+    }
+
     async function loadEnvironmentEvents(forceServer = false) {
       const { from, to, fromIso, toIso } = getTimeWindow(activeRange);
       const winLabel = formatTimeWindowLabel(from, to);
@@ -1625,77 +1905,9 @@
       spin.style.animation = 'spin .7s linear infinite';
       isSample = false;
 
-      const events = [];
-
-      // Ensure cloud flows mapping is ready for friendly flow names
-      await loadCloudFlowsMap().catch(() => {});
-
-      // Query all sources in parallel with graceful failure and fallback per category
-      await Promise.allSettled([
-        // 1. Audits
-        dvFetchWithHeaders(`/audits?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=auditid,createdon,action,operation,objecttypecode,_userid_value,_objectid_value&$orderby=createdon desc&$top=150`)
-          .then(data => {
-            (data.value || []).forEach(r => events.push(normalizeAuditEvent(r)));
-          }).catch(e => console.warn('[EnvTimeline] Audits query:', e.message)),
-
-        // 2. Plugin Trace Logs (performanceexecutionduration is the official Dataverse Web API property name)
-        dvFetchWithHeaders(`/plugintracelogs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=plugintracelogid,createdon,typename,messagename,primaryentity,mode,operationtype,performanceexecutionduration,correlationid,messageblock,exceptiondetails&$orderby=createdon desc&$top=150`)
-          .then(data => {
-            (data.value || []).forEach(r => events.push(normalizePluginEvent(r)));
-          }).catch(e => console.warn('[EnvTimeline] PluginTraces query:', e.message)),
-
-        // 3. System Jobs (Async Operations: createdon is universal; _workflowactivationid_value & _regardingobjectid_value link to workflow)
-        dvFetchWithHeaders(`/asyncoperations?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=asyncoperationid,name,operationtype,statuscode,statecode,startedon,completedon,createdon,message,_ownerid_value,_regardingobjectid_value,_workflowactivationid_value&$orderby=createdon desc&$top=150`)
-          .catch(() => dvFetchWithHeaders(`/asyncoperations?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=asyncoperationid,name,operationtype,statuscode,statecode,startedon,completedon,createdon,message,_ownerid_value,_regardingobjectid_value&$orderby=createdon desc&$top=150`))
-          .then(data => {
-            (data.value || []).forEach(r => events.push(normalizeJobEvent(r)));
-          }).catch(e => console.warn('[EnvTimeline] AsyncOps query:', e.message)),
-
-        // 4. Cloud Flow Runs (Modern elastic table flowruns: workflowid is the direct attribute on elastic table)
-        dvFetchWithHeaders(`/flowruns?$filter=starttime ge ${fromIso} and starttime le ${toIso}&$select=flowrunid,name,starttime,endtime,status,errorcode,errormessage,workflowid&$orderby=starttime desc&$top=100`)
-          .then(data => {
-            (data.value || []).forEach(r => events.push(normalizeFlowEvent(r)));
-          }).catch(e => {
-            console.warn('[EnvTimeline] FlowRuns table query not available (elastic table), captured via asyncoperations:', e.message);
-          }),
-
-        // 5. Solution History (msdyn_solutionhistories) + Import Jobs (importjobs exists in all orgs)
-        dvFetchWithHeaders(`/msdyn_solutionhistories?$filter=msdyn_starttime ge ${fromIso} and msdyn_starttime le ${toIso}&$select=msdyn_solutionhistoryid,msdyn_name,msdyn_solutionversion,msdyn_operation,msdyn_status,msdyn_result,msdyn_starttime,msdyn_endtime,msdyn_errorcode,msdyn_exceptionmessage,msdyn_publishername&$orderby=msdyn_starttime desc&$top=80`)
-          .then(data => {
-            (data.value || []).forEach(r => events.push(normalizeSolutionHistoryEvent(r)));
-          }).catch(() => {
-            // Fallback to importjobs if msdyn_solutionhistories is absent
-            return dvFetchWithHeaders(`/importjobs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=importjobid,solutionname,createdon,completedon,progress,_createdby_value&$orderby=createdon desc&$top=50`)
-              .then(data => {
-                (data.value || []).forEach(r => events.push(normalizeImportJobEvent(r)));
-              }).catch(e => console.warn('[EnvTimeline] Solution imports query:', e.message));
-          }),
-
-        // 6. Trace Logs (Mailbox Sync / SSS) & Sync Errors
-        dvFetchWithHeaders(`/tracelogs?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=tracelogid,createdon,text,level,machinename,errordetails&$orderby=createdon desc&$top=80`)
-          .then(data => {
-            (data.value || []).forEach(r => events.push(normalizeSyncEvent(r)));
-          }).catch(() => {
-            // Fallback / supplement with syncerrors for dual-write / mobile offline
-            return dvFetchWithHeaders(`/syncerrors?$filter=createdon ge ${fromIso} and createdon le ${toIso}&$select=syncerrorid,name,errorcode,errormessage,createdon,_regardingobjectid_value&$orderby=createdon desc&$top=50`)
-              .then(data => {
-                (data.value || []).forEach(r => events.push(normalizeSyncErrorEvent(r)));
-              }).catch(e => console.warn('[EnvTimeline] Sync logs query:', e.message));
-          })
-      ]);
+      const uniqueEvents = await fetchEventsForWindow(fromIso, toIso, false);
 
       spin.style.animation = 'none';
-
-      // Deduplicate events by id
-      const seenIds = new Set();
-      const uniqueEvents = [];
-      for (const ev of events) {
-        if (!ev.id || !seenIds.has(ev.id)) {
-          if (ev.id) seenIds.add(ev.id);
-          uniqueEvents.push(ev);
-        }
-      }
-
       cachedServerWindow = { from, to };
 
       if (uniqueEvents.length === 0) {
@@ -1708,34 +1920,7 @@
       updateAuditOpOptions();
       updateAuditTableOptions();
       renderTimeline();
-
-      // On-demand resolution for any flow/process runs with missing friendly names
-      const unresolvedFlowIds = new Set();
-      allEvents.forEach(ev => {
-        if ((ev.category === 'flow' || ev.category === 'workflow' || ev.category === 'action') && ev.flowId) {
-          const fid = ev.flowId.toLowerCase();
-          if (!workflowsMap[fid] && (!ev.title || ev.title === 'Cloud Flow' || ev.title === 'Classic Workflow' || ev.title === 'Action Process')) {
-            unresolvedFlowIds.add(fid);
-          }
-        }
-      });
-
-      if (unresolvedFlowIds.size > 0) {
-        Promise.allSettled(Array.from(unresolvedFlowIds).slice(0, 25).map(id => resolveFlowMetadata(id)))
-          .then(() => {
-            let changed = false;
-            allEvents.forEach(ev => {
-              if (ev.flowId && (ev.title === 'Cloud Flow' || ev.title === 'Classic Workflow' || ev.title === 'Action Process')) {
-                const meta = workflowsMap[ev.flowId.toLowerCase()];
-                if (meta?.name) {
-                  ev.title = meta.name;
-                  changed = true;
-                }
-              }
-            });
-            if (changed) renderTimeline();
-          });
-      }
+      resolveEventFlowNames(allEvents, () => renderTimeline());
     }
 
     /* ─── 7. Event Normalization & Multi-Select Filter Helpers ──────── */
@@ -2173,11 +2358,14 @@
     function normalizeAuditEvent(r) {
       const act = AUDIT_ACTIONS[r.action] || `Audit Action ${r.action}`;
       const isSec = r.action === 13 || r.action === 14 || r.action === 64 || r.action === 65;
+      const startTime = new Date(r.createdon);
       return {
         id: r.auditid,
         category: 'audit',
         categoryLabel: 'Audit',
-        time: new Date(r.createdon),
+        time: startTime,
+        startTime,
+        endTime: null,
         severity: isSec ? 'warn' : 'info',
         severityLabel: isSec ? 'Security' : 'Audit',
         title: `${act} on ${r.objecttypecode || 'Record'}`,
@@ -2195,11 +2383,14 @@
 
     function normalizePluginEvent(r) {
       const hasErr = !!r.exceptiondetails;
+      const startTime = new Date(r.createdon);
       return {
         id: r.plugintracelogid,
         category: 'plugin',
         categoryLabel: 'Plugin',
-        time: new Date(r.createdon),
+        time: startTime,
+        startTime,
+        endTime: null,
         severity: hasErr ? 'error' : 'success',
         severityLabel: hasErr ? 'Error' : 'Success',
         title: `${r.typename || 'Plugin'} (${r.messagename || 'Message'})`,
@@ -2264,11 +2455,15 @@
         title = (wfMeta ? wfMeta.name : (flowId ? cloudFlowsMap[flowId] : null)) || r.name || 'Classic Workflow';
       }
 
+      const startTime = new Date(r.startedon || r.createdon);
+      const endTime = r.completedon ? new Date(r.completedon) : null;
       return {
         id: r.asyncoperationid,
         category,
         categoryLabel,
-        time: new Date(r.startedon || r.createdon),
+        time: startTime,
+        startTime,
+        endTime,
         severity,
         severityLabel: sevLabel,
         title,
@@ -2299,12 +2494,16 @@
                        r['_workflowid_value@OData.Community.Display.V1.FormattedValue'] ||
                        'Cloud Flow';
       const runId = r.name || r.flowrunid || null;
+      const startTime = new Date(r.starttime);
+      const endTime = r.endtime ? new Date(r.endtime) : null;
 
       return {
         id: r.flowrunid || uid(),
         category: 'flow',
         categoryLabel: 'Cloud Flow',
-        time: new Date(r.starttime),
+        time: startTime,
+        startTime,
+        endTime,
         severity,
         severityLabel: sevLabel,
         title: flowName,
@@ -2322,11 +2521,15 @@
     function normalizeSolutionHistoryEvent(r) {
       const ok = r.msdyn_result === true;
       const op = SOLUTION_OP_MAP[r.msdyn_operation] || `Operation ${r.msdyn_operation}`;
+      const startTime = new Date(r.msdyn_starttime);
+      const endTime = r.msdyn_endtime ? new Date(r.msdyn_endtime) : null;
       return {
         id: r.msdyn_solutionhistoryid,
         category: 'solution',
         categoryLabel: 'Solution',
-        time: new Date(r.msdyn_starttime),
+        time: startTime,
+        startTime,
+        endTime,
         severity: ok ? 'success' : 'error',
         severityLabel: ok ? 'Succeeded' : 'Failed',
         title: `Solution ${op}: ${r.msdyn_name || 'Solution'} (v${r.msdyn_solutionversion || ''})`,
@@ -2341,11 +2544,15 @@
 
     function normalizeImportJobEvent(r) {
       const completed = (r.progress === 100) || !!r.completedon;
+      const startTime = new Date(r.createdon);
+      const endTime = r.completedon ? new Date(r.completedon) : null;
       return {
         id: r.importjobid,
         category: 'solution',
         categoryLabel: 'Solution',
-        time: new Date(r.createdon),
+        time: startTime,
+        startTime,
+        endTime,
         severity: completed ? 'success' : 'info',
         severityLabel: completed ? 'Imported' : `${r.progress || 0}%`,
         title: `Solution Import: ${r.solutionname || 'Solution Package'}`,
@@ -2363,11 +2570,14 @@
       const lvl = Number(r.level);
       const sev = lvl === 3 ? 'error' : lvl === 2 ? 'warn' : 'info';
       const sevLabel = lvl === 3 ? 'Error' : lvl === 2 ? 'Warning' : 'Info';
+      const startTime = new Date(r.createdon);
       return {
         id: r.tracelogid,
         category: 'sync',
         categoryLabel: 'Sync Log',
-        time: new Date(r.createdon),
+        time: startTime,
+        startTime,
+        endTime: null,
         severity: sev,
         severityLabel: sevLabel,
         title: (r.text || 'Mailbox Synchronization Event').slice(0, 100),
@@ -2381,11 +2591,14 @@
     }
 
     function normalizeSyncErrorEvent(r) {
+      const startTime = new Date(r.createdon);
       return {
         id: r.syncerrorid,
         category: 'sync',
         categoryLabel: 'Sync Log',
-        time: new Date(r.createdon),
+        time: startTime,
+        startTime,
+        endTime: null,
         severity: 'error',
         severityLabel: 'Sync Error',
         title: r.name || 'Dataverse Sync Error',
@@ -2403,10 +2616,11 @@
       isSample = true;
       const now = new Date();
       const minsAgo = m => new Date(now.getTime() - m * 60000);
+      const addMs = (d, ms) => new Date(d.getTime() + ms);
 
       allEvents = [
         {
-          id: 's1', category: 'plugin', categoryLabel: 'Plugin', time: minsAgo(12),
+          id: 's1', category: 'plugin', categoryLabel: 'Plugin', time: minsAgo(12), startTime: minsAgo(12), endTime: null,
           severity: 'error', severityLabel: 'Error',
           title: 'PostAccountUpdate: NullReferenceException',
           entity: 'account', user: 'Ashish V.', duration: '142ms',
@@ -2415,17 +2629,47 @@
           raw: { plugin: 'AccountHandler', stage: 40, durationMs: 142 }
         },
         {
-          id: 's2', category: 'flow', categoryLabel: 'Cloud Flow', time: minsAgo(24),
+          id: 's2', category: 'flow', categoryLabel: 'Cloud Flow', time: minsAgo(24), startTime: minsAgo(24), endTime: addMs(minsAgo(24), 4500),
           severity: 'success', severityLabel: 'Succeeded',
           title: 'Sync Invoice to ERP Webhook',
-          entity: 'Cloud Flow', user: 'Automated', duration: '2.4s',
+          entity: 'Cloud Flow', user: 'Automated', duration: '4.5s',
           flowId: '7f3a9921-1234-4567-89ab-cdef01234567',
           runId: '08584857291038475628491028374',
           error: null, traces: null,
-          raw: { flow: 'Sync Invoice to ERP', durationSeconds: 2.4, trigger: 'HTTP Webhook' }
+          raw: { flow: 'Sync Invoice to ERP', starttime: minsAgo(24).toISOString(), endtime: addMs(minsAgo(24), 4500).toISOString(), durationSeconds: 4.5, trigger: 'HTTP Webhook' }
         },
         {
-          id: 's3', category: 'audit', categoryLabel: 'Audit', time: minsAgo(45),
+          id: 's13', category: 'plugin', categoryLabel: 'Plugin', time: addMs(minsAgo(24), 850), startTime: addMs(minsAgo(24), 850), endTime: null,
+          severity: 'success', severityLabel: 'Success',
+          title: 'PostInvoiceSyncUpdate (Sync)',
+          entity: 'invoice', user: 'Sync', duration: '64ms',
+          error: null, traces: '[PostInvoiceSyncUpdate: ERP Reference ID stamped on invoice]',
+          raw: { plugin: 'InvoiceSyncHandler', durationMs: 64 }
+        },
+        {
+          id: 's14', category: 'audit', categoryLabel: 'Audit', time: addMs(minsAgo(24), 2100), startTime: addMs(minsAgo(24), 2100), endTime: null,
+          severity: 'info', severityLabel: 'Update',
+          title: 'Update on invoice (new_erpsyncstatus & statuscode changed)',
+          entity: 'invoice', user: 'Flow Service', duration: '—',
+          rawAction: 2, rawOperation: 2, error: null, traces: null,
+          auditDetail: {
+            "@odata.type": "#Microsoft.Dynamics.CRM.AttributeAuditDetail",
+            OldValue: { new_erpsyncstatus: "Pending", statuscode: 1 },
+            NewValue: { new_erpsyncstatus: "Synced", statuscode: 2 }
+          },
+          raw: { action: 2, operation: 2, entity: 'invoice', changedField: 'new_erpsyncstatus' }
+        },
+        {
+          id: 's15', category: 'action', categoryLabel: 'Action', time: addMs(minsAgo(24), -1500), startTime: addMs(minsAgo(24), -1500), endTime: addMs(minsAgo(24), 1100),
+          severity: 'success', severityLabel: 'Succeeded',
+          title: 'Contoso_ValidateErpPayload',
+          entity: 'Action', user: 'SYSTEM', duration: '2.6s',
+          flowId: 'e3000000-0000-0000-0000-000000000003', runId: null,
+          error: null, traces: null,
+          raw: { name: 'Contoso_ValidateErpPayload', operationtype: 10, category: 3, startedon: addMs(minsAgo(24), -1500).toISOString(), completedon: addMs(minsAgo(24), 1100).toISOString() }
+        },
+        {
+          id: 's3', category: 'audit', categoryLabel: 'Audit', time: minsAgo(45), startTime: minsAgo(45), endTime: null,
           severity: 'info', severityLabel: 'Update',
           title: 'Update on contact (emailaddress1 & telephone1 changed)',
           entity: 'contact', user: 'Ashish V.', duration: '—',
@@ -2453,7 +2697,7 @@
           raw: { action: 2, operation: 2, entity: 'contact', changedField: 'emailaddress1', old: 'john.doe@contoso-legacy.com', new: 'john.doe@contoso.com' }
         },
         {
-          id: 's4', category: 'solution', categoryLabel: 'Solution', time: minsAgo(70),
+          id: 's4', category: 'solution', categoryLabel: 'Solution', time: minsAgo(70), startTime: minsAgo(70), endTime: addMs(minsAgo(70), 48000),
           severity: 'success', severityLabel: 'Imported',
           title: 'Solution Import: ContosoSalesCore (v2.4.1.0)',
           entity: 'solution', user: 'ALM Pipeline', duration: '48s',
@@ -2481,7 +2725,7 @@
           raw: { action: 14, role: 'System Administrator', targetUser: 'service_dev_agent' }
         },
         {
-          id: 's6', category: 'job', categoryLabel: 'System Job', time: minsAgo(150),
+          id: 's6', category: 'job', categoryLabel: 'System Job', time: minsAgo(150), startTime: minsAgo(150), endTime: addMs(minsAgo(150), 724000),
           severity: 'error', severityLabel: 'Failed',
           title: 'Bulk Delete Job "Purge Audit Logs older than 90d"',
           entity: 'Bulk Delete', user: 'SYSTEM', duration: '12m 4s',
@@ -2537,7 +2781,7 @@
           raw: { action: 3, operation: 3, entity: 'opportunity', recordId: '11223344-5566-7788-9900-aabbccddeeff' }
         },
         {
-          id: 's11', category: 'action', categoryLabel: 'Action', time: minsAgo(95),
+          id: 's11', category: 'action', categoryLabel: 'Action', time: minsAgo(95), startTime: minsAgo(95), endTime: addMs(minsAgo(95), 280),
           severity: 'success', severityLabel: 'Succeeded',
           title: 'Contoso_CalculateCustomerCreditScore',
           entity: 'Action', user: 'Ashish V.', duration: '280ms',
@@ -2547,7 +2791,7 @@
           raw: { name: 'Contoso_CalculateCustomerCreditScore', operationtype: 10, category: 3, statuscode: 30 }
         },
         {
-          id: 's12', category: 'workflow', categoryLabel: 'Classic Workflow', time: minsAgo(180),
+          id: 's12', category: 'workflow', categoryLabel: 'Classic Workflow', time: minsAgo(180), startTime: minsAgo(180), endTime: addMs(minsAgo(180), 1200),
           severity: 'success', severityLabel: 'Succeeded',
           title: 'Account On-boarding Notifications',
           entity: 'Classic Workflow', user: 'SYSTEM', duration: '1.2s',
@@ -2560,7 +2804,7 @@
 
       updateAuditOpOptions();
       updateAuditTableOptions();
-      notify('Loaded 12 realistic sample events across all Dataverse log categories.', 'info');
+      notify(`Loaded ${allEvents.length} sample events across Dataverse log categories.`, 'info');
       renderTimeline();
     }
 
@@ -2722,8 +2966,227 @@
       return tr;
     }
 
-    /* ─── 10. Detail Modal ──────────────────────────────────── */
-    function openDetailModal(ev) {
+    /* ─── 10. Detail Modal & Execution Drill-Down ───────────── */
+    function getDrilldownWindow(ev) {
+      const start = (ev?.startTime instanceof Date && !isNaN(ev.startTime)) ? ev.startTime : ev?.time;
+      if (!start || isNaN(start.getTime())) return null;
+      const hasEnd = ev.endTime instanceof Date && !isNaN(ev.endTime);
+      const isTimedCat = ['flow', 'workflow', 'action', 'job', 'solution'].includes(ev.category);
+      if (!hasEnd && !isTimedCat) return null;
+
+      const isRunning = !hasEnd && ev.severityLabel === 'Running';
+      let end = hasEnd
+        ? ev.endTime
+        : (isRunning ? new Date(Math.min(Date.now(), start.getTime() + 15 * 60 * 1000)) : start);
+      if (end.getTime() < start.getTime()) end = start;
+      return { start, end, hasExplicitEnd: hasEnd, isRunning };
+    }
+
+    function doesEventOverlapWindow(candidate, winStartMs, winEndMs, bufferMs) {
+      const cStartDate = candidate?.startTime || candidate?.time;
+      if (!cStartDate || isNaN(cStartDate.getTime())) return false;
+      const cStart = cStartDate.getTime();
+      const cEnd = (candidate.endTime instanceof Date && !isNaN(candidate.endTime) && candidate.endTime.getTime() >= cStart)
+        ? candidate.endTime.getTime()
+        : cStart;
+      return cStart <= (winEndMs + bufferMs) && cEnd >= (winStartMs - bufferMs);
+    }
+
+    function matchesDrilldownCategory(candidate, filterKey) {
+      if (!filterKey || filterKey === 'all') return true;
+      if (filterKey === 'audit') return candidate.category === 'audit';
+      if (filterKey === 'plugin') return candidate.category === 'plugin';
+      if (filterKey === 'process') return ['flow', 'workflow', 'action', 'job'].includes(candidate.category);
+      if (filterKey === 'other') return ['solution', 'sync'].includes(candidate.category);
+      return true;
+    }
+
+    function formatPreciseTime(d) {
+      if (!d || isNaN(d.getTime())) return '—';
+      const pad = (n, w = 2) => String(n).padStart(w, '0');
+      return `${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}.${pad(d.getMilliseconds(), 3)}`;
+    }
+
+    function formatRelativeOffset(candidate, winStartMs, winEndMs) {
+      const cStart = (candidate.startTime || candidate.time).getTime();
+      const cEnd = (candidate.endTime instanceof Date && !isNaN(candidate.endTime)) ? candidate.endTime.getTime() : cStart;
+      const diffMs = cStart - winStartMs;
+      const absSec = Math.abs(diffMs) / 1000;
+      const formatted = absSec < 60
+        ? `${absSec.toFixed(absSec < 10 ? 1 : 0)}s`
+        : `${Math.floor(absSec / 60)}m ${Math.round(absSec % 60)}s`;
+      const sign = diffMs >= 0 ? '+' : '-';
+      if (cStart < winStartMs && cEnd >= winStartMs) {
+        return { label: `${sign}${formatted} (overlap)`, title: 'Started before this window and overlapped into it' };
+      }
+      if (cStart > winEndMs) {
+        return { label: `+${((cStart - winStartMs) / 1000).toFixed(1)}s (buf)`, title: 'Fell within post-end buffer' };
+      }
+      return { label: `${sign}${formatted}`, title: `${diffMs >= 0 ? 'After' : 'Before'} start time` };
+    }
+
+    function renderModalDrilldown(ev, bounds, state = {}) {
+      const tbody = document.getElementById('md-drilldown-tbody');
+      const statusEl = document.getElementById('md-drilldown-status');
+      if (!tbody || !statusEl) return;
+
+      const winStartMs = bounds.start.getTime();
+      const winEndMs = bounds.end.getTime();
+      const bufferMs = drilldownBufferSec * 1000;
+      const padStart = new Date(winStartMs - bufferMs);
+      const padEnd = new Date(winEndMs + bufferMs);
+
+      const pool = deduplicateEvents([...drilldownServerEvents, ...allEvents]);
+      const matches = pool
+        .filter(c => c.id !== ev.id && doesEventOverlapWindow(c, winStartMs, winEndMs, bufferMs))
+        .sort((a, b) => (a.startTime || a.time) - (b.startTime || b.time));
+
+      const catFiltered = matches.filter(c => matchesDrilldownCategory(c, drilldownCatFilter));
+      const winText = `${formatPreciseTime(padStart)} → ${formatPreciseTime(padEnd)} (±${drilldownBufferSec}s)`;
+
+      if (state.loading) {
+        statusEl.textContent = `⏳ Querying Dataverse for ${winText}… (${matches.length} cached match${matches.length === 1 ? '' : 'es'})`;
+      } else if (state.error) {
+        statusEl.textContent = `Showing ${catFiltered.length} of ${matches.length} cached matches · Server query failed: ${state.error}`;
+      } else if (state.source === 'sample') {
+        statusEl.textContent = `Sample window ${winText} · ${catFiltered.length} matching event${catFiltered.length === 1 ? '' : 's'}`;
+      } else {
+        statusEl.textContent = `Window ${winText} · ${catFiltered.length} concurrent event${catFiltered.length === 1 ? '' : 's'}${matches.length !== catFiltered.length ? ` (${matches.length} total)` : ''}`;
+      }
+
+      tbody.innerHTML = '';
+      if (!catFiltered.length) {
+        const emptyMsg = state.loading
+          ? 'Searching Dataverse for concurrent events in this window…'
+          : 'No concurrent events found in this execution window (try increasing the ± buffer).';
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text-sec);">${esc(emptyMsg)}</td></tr>`;
+        return;
+      }
+
+      for (const item of catFiltered) {
+        const tr = document.createElement('tr');
+        tr.className = 'dd-row';
+        const offset = formatRelativeOffset(item, winStartMs, winEndMs);
+        const startDate = item.startTime || item.time;
+        tr.innerHTML = `
+          <td><span class="dd-offset" title="${esc(offset.title)}">${esc(offset.label)}</span></td>
+          <td style="font-family:monospace;white-space:nowrap;">${esc(formatPreciseTime(startDate))}</td>
+          <td><span class="badge-cat cat-${item.category}">${esc(item.categoryLabel)}</span></td>
+          <td><span class="badge-sev ${item.severity}">${esc(item.severityLabel)}</span></td>
+          <td title="${esc(item.title)}" style="font-weight:500;">${esc(item.title)}</td>
+          <td style="font-family:monospace;font-size:11px;color:var(--text-sec);">${esc(item.entity || '—')} · ${esc(item.user || '—')}</td>
+        `;
+        tr.addEventListener('click', () => openDetailModal(item, { pushHistory: true }));
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function loadDrilldownWindow(ev, bounds, forceRefresh = false) {
+      if (isSample || !context) {
+        renderModalDrilldown(ev, bounds, { source: 'sample' });
+        return;
+      }
+
+      const bufferMs = drilldownBufferSec * 1000;
+      const padStart = new Date(bounds.start.getTime() - bufferMs);
+      const padEnd   = new Date(bounds.end.getTime() + bufferMs);
+
+      const alreadyFetched = !forceRefresh && drilldownServerFetchedWindow &&
+        padStart.getTime() >= drilldownServerFetchedWindow.fromMs &&
+        padEnd.getTime() <= drilldownServerFetchedWindow.toMs;
+
+      if (alreadyFetched) {
+        renderModalDrilldown(ev, bounds, { loading: false });
+        return;
+      }
+
+      const mySeq = ++drilldownReqSeq;
+      renderModalDrilldown(ev, bounds, { loading: true });
+
+      try {
+        const fetched = await fetchEventsForWindow(padStart.toISOString(), padEnd.toISOString(), true);
+        if (mySeq !== drilldownReqSeq || currentModalEvent?.id !== ev.id) return;
+        drilldownServerEvents = fetched;
+        drilldownServerFetchedWindow = { fromMs: padStart.getTime(), toMs: padEnd.getTime() };
+        renderModalDrilldown(ev, bounds, { loading: false });
+        resolveEventFlowNames(drilldownServerEvents, () => {
+          if (mySeq === drilldownReqSeq && currentModalEvent?.id === ev.id) {
+            renderModalDrilldown(ev, bounds, { loading: false });
+          }
+        });
+      } catch (err) {
+        if (mySeq !== drilldownReqSeq || currentModalEvent?.id !== ev.id) return;
+        renderModalDrilldown(ev, bounds, { loading: false, error: err.message });
+      }
+    }
+
+    function scopeMainTimelineToEvent(ev, bounds) {
+      const bufferMs = drilldownBufferSec * 1000;
+      const from = new Date(bounds.start.getTime() - bufferMs);
+      const to   = new Date(bounds.end.getTime() + bufferMs);
+
+      if (!savedScopeBackup) {
+        savedScopeBackup = {
+          range: activeRange,
+          dtFrom: document.getElementById('dt-from').value,
+          dtTo: document.getElementById('dt-to').value
+        };
+      }
+
+      document.getElementById('dt-from').value = toDatetimeLocalValue(from);
+      document.getElementById('dt-to').value   = toDatetimeLocalValue(to);
+      activeRange = 'custom';
+      document.getElementById('time-range-select').value = 'custom';
+
+      const banner = document.getElementById('scope-banner');
+      const bannerTxt = document.getElementById('scope-banner-text');
+      if (banner && bannerTxt) {
+        bannerTxt.innerHTML = `🔍 Scoped to <strong>${esc(ev.title)}</strong> (${esc(formatPreciseTime(from))} → ${esc(formatPreciseTime(to))}, ±${drilldownBufferSec}s)`;
+        banner.style.display = 'flex';
+      }
+
+      closeDetailModal();
+      if (isSample || !context) renderTimeline();
+      else loadEnvironmentEvents(true);
+    }
+
+    function restoreMainTimelineScope() {
+      const banner = document.getElementById('scope-banner');
+      if (banner) banner.style.display = 'none';
+      if (!savedScopeBackup) return;
+      const prev = savedScopeBackup;
+      savedScopeBackup = null;
+      activeRange = prev.range;
+      document.getElementById('time-range-select').value = prev.range;
+      document.getElementById('dt-from').value = prev.dtFrom;
+      document.getElementById('dt-to').value   = prev.dtTo;
+      if (isSample || !context) renderTimeline();
+      else loadEnvironmentEvents();
+    }
+
+    function openDetailModal(ev, opts = {}) {
+      if (opts.pushHistory && currentModalEvent && currentModalEvent.id !== ev.id) {
+        modalHistoryStack.push(currentModalEvent);
+      } else if (!opts.pushHistory && !opts.isBack) {
+        modalHistoryStack = [];
+      }
+
+      currentModalEvent = ev;
+      drilldownServerEvents = [];
+      drilldownServerFetchedWindow = null;
+
+      const backBtn = document.getElementById('md-back-btn');
+      if (backBtn) {
+        if (modalHistoryStack.length > 0) {
+          const prev = modalHistoryStack[modalHistoryStack.length - 1];
+          const shortTitle = (prev.title || 'Previous').slice(0, 28);
+          backBtn.textContent = `← Back to ${shortTitle}${prev.title?.length > 28 ? '…' : ''}`;
+          backBtn.style.display = 'inline-flex';
+        } else {
+          backBtn.style.display = 'none';
+        }
+      }
+
       document.getElementById('md-title').textContent = ev.title;
 
       const catBadge = document.getElementById('md-cat-badge');
@@ -2734,10 +3197,16 @@
       sevBadge.className = `badge-sev ${ev.severity}`;
       sevBadge.textContent = ev.severityLabel;
 
-      document.getElementById('md-time').textContent = ev.time.toLocaleString();
+      const startD = (ev.startTime instanceof Date && !isNaN(ev.startTime)) ? ev.startTime : ev.time;
+      const hasEndD = ev.endTime instanceof Date && !isNaN(ev.endTime);
+      document.getElementById('md-start').textContent = startD ? `${startD.toLocaleDateString()} ${formatPreciseTime(startD)}` : '—';
+      document.getElementById('md-end').textContent   = hasEndD
+        ? `${ev.endTime.toLocaleDateString()} ${formatPreciseTime(ev.endTime)}`
+        : (ev.severityLabel === 'Running' ? 'Still Running' : '— (Point-in-time)');
+      document.getElementById('md-time').textContent  = ev.time.toLocaleString();
       document.getElementById('md-entity').textContent = ev.entity;
-      document.getElementById('md-user').textContent = ev.user;
-      document.getElementById('md-id').textContent = ev.id;
+      document.getElementById('md-user').textContent   = ev.user;
+      document.getElementById('md-id').textContent     = ev.id;
       document.getElementById('md-duration').textContent = ev.duration;
 
       // Error section
@@ -2880,10 +3349,26 @@
         flowSec.style.display = 'none';
       }
 
+      const ddSec = document.getElementById('md-drilldown-sec');
+      const ddBounds = getDrilldownWindow(ev);
+      if (ddSec && ddBounds) {
+        ddSec.style.display = 'block';
+        const scopeBtn = document.getElementById('md-scope-btn');
+        if (scopeBtn) scopeBtn.onclick = () => scopeMainTimelineToEvent(ev, ddBounds);
+        const refBtn = document.getElementById('md-drilldown-refresh');
+        if (refBtn) refBtn.onclick = () => loadDrilldownWindow(ev, ddBounds, true);
+        loadDrilldownWindow(ev, ddBounds);
+      } else if (ddSec) {
+        ddSec.style.display = 'none';
+      }
+
       document.getElementById('detail-modal').classList.add('open');
     }
 
     function closeDetailModal() {
+      drilldownReqSeq++;
+      currentModalEvent = null;
+      modalHistoryStack = [];
       document.getElementById('detail-modal').classList.remove('open');
     }
 
@@ -2937,6 +3422,9 @@
     /* ─── 12. UI Event Bindings ─────────────────────────────── */
     // Time Range selector presets
     document.getElementById('time-range-select').addEventListener('change', e => {
+      savedScopeBackup = null;
+      const banner = document.getElementById('scope-banner');
+      if (banner) banner.style.display = 'none';
       activeRange = e.target.value;
       toolStore('range', activeRange);
       if (activeRange !== 'custom') {
@@ -3207,9 +3695,37 @@
 
     updateCategoryActionButtons();
 
-    // Modal
+    // Modal & Drill-Down bindings
     document.getElementById('md-close-btn').addEventListener('click', closeDetailModal);
     document.getElementById('md-ok-btn').addEventListener('click', closeDetailModal);
+    document.getElementById('md-back-btn')?.addEventListener('click', () => {
+      if (!modalHistoryStack.length) return;
+      const prev = modalHistoryStack.pop();
+      openDetailModal(prev, { isBack: true });
+    });
+    document.getElementById('btn-restore-scope')?.addEventListener('click', restoreMainTimelineScope);
+    document.querySelectorAll('#dd-buffer-pills .dd-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#dd-buffer-pills .dd-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        drilldownBufferSec = Number(btn.dataset.buf) || 0;
+        if (currentModalEvent) {
+          const b = getDrilldownWindow(currentModalEvent);
+          if (b) loadDrilldownWindow(currentModalEvent, b);
+        }
+      });
+    });
+    document.querySelectorAll('#dd-cat-pills .dd-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#dd-cat-pills .dd-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        drilldownCatFilter = btn.dataset.ddcat || 'all';
+        if (currentModalEvent) {
+          const b = getDrilldownWindow(currentModalEvent);
+          if (b) renderModalDrilldown(currentModalEvent, b, { source: isSample ? 'sample' : 'cached' });
+        }
+      });
+    });
     document.getElementById('detail-modal').addEventListener('click', e => {
       if (e.target === document.getElementById('detail-modal')) closeDetailModal();
     });
