@@ -206,6 +206,24 @@
       border-radius: 6px; padding: 5px 10px; font-size: 12px; cursor: pointer; flex-shrink: 0;
     }
     .copy-btn:hover { background: rgba(255,255,255,0.2); }
+    .proxy-downloads {
+      margin-top: 10px;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .proxy-dl-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .proxy-dl-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 
     /* Tools Catalog */
     .tools-section { background: var(--bg-elev); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
@@ -433,6 +451,22 @@
           <div class="code-box">
             <code id="proxy-cmd">.\dev-server\dev-server.ps1 -Env https://yourorg.crm.dynamics.com</code>
             <button class="copy-btn" data-copy="proxy-cmd">Copy Command</button>
+          </div>
+          <div class="proxy-downloads" aria-label="Download local dev-server files">
+            <div class="proxy-dl-row">
+              <div class="proxy-dl-group">
+                <strong style="font-size:13px;">⬇️ Download Local Proxy:</strong>
+                <a class="btn btn-sm" href="dev-server/dev-server.ps1" download="dev-server.ps1">PowerShell · dev-server.ps1 (26.0 KB)</a>
+                <a class="btn btn-sm" href="dev-server/dev-server.js" download="dev-server.js">Node.js · dev-server.js (20.4 KB)</a>
+                <a class="btn btn-sm" href="dev-server/DvOpenTools.Proxy.csproj" download="DvOpenTools.Proxy.csproj">C# .csproj (0.3 KB)</a>
+                <a class="btn btn-sm" href="dev-server/Program.cs" download="Program.cs">C# Program.cs (33.4 KB)</a>
+              </div>
+              <div class="proxy-dl-group">
+                <button type="button" id="btn-dl-ds-dotnet" class="btn btn-sm btn-primary">📦 C# .NET Project (.zip · 36.0 KB)</button>
+                <button type="button" id="btn-dl-ds-all" class="btn btn-sm btn-primary">📦 All Dev Servers (.zip · 82.3 KB)</button>
+              </div>
+            </div>
+            <div id="ds-dl-status" class="bundle-status">Place downloaded proxy file(s) in the same folder as your repo checkout (or run with <code>--env https://yourorg.crm.dynamics.com</code> alongside GitHub Pages).</div>
           </div>
         </div>
       </div>
@@ -804,6 +838,161 @@
     document.getElementById('tool-search').addEventListener('input', e => {
       searchQuery = e.target.value;
       renderTools();
+    });
+
+    const DEV_SERVER_FILES = [
+      { path: 'dev-server/dev-server.ps1', archivePath: 'dev-server/dev-server.ps1', group: 'ps', sizeBytes: 26651 },
+      { path: 'dev-server/DvOpenTools.Proxy.csproj', archivePath: 'dev-server/DvOpenTools.Proxy.csproj', group: 'dotnet', sizeBytes: 325 },
+      { path: 'dev-server/Program.cs', archivePath: 'dev-server/Program.cs', group: 'dotnet', sizeBytes: 34228 },
+      { path: 'dev-server/dev-server.js', archivePath: 'dev-server/dev-server.js', group: 'node', sizeBytes: 20922 },
+      { path: 'dev-server/README.md', archivePath: 'dev-server/README.md', group: 'doc', sizeBytes: 2175 }
+    ];
+
+    const CRC32_TABLE = (() => {
+      const tbl = new Uint32Array(256);
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        tbl[i] = c >>> 0;
+      }
+      return tbl;
+    })();
+
+    function crc32Bytes(u8) {
+      let crc = 0xFFFFFFFF;
+      for (let i = 0; i < u8.length; i++) {
+        crc = CRC32_TABLE[(crc ^ u8[i]) & 0xFF] ^ (crc >>> 8);
+      }
+      return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    function buildZipBytes(entries) {
+      const enc = new TextEncoder();
+      const now = new Date();
+      const dosTime = ((now.getHours() & 0x1F) << 11) | ((now.getMinutes() & 0x3F) << 5) | ((now.getSeconds() >> 1) & 0x1F);
+      const dosDate = (((Math.max(1980, now.getFullYear()) - 1980) & 0x7F) << 9) | (((now.getMonth() + 1) & 0x0F) << 5) | (now.getDate() & 0x1F);
+
+      const locals = [];
+      const centrals = [];
+      let offset = 0;
+
+      for (const e of entries) {
+        const nameBytes = enc.encode(e.name);
+        const dataBytes = typeof e.data === 'string' ? enc.encode(e.data) : e.data;
+        const crc = crc32Bytes(dataBytes);
+        const size = dataBytes.length;
+
+        const lh = new ArrayBuffer(30 + nameBytes.length);
+        const lv = new DataView(lh);
+        lv.setUint32(0, 0x04034B50, true);
+        lv.setUint16(4, 20, true);
+        lv.setUint16(6, 0x0800, true); // UTF-8 filename flag
+        lv.setUint16(8, 0, true);      // Store (no compression)
+        lv.setUint16(10, dosTime, true);
+        lv.setUint16(12, dosDate, true);
+        lv.setUint32(14, crc, true);
+        lv.setUint32(18, size, true);
+        lv.setUint32(22, size, true);
+        lv.setUint16(26, nameBytes.length, true);
+        lv.setUint16(28, 0, true);
+        new Uint8Array(lh, 30).set(nameBytes);
+        const lhU8 = new Uint8Array(lh);
+        locals.push(lhU8, dataBytes);
+
+        const ch = new ArrayBuffer(46 + nameBytes.length);
+        const cv = new DataView(ch);
+        cv.setUint32(0, 0x02014B50, true);
+        cv.setUint16(4, 20, true);
+        cv.setUint16(6, 20, true);
+        cv.setUint16(8, 0x0800, true);
+        cv.setUint16(10, 0, true);
+        cv.setUint16(12, dosTime, true);
+        cv.setUint16(14, dosDate, true);
+        cv.setUint32(16, crc, true);
+        cv.setUint32(20, size, true);
+        cv.setUint32(24, size, true);
+        cv.setUint16(28, nameBytes.length, true);
+        cv.setUint16(30, 0, true);
+        cv.setUint16(32, 0, true);
+        cv.setUint16(34, 0, true);
+        cv.setUint16(36, 0, true);
+        cv.setUint32(38, 0, true);
+        cv.setUint32(42, offset, true);
+        new Uint8Array(ch, 46).set(nameBytes);
+        centrals.push(new Uint8Array(ch));
+
+        offset += lhU8.length + size;
+      }
+
+      const cdOffset = offset;
+      let cdSize = 0;
+      for (const c of centrals) cdSize += c.length;
+
+      const eocd = new ArrayBuffer(22);
+      const ev = new DataView(eocd);
+      ev.setUint32(0, 0x06054B50, true);
+      ev.setUint16(4, 0, true);
+      ev.setUint16(6, 0, true);
+      ev.setUint16(8, entries.length, true);
+      ev.setUint16(10, entries.length, true);
+      ev.setUint32(12, cdSize, true);
+      ev.setUint32(16, cdOffset, true);
+      ev.setUint16(20, 0, true);
+
+      const total = offset + cdSize + 22;
+      const out = new Uint8Array(total);
+      let pos = 0;
+      for (const part of locals) { out.set(part, pos); pos += part.length; }
+      for (const c of centrals) { out.set(c, pos); pos += c.length; }
+      out.set(new Uint8Array(eocd), pos);
+      return out;
+    }
+
+    async function downloadDevServerZip(files, zipFilename) {
+      const statusEl = document.getElementById('ds-dl-status');
+      const btnNet = document.getElementById('btn-dl-ds-dotnet');
+      const btnAll = document.getElementById('btn-dl-ds-all');
+      btnNet.disabled = true;
+      btnAll.disabled = true;
+      statusEl.className = 'bundle-status';
+      statusEl.textContent = `Packing ${files.length} dev-server file(s) into ${zipFilename}…`;
+      try {
+        const entries = await Promise.all(files.map(async f => {
+          const res = await fetch(f.path, { cache: 'no-store' });
+          if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${f.path}`);
+          return { name: f.archivePath, data: new Uint8Array(await res.arrayBuffer()) };
+        }));
+        const zipU8 = buildZipBytes(entries);
+        const blob = new Blob([zipU8], { type: 'application/zip' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = zipFilename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        statusEl.className = 'bundle-status ok';
+        statusEl.textContent = `Downloaded ${zipFilename} (${entries.length} files · ${formatBytes(blob.size)}). Extract and run from your terminal.`;
+      } catch (err) {
+        statusEl.className = 'bundle-status err';
+        statusEl.textContent = location.protocol === 'file:'
+          ? 'Browser file:// blocks ZIP assembly across local files — use the direct file download links above, or open via GitHub Pages / http://127.0.0.1:8787.'
+          : `ZIP build failed: ${err.message}`;
+      } finally {
+        btnNet.disabled = false;
+        btnAll.disabled = false;
+      }
+    }
+
+    document.getElementById('btn-dl-ds-dotnet').addEventListener('click', () => {
+      downloadDevServerZip(
+        DEV_SERVER_FILES.filter(f => f.group === 'dotnet' || f.group === 'doc'),
+        'dvot-dev-server-dotnet.zip'
+      );
+    });
+    document.getElementById('btn-dl-ds-all').addEventListener('click', () => {
+      downloadDevServerZip(DEV_SERVER_FILES, 'dvot-dev-servers.zip');
     });
 
     document.querySelectorAll('[data-proxy-cmd]').forEach(tab => {
