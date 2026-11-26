@@ -442,19 +442,67 @@
       throw new Error('Unrecognized JSON format. Paste Flow clientdata, Logic Apps definition, or Designer Peek Code JSON.');
     }
 
+    function resolveLogicalEntityName(raw) {
+      const s = String(raw || '').trim().toLowerCase();
+      if (!s) return '';
+      if (entitiesByLogical.has(s)) return s;
+      if (entitiesBySet.has(s)) return entitiesBySet.get(s).logicalName.toLowerCase();
+      return s;
+    }
+
     function normalizeBindKey(rawKey) {
       // "item/primarycontactid@odata.bind" -> "primarycontactid", "item/new_tier" -> "new_tier"
-      let k = rawKey.replace(/^item\//i, '').replace(/@odata\.bind$/i, '');
-      // Handle Power Automate typed lookup suffix e.g. parentcustomerid_account -> parentcustomerid
-      return k;
+      return String(rawKey || '').replace(/^item\//i, '').replace(/@odata\.bind$/i, '');
+    }
+
+    function isFilterParamKey(rawKey) {
+      return /^(?:.*\/)?(?:\$filter|filterexpression)$/i.test(String(rawKey || '').trim());
+    }
+
+    function getNodeParamEntries(node) {
+      const entries = Object.entries(node?.inputs?.parameters || {});
+      if (node?.inputs?.queries && typeof node.inputs.queries === 'object') {
+        for (const [k, v] of Object.entries(node.inputs.queries)) {
+          entries.push([`queries/${k}`, v]);
+        }
+      }
+      if (node?.inputs?.parameters?.queries && typeof node.inputs.parameters.queries === 'object') {
+        for (const [k, v] of Object.entries(node.inputs.parameters.queries)) {
+          entries.push([`queries/${k}`, v]);
+        }
+      }
+      return entries;
+    }
+
+    function forEachFlowNode(root, fn) {
+      const walkMap = (map, role = 'action') => {
+        if (!map || typeof map !== 'object') return;
+        for (const [name, node] of Object.entries(map)) {
+          if (!node || typeof node !== 'object') continue;
+          fn(name, node, role);
+          if (node.actions) walkMap(node.actions, 'action');
+          if (node.else?.actions) walkMap(node.else.actions, 'action');
+          if (node.cases) {
+            for (const c of Object.values(node.cases)) {
+              if (c?.actions) walkMap(c.actions, 'action');
+            }
+          }
+          if (node.default?.actions) walkMap(node.default.actions, 'action');
+        }
+      };
+      walkMap(root?.triggers, 'trigger');
+      walkMap(root?.actions, 'action');
     }
 
     function inferNodeEntity(node) {
-      const p = node?.inputs?.parameters || {};
-      const bodyEntity = p.entityName || p.tableName || p['subscriptionRequest/entityname'];
-      if (bodyEntity && typeof bodyEntity === 'string') return bodyEntity.toLowerCase();
+      const entries = getNodeParamEntries(node);
+      for (const [k, v] of entries) {
+        if ((k === 'entityName' || k === 'tableName' || k === 'subscriptionRequest/entityname') && v && typeof v === 'string') {
+          return resolveLogicalEntityName(v);
+        }
+      }
       // Check @odata.bind values for entityset hint
-      for (const v of Object.values(p)) {
+      for (const [, v] of entries) {
         if (typeof v === 'string') {
           const m = v.match(ODATA_BIND_RE);
           if (m && entitiesBySet.has(m[1].toLowerCase())) {
@@ -462,73 +510,48 @@
           }
         }
       }
-      return (document.getElementById('default-entity')?.value || '').toLowerCase();
+      return resolveLogicalEntityName(document.getElementById('default-entity')?.value || '');
     }
 
     function collectTablesAndTargets(root) {
       const tables = new Set();
-      const defEnt = (document.getElementById('default-entity')?.value || '').toLowerCase();
+      const defEnt = resolveLogicalEntityName(document.getElementById('default-entity')?.value || '');
       if (defEnt) tables.add(defEnt);
 
       const recordRequests = []; // { entity, guid }
       const actionOutputTables = new Map(); // actionName -> logicalName
 
-      const walkActions = (map) => {
-        if (!map || typeof map !== 'object') return;
-        for (const [name, node] of Object.entries(map)) {
-          if (!node || typeof node !== 'object') continue;
-          const ent = inferNodeEntity(node);
-          if (ent) {
-            tables.add(ent);
-            actionOutputTables.set(name, ent);
-          }
-
-          const p = node.inputs?.parameters || {};
-          // Direct recordId + entityName
-          if (ent && typeof p.recordId === 'string' && GUID_RE.test(p.recordId)) {
-            recordRequests.push({ entity: ent, guid: p.recordId.match(GUID_RE)[0] });
-          }
-          // @odata.bind values
-          for (const val of Object.values(p)) {
-            if (typeof val === 'string') {
-              const bm = val.match(ODATA_BIND_RE);
-              if (bm) {
-                const entInfo = entitiesBySet.get(bm[1].toLowerCase());
-                const ln = entInfo ? entInfo.logicalName : bm[1].toLowerCase();
-                tables.add(ln);
-                recordRequests.push({ entity: ln, guid: bm[2] });
-              }
-            }
-          }
-          // Run a Child Flow
-          const wfId = node.inputs?.host?.workflowReferenceName || p.workflowid;
-          if (typeof wfId === 'string' && GUID_RE.test(wfId)) {
-            tables.add('workflow');
-            recordRequests.push({ entity: 'workflow', guid: wfId.match(GUID_RE)[0] });
-          }
-
-          if (node.actions) walkActions(node.actions);
-          if (node.else?.actions) walkActions(node.else.actions);
-          if (node.cases) {
-            for (const c of Object.values(node.cases)) {
-              if (c?.actions) walkActions(c.actions);
-            }
-          }
-          if (node.default?.actions) walkActions(node.default.actions);
-        }
-      };
-
-      for (const [tName, tr] of Object.entries(root.triggers || {})) {
-        const ent = inferNodeEntity(tr);
+      forEachFlowNode(root, (name, node, role) => {
+        const ent = inferNodeEntity(node);
         if (ent) {
           tables.add(ent);
-          actionOutputTables.set(tName, ent);
-          actionOutputTables.set('__TRIGGER__', ent);
+          actionOutputTables.set(name, ent);
+          if (role === 'trigger') actionOutputTables.set('__TRIGGER__', ent);
         }
-      }
-      walkActions(root.actions);
 
-      // Deduplicate record requests
+        const p = node.inputs?.parameters || {};
+        if (ent && typeof p.recordId === 'string' && GUID_RE.test(p.recordId)) {
+          recordRequests.push({ entity: ent, guid: p.recordId.match(GUID_RE)[0] });
+        }
+
+        for (const [, val] of getNodeParamEntries(node)) {
+          if (typeof val === 'string') {
+            const bm = val.match(ODATA_BIND_RE);
+            if (bm) {
+              const ln = resolveLogicalEntityName(bm[1]);
+              tables.add(ln);
+              recordRequests.push({ entity: ln, guid: bm[2] });
+            }
+          }
+        }
+
+        const wfId = node.inputs?.host?.workflowReferenceName || p.workflowid;
+        if (typeof wfId === 'string' && GUID_RE.test(wfId)) {
+          tables.add('workflow');
+          recordRequests.push({ entity: 'workflow', guid: wfId.match(GUID_RE)[0] });
+        }
+      });
+
       const seenRec = new Set();
       const uniqueRecs = [];
       for (const r of recordRequests) {
@@ -543,7 +566,7 @@
     function lookupOptionLabel(attrMap, attrName, rawVal) {
       if (!attrMap || !attrName) return null;
       const cleanName = attrName.toLowerCase();
-      const meta = attrMap.get(cleanName);
+      const meta = attrMap.get(cleanName) || attrMap.get(cleanName.replace(/_[a-z0-9_]+$/i, ''));
       if (!meta || !meta.options || meta.options.size === 0) return null;
 
       // Support comma-separated MultiSelect Picklist values e.g. "100000001,100000002"
@@ -559,33 +582,120 @@
       return { attrDisplay: meta.displayName, label: lbl };
     }
 
-    function decodeODataFilter(filterStr, entityName, resolvedTokens) {
-      if (!filterStr || typeof filterStr !== 'string') return { raw: filterStr, annotations: [] };
-      const attrMap = attrMetaCache.get((entityName || '').toLowerCase());
-      const annotations = [];
+    function inferLookupTargetEntities(colPath, ownerEntity) {
+      const targets = new Set();
+      const attrMap = ownerEntity ? attrMetaCache.get(resolveLogicalEntityName(ownerEntity)) : null;
 
-      // Match patterns like `statuscode eq 1` or `new_tier ne 100000002`
-      for (const m of filterStr.matchAll(/\b([a-z0-9_]+)\s+(eq|ne|gt|lt|ge|le)\s+(-?\d+|true|false)\b/gi)) {
-        const col = m[1];
-        const val = m[3];
-        const hit = lookupOptionLabel(attrMap, col, val);
-        if (hit) {
-          const text = `${hit.attrDisplay} (${col}): ${val} → "${hit.label}"`;
-          annotations.push({ type: 'optionset', col, val, label: hit.label, text });
-          resolvedTokens.push({ kind: 'OptionSet', context: `$filter (${entityName})`, raw: `${col} ${m[2]} ${val}`, resolved: hit.label });
+      // e.g. parentcustomerid_account/accountid or customerid/accountid
+      if (colPath.includes('/')) {
+        const [nav, prop] = colPath.split('/');
+        const navClean = nav.replace(/^_/, '').replace(/_value$/i, '').toLowerCase();
+        const navMeta = attrMap?.get(navClean) || attrMap?.get(navClean.replace(/_[a-z0-9_]+$/i, ''));
+        (navMeta?.targets || []).forEach(t => targets.add(t.toLowerCase()));
+        if (prop) {
+          const propBase = prop.toLowerCase().replace(/id$/, '');
+          if (entitiesByLogical.has(propBase)) targets.add(propBase);
         }
       }
 
-      // Match GUIDs inside filter (`_accountid_value eq <guid>`)
-      for (const m of filterStr.matchAll(/\b([a-z0-9_]+)\s+(eq|ne)\s+'?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'?/gi)) {
-        const col = m[1].replace(/^_/, '').replace(/_value$/, '');
-        const guid = m[3].toLowerCase();
-        const meta = attrMap?.get(col.toLowerCase());
-        const targetEntity = meta?.targets?.[0] || '';
-        const rec = targetEntity ? recordCache.get(`${targetEntity.toLowerCase()}:${guid}`) : null;
+      const col = colPath.split('/').pop().replace(/^_/, '').replace(/_value$/i, '').toLowerCase();
+      const meta = attrMap?.get(col) || attrMap?.get(col.replace(/_[a-z0-9_]+$/i, ''));
+      (meta?.targets || []).forEach(t => targets.add(t.toLowerCase()));
+
+      // System & common Dataverse lookup fallbacks
+      if (col === 'ownerid' || col === 'owninguser' || col === 'createdby' || col === 'modifiedby' || col === 'createdonbehalfby' || col === 'modifiedonbehalfby') {
+        targets.add('systemuser');
+        if (col === 'ownerid') targets.add('team');
+      } else if (col === 'owningteam') {
+        targets.add('team');
+      } else if (col === 'owningbusinessunit') {
+        targets.add('businessunit');
+      } else if (col === 'transactioncurrencyid') {
+        targets.add('transactioncurrency');
+      }
+
+      // Direct primary key match e.g. `accountid eq guid` or `_accountid_value eq guid`
+      if (targets.size === 0 && col.endsWith('id')) {
+        const candidate = col.slice(0, -2);
+        if (entitiesByLogical.has(candidate)) targets.add(candidate);
+        for (const [ln, info] of entitiesByLogical.entries()) {
+          if (info.primaryId && info.primaryId.toLowerCase() === col) targets.add(ln);
+        }
+      }
+
+      // Same-entity fallback if `ownerEntity` matches primary id
+      if (targets.size === 0 && ownerEntity) {
+        const ownMeta = entitiesByLogical.get(resolveLogicalEntityName(ownerEntity));
+        if (ownMeta?.primaryId?.toLowerCase() === col) targets.add(ownMeta.logicalName.toLowerCase());
+      }
+
+      return [...targets];
+    }
+
+    function extractFilterGuidLookups(filterStr, entityName) {
+      if (!filterStr || typeof filterStr !== 'string') return [];
+      const found = [];
+      const re = /\b([a-z0-9_]+(?:\/[a-z0-9_]+)?)\s+(?:eq|ne)\s+(?:guid)?(?:'|\()?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:'|\))?/gi;
+      for (const m of filterStr.matchAll(re)) {
+        const colPath = m[1];
+        const guid = m[2].toLowerCase();
+        const targets = inferLookupTargetEntities(colPath, entityName);
+        found.push({ colPath, guid, targets });
+      }
+      return found;
+    }
+
+    function decodeODataFilter(filterStr, entityName, resolvedTokens) {
+      if (!filterStr || typeof filterStr !== 'string') return { raw: filterStr, annotations: [] };
+      const ln = resolveLogicalEntityName(entityName);
+      const attrMap = ln ? attrMetaCache.get(ln) : null;
+      const annotations = [];
+      const seenOpt = new Set();
+
+      // 1. Standard OData comparisons: `statuscode eq 1`, `(new_tier ne '100000002')`, `table/col eq 0`
+      for (const m of filterStr.matchAll(/\b([a-z0-9_]+(?:\/[a-z0-9_]+)?)\s+(eq|ne|gt|lt|ge|le)\s+(?:\(\s*)?'?(-?\d+|true|false)'?(?:\s*\))?/gi)) {
+        const col = m[1].split('/').pop();
+        const val = m[3];
+        const hit = lookupOptionLabel(attrMap, col, val);
+        if (hit) {
+          const dedupKey = `${col.toLowerCase()}=${val}`;
+          if (seenOpt.has(dedupKey)) continue;
+          seenOpt.add(dedupKey);
+          const text = `${hit.attrDisplay} (${col}): ${val} → "${hit.label}"`;
+          annotations.push({ type: 'optionset', col, val, label: hit.label, text });
+          resolvedTokens.push({ kind: 'OptionSet', context: `$filter (${ln || 'auto'})`, raw: `${m[1]} ${m[2]} ${val}`, resolved: hit.label });
+        }
+      }
+
+      // 2. Dataverse functions: In / NotIn / ContainValues / DoesNotContainValues
+      const funcRe = /Microsoft\.Dynamics\.CRM\.(?:In|NotIn|ContainValues|DoesNotContainValues)\(\s*PropertyName\s*=\s*'([a-z0-9_]+)'\s*,\s*PropertyValues\s*=\s*\[([^\]]+)\]/gi;
+      for (const m of filterStr.matchAll(funcRe)) {
+        const col = m[1];
+        const vals = m[2].split(',').map(x => x.trim().replace(/^'|'$/g, '')).filter(Boolean);
+        const mapped = [];
+        for (const v of vals) {
+          const hit = lookupOptionLabel(attrMap, col, v);
+          if (hit) mapped.push(`${v} → "${hit.label}"`);
+        }
+        if (mapped.length) {
+          const meta = attrMap?.get(col.toLowerCase());
+          const text = `${meta?.displayName || col} (${col}): ${mapped.join(', ')}`;
+          annotations.push({ type: 'optionset', col, val: vals.join(','), label: mapped.join(', '), text });
+          resolvedTokens.push({ kind: 'OptionSet', context: `$filter (${ln || 'auto'})`, raw: `${col} IN [${vals.join(',')}]`, resolved: mapped.join(', ') });
+        }
+      }
+
+      // 3. Lookup / Record GUIDs inside filter (`_accountid_value eq <guid>`, `ownerid eq '...'`, etc.)
+      for (const item of extractFilterGuidLookups(filterStr, ln)) {
+        let rec = null;
+        for (const targetEnt of item.targets) {
+          const cached = recordCache.get(`${targetEnt}:${item.guid}`);
+          if (cached?.name) { rec = cached; break; }
+          if (!rec && cached) rec = cached;
+        }
         if (rec?.name) {
-          annotations.push({ type: 'record', rec, text: `${m[1]}: ${guid} → ${rec.name} (${rec.entity})` });
-          resolvedTokens.push({ kind: 'Record', context: `$filter (${entityName})`, raw: guid, resolved: `${rec.name} (${rec.entity})`, url: rec.url, entity: rec.entity, guid });
+          annotations.push({ type: 'record', rec, colPath: item.colPath, guid: item.guid, text: `${item.colPath}: ${rec.name} (${rec.entity})` });
+          resolvedTokens.push({ kind: 'Record', context: `$filter (${ln || 'auto'})`, raw: item.guid, resolved: `${rec.name} (${rec.entity})`, url: rec.url, entity: rec.entity, guid: item.guid });
         }
       }
 
@@ -672,23 +782,30 @@
       // Step 1: Load Attribute/OptionSet metadata for all referenced tables
       await Promise.allSettled(tables.map(t => loadEntityAttributeMeta(t)));
 
-      // Step 2: Check for any additional lookup/target entities in $filter GUIDs
-      for (const node of [...Object.values(root.triggers), ...Object.values(root.actions)]) {
+      // Step 2: Check for any additional lookup/target entities in $filter / filterExpression GUIDs across ALL nested nodes
+      forEachFlowNode(root, (_n, node) => {
         const ent = inferNodeEntity(node);
-        const p = node?.inputs?.parameters || {};
-        if (ent && typeof p.$filter === 'string') {
-          const attrMap = attrMetaCache.get(ent);
-          for (const m of p.$filter.matchAll(/\b([a-z0-9_]+)\s+(?:eq|ne)\s+'?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'?/gi)) {
-            const col = m[1].replace(/^_/, '').replace(/_value$/, '').toLowerCase();
-            const meta = attrMap?.get(col);
-            const targetEnt = meta?.targets?.[0];
-            if (targetEnt) recordRequests.push({ entity: targetEnt.toLowerCase(), guid: m[2] });
+        for (const [k, v] of getNodeParamEntries(node)) {
+          if (isFilterParamKey(k) && typeof v === 'string') {
+            for (const item of extractFilterGuidLookups(v, ent)) {
+              for (const tEnt of item.targets) {
+                recordRequests.push({ entity: tEnt, guid: item.guid });
+              }
+            }
           }
         }
+      });
+
+      // Deduplicate after Step 2 additions
+      const seenAfter = new Set();
+      const allRecReqs = [];
+      for (const r of recordRequests) {
+        const k = `${r.entity}:${r.guid.toLowerCase()}`;
+        if (!seenAfter.has(k)) { seenAfter.add(k); allRecReqs.push(r); }
       }
 
-      // Step 3: Resolve all discovered Record GUIDs (capped cleanly at 40 concurrent/unique records)
-      await Promise.allSettled(recordRequests.slice(0, 40).map(r => resolveRecordDisplay(r.entity, r.guid)));
+      // Step 3: Resolve all discovered Record GUIDs (capped cleanly at 50 unique lookups)
+      await Promise.allSettled(allRecReqs.slice(0, 50).map(r => resolveRecordDisplay(r.entity, r.guid)));
 
       // Step 4: Build decoded UI tree, annotated JSON, and resolved token list
       const resolvedTokens = [];
@@ -710,10 +827,13 @@
             return renderRecordChip(label, ln, bm[2], rec?.url, val);
           }
 
-          // 2. OData $filter / filterExpression
-          if (cleanKey === '$filter' || cleanKey === 'filterExpression') {
+          // 2. OData $filter / filterExpression (handles $filter, queries/$filter, subscriptionRequest/filterExpression)
+          if (isFilterParamKey(rawKey) || isFilterParamKey(cleanKey)) {
             const dec = decodeODataFilter(val, entity, resolvedTokensOut);
-            const annHtml = dec.annotations.map(a => `<div style="margin-top:4px;">${a.type === 'optionset' ? `<span class="chip-opt">🏷️ ${DV.esc(a.text)}</span>` : `<span class="chip-rec">📄 ${DV.esc(a.text)}</span>`}</div>`).join('');
+            const annHtml = dec.annotations.map(a => {
+              if (a.type === 'optionset') return `<div style="margin-top:4px;"><span class="chip-opt">🏷️ ${DV.esc(a.text)}</span></div>`;
+              return `<div style="margin-top:4px;">${renderRecordChip(`${a.rec.name} (${a.colPath})`, a.rec.entity, a.guid, a.rec.url, a.guid)}</div>`;
+            }).join('');
             return `<code class="chip-expr">${DV.esc(val)}</code>${annHtml}`;
           }
 
@@ -807,11 +927,12 @@
           kvRows += `<tr><td class="kv-key">Child Flow<span class="kv-sub">workflowReferenceName</span></td><td>${renderRecordChip(wfName, 'workflow', gid, rec?.url, gid)}</td></tr>`;
         }
 
-        // Parameters table (hide duplicate subscriptionRequest/message already decoded above)
-        for (const [k, v] of Object.entries(p)) {
+        // Parameters & Queries table (hide duplicate subscriptionRequest/message already decoded above)
+        for (const [k, v] of getNodeParamEntries(node)) {
           if (role === 'trigger' && (k === 'subscriptionRequest/message' || k === 'subscriptionRequest/scope')) continue;
+          if (k === 'queries' && v && typeof v === 'object') continue;
           const cleanK = normalizeBindKey(k);
-          const meta = attrMap?.get(cleanK.toLowerCase());
+          const meta = attrMap?.get(cleanK.toLowerCase()) || attrMap?.get(cleanK.replace(/_[a-z0-9_]+$/i, '').toLowerCase());
           const colDisplay = meta?.displayName || cleanK;
           kvRows += `<tr>
             <td class="kv-key">${DV.esc(colDisplay)}<span class="kv-sub">${DV.esc(k)}</span></td>
@@ -907,13 +1028,16 @@
           }
         }
         for (const t of resolvedTokens) {
+          if (t.kind === 'OptionSet' && line.toLowerCase().includes('filter') && line.includes(t.raw.split(' ').pop())) {
+            comments.push(t.resolved);
+          }
           if (t.kind === 'Record' && t.guid && line.toLowerCase().includes(t.guid.toLowerCase()) && !bindM) {
             comments.push(t.resolved);
-            break;
           }
         }
-        return comments.length
-          ? `${escaped}  <span class="annot-cmt">// ${DV.esc(comments.join(' | '))}</span>`
+        const uniqueComments = [...new Set(comments)];
+        return uniqueComments.length
+          ? `${escaped}  <span class="annot-cmt">// ${DV.esc(uniqueComments.join(' | '))}</span>`
           : escaped;
       }).join('\n');
 
@@ -996,7 +1120,7 @@
                     'subscriptionRequest/message': 3,
                     'subscriptionRequest/scope': 4,
                     'subscriptionRequest/filteringattributes': 'statuscode,new_erpsyncstatus',
-                    'subscriptionRequest/filterExpression': 'statecode eq 0 and new_erpsyncstatus eq 100000000'
+                    'subscriptionRequest/filterExpression': 'statecode eq 0 and new_erpsyncstatus eq 100000000 and _customerid_value eq 8f7a1122-3344-5566-7788-99aabbccddee'
                   }
                 }
               }
