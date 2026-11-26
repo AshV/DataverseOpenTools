@@ -1189,6 +1189,25 @@
           <pre class="code-block" id="md-trace-text"></pre>
         </div>
 
+        <!-- Audited Record Quick-Open Card -->
+        <div id="md-audit-record-nav" style="display:none;padding:10px 12px;background:rgba(0,120,212,0.06);border:1px solid rgba(0,120,212,0.25);border-radius:6px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:700;font-size:12px;color:var(--primary);display:flex;align-items:center;gap:6px;">
+                <span>📄</span> Audited Dataverse Record
+              </div>
+              <div id="md-audit-rec-meta" style="font-size:11px;color:var(--text-sec);font-family:monospace;margin-top:2px;">—</div>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              <button class="btn btn-sm" id="md-audit-copy-url">📋 Copy Record URL</button>
+              <button class="btn btn-sm" id="md-audit-inspect-btn">🔎 Inspect in Record Inspector</button>
+              <a href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm primary" id="md-audit-open-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+                📄 Open Record ↗
+              </a>
+            </div>
+          </div>
+        </div>
+
         <!-- Pre/Post Audit Field Changes Diff Section -->
         <div id="md-audit-diff-sec" style="display:none;margin-top:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
@@ -2341,7 +2360,7 @@
       }
 
       if (ev.category === 'workflow' || ev.category === 'action') {
-        const baseUrl = context?.environmentUrl || '';
+        const baseUrl = getDataverseAppUrl();
         if (flowId && baseUrl) {
           return `${baseUrl}/main.aspx?etn=workflow&pagetype=entityrecord&id=${encodeURIComponent(flowId)}`;
         }
@@ -2351,6 +2370,37 @@
       }
 
       return null;
+    }
+
+    function getDataverseAppUrl() {
+      if (context?.dataverseUrl && /^https?:\/\//i.test(context.dataverseUrl)) {
+        return context.dataverseUrl.replace(/\/+$/, '');
+      }
+      const envUrl = context?.environmentUrl || '';
+      if (/^https:\/\/[a-z0-9.-]+\.(dynamics\.com|dynamics\.cn|microsoftdynamics\.de|microsoftdynamics\.us|appsplatform\.us)$/i.test(envUrl)) {
+        return envUrl.replace(/\/+$/, '');
+      }
+      return '';
+    }
+
+    function getAuditRecordTarget(ev) {
+      if (!ev || ev.category !== 'audit') return null;
+      const etn = (ev.raw?.objecttypecode || ev.entity || '').trim();
+      const recId = String(ev.recordId || ev.raw?._objectid_value || ev.raw?.recordId || '').replace(/[{}]/g, '').trim();
+      if (!etn || etn === '—' || etn.toLowerCase() === 'none' || !recId) return null;
+      return {
+        entity: etn,
+        recordId: recId,
+        isDeleted: Number(ev.rawAction) === 3
+      };
+    }
+
+    function getAuditRecordUrl(ev) {
+      const target = getAuditRecordTarget(ev);
+      if (!target) return null;
+      const baseUrl = getDataverseAppUrl();
+      if (!baseUrl) return null;
+      return `${baseUrl}/main.aspx?etn=${encodeURIComponent(target.entity)}&pagetype=entityrecord&id=${encodeURIComponent(target.recordId)}`;
     }
 
     const getFlowRunUrl = getProcessUrl;
@@ -2370,6 +2420,7 @@
         severityLabel: isSec ? 'Security' : 'Audit',
         title: `${act} on ${r.objecttypecode || 'Record'}`,
         entity: r.objecttypecode || '—',
+        recordId: r._objectid_value || null,
         user: r._userid_value ? r._userid_value.slice(0, 8) + '…' : 'SYSTEM',
         duration: '—',
         error: null,
@@ -2948,6 +2999,23 @@
           <a href="${esc(procUrl)}" target="_blank" rel="noopener noreferrer" class="btn icon-only" style="padding:2px 6px;font-size:11px;text-decoration:none;color:var(--primary);margin-right:2px;" title="${tooltip}" onclick="event.stopPropagation();">${icon}</a>
           <button class="btn icon-only" style="padding:2px 6px;font-size:11px;" title="View event details">🔍</button>
         `;
+      } else if (ev.category === 'audit') {
+        const auditTarget = getAuditRecordTarget(ev);
+        const auditUrl = getAuditRecordUrl(ev);
+        if (auditUrl && auditTarget) {
+          const tip = auditTarget.isDeleted
+            ? `Open deleted ${auditTarget.entity} record in Dataverse (may no longer exist)`
+            : `Open ${auditTarget.entity} record in Dataverse (new tab)`;
+          actionHtml = `
+            <a href="${esc(auditUrl)}" target="_blank" rel="noopener noreferrer" class="btn icon-only" style="padding:2px 6px;font-size:11px;text-decoration:none;color:var(--primary);margin-right:2px;" title="${esc(tip)}" onclick="event.stopPropagation();">📄↗</a>
+            <button class="btn icon-only" style="padding:2px 6px;font-size:11px;" title="View event details">🔍</button>
+          `;
+        } else if (auditTarget) {
+          actionHtml = `
+            <button type="button" class="btn icon-only btn-inspect-rec" style="padding:2px 6px;font-size:11px;color:var(--primary);margin-right:2px;" title="Inspect ${esc(auditTarget.entity)} record in Record Inspector">📄</button>
+            <button class="btn icon-only" style="padding:2px 6px;font-size:11px;" title="View event details">🔍</button>
+          `;
+        }
       }
 
       tr.innerHTML = `
@@ -2963,6 +3031,11 @@
       `;
 
       tr.addEventListener('click', () => openDetailModal(ev));
+      tr.querySelector('.btn-inspect-rec')?.addEventListener('click', e => {
+        e.stopPropagation();
+        const t = getAuditRecordTarget(ev);
+        if (t) toHost('OPEN_TOOL', { toolId: 'record-inspector', data: { entity: t.entity, id: t.recordId } });
+      });
       return tr;
     }
 
@@ -3240,6 +3313,52 @@
 
       // Raw json
       document.getElementById('md-raw-json').textContent = JSON.stringify(ev.raw, null, 2);
+
+      // Audited Record Quick-Open Section
+      const recNavSec = document.getElementById('md-audit-record-nav');
+      const auditTarget = getAuditRecordTarget(ev);
+      if (recNavSec && auditTarget) {
+        const auditUrl = getAuditRecordUrl(ev);
+        const metaEl = document.getElementById('md-audit-rec-meta');
+        const openRecBtn = document.getElementById('md-audit-open-btn');
+        const copyRecBtn = document.getElementById('md-audit-copy-url');
+        const inspRecBtn = document.getElementById('md-audit-inspect-btn');
+
+        recNavSec.style.display = 'block';
+        if (metaEl) {
+          metaEl.textContent = `${auditTarget.entity} · ${auditTarget.recordId}${auditTarget.isDeleted ? ' (Deleted — record may no longer exist in Dataverse)' : ''}`;
+        }
+        if (openRecBtn) {
+          if (auditUrl) {
+            openRecBtn.href = auditUrl;
+            openRecBtn.style.pointerEvents = 'auto';
+            openRecBtn.style.opacity = '1';
+            openRecBtn.title = auditTarget.isDeleted ? 'Record was deleted and may no longer open in Dataverse' : `Open ${auditTarget.entity} in Dataverse`;
+          } else {
+            openRecBtn.href = '#';
+            openRecBtn.style.pointerEvents = 'none';
+            openRecBtn.style.opacity = '0.5';
+            openRecBtn.title = 'Connect to Dataverse / dev-server.js proxy to build main.aspx URL';
+          }
+        }
+        if (copyRecBtn) {
+          copyRecBtn.textContent = auditUrl ? '📋 Copy Record URL' : '📋 Copy Record GUID';
+          copyRecBtn.onclick = () => {
+            const val = auditUrl || auditTarget.recordId;
+            navigator.clipboard?.writeText(val).then(() => {
+              notify(auditUrl ? 'Copied Dataverse record URL' : 'Copied record GUID', 'success');
+            });
+          };
+        }
+        if (inspRecBtn) {
+          inspRecBtn.onclick = () => {
+            toHost('OPEN_TOOL', { toolId: 'record-inspector', data: { entity: auditTarget.entity, id: auditTarget.recordId } });
+            closeDetailModal();
+          };
+        }
+      } else if (recNavSec) {
+        recNavSec.style.display = 'none';
+      }
 
       // Pre/Post audit field changes diff section
       const diffSec = document.getElementById('md-audit-diff-sec');

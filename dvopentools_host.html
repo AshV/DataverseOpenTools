@@ -957,6 +957,7 @@
       runtimeMode: HOST_RUNTIME,
       isExternalMode: IS_EXTERNAL_MODE,
       proxyTargetHost: '',
+      proxyTargetUrl: '',
       externalHtmlCache: new Map(),
       tabs: [],         // [{tabId, toolId, name, icon, type:'wr'|'file', wrName?}]
       activeTabId: null,
@@ -1052,11 +1053,14 @@
       const base = getApiBaseUrl();
       if (S.isExternalMode) {
         if (!base) throw new Error('Local Proxy URL is not configured.');
+        S.proxyTargetHost = '';
+        S.proxyTargetUrl = '';
         try {
           const stRes = await fetch(`${base}/_proxy/status`, { cache: 'no-store' });
           if (stRes.ok) {
             const st = await stRes.json();
             S.proxyTargetHost = st.targetHost || '';
+            S.proxyTargetUrl = st.targetUrl || '';
           }
         } catch {}
       }
@@ -1085,6 +1089,7 @@
 
       return {
         environmentUrl: base,
+        dataverseUrl: (S.isExternalMode && S.proxyTargetUrl) ? S.proxyTargetUrl : base,
         apiVersion: S.cfg.apiVersion,
         userId: who.UserId,
         userName: name,

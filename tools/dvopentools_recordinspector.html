@@ -70,13 +70,32 @@
     'use strict';
 
     const HOST_ORIGIN = window.location.origin;
-    let entities = [], attrMeta = new Map(), currentRecord = null, currentEntity = null, currentId = '', editingAttr = null;
+    let entities = [], attrMeta = new Map(), currentRecord = null, currentEntity = null, currentId = '', editingAttr = null, pendingLaunch = null;
 
     window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
     window.addEventListener('message', e => {
       if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
       if (e.data.type === 'CONTEXT_INIT') onContextReady();
+      if (e.data.type === 'TOOL_LAUNCH' && e.data.payload) {
+        pendingLaunch = e.data.payload;
+        if (entities.length > 0) applyLaunchPayload();
+      }
     });
+
+    function applyLaunchPayload() {
+      if (!pendingLaunch) return;
+      const { entity, id } = pendingLaunch;
+      pendingLaunch = null;
+      if (entity && entities.some(e => e.logicalName === entity)) {
+        document.getElementById('ent-select').value = entity;
+      }
+      if (id) {
+        document.getElementById('rec-guid').value = String(id).replace(/[{}]/g, '');
+      }
+      if (entity && id && entities.some(e => e.logicalName === entity)) {
+        loadRecord();
+      }
+    }
 
     async function onContextReady() {
       try {
@@ -89,6 +108,7 @@
         document.getElementById('ent-select').innerHTML = entities.map(e => `<option value="${DV.esc(e.logicalName)}">${DV.esc(e.displayName)} (${DV.esc(e.logicalName)})</option>`).join('');
         if (entities.some(e => e.logicalName === 'account')) document.getElementById('ent-select').value = 'account';
         document.getElementById('btn-load').disabled = false;
+        if (pendingLaunch) applyLaunchPayload();
       } catch (err) { DV.notify(err.message, 'error'); }
     }
 
