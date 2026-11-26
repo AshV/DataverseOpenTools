@@ -9,8 +9,8 @@
   {
     "id":             "flow-schedules",
     "name":           "Scheduled Flows",
-    "version":        "1.0.0",
-    "description":    "List all Scheduled Power Automate Cloud Flows with decoded recurrence frequency, interval, days/times schedule, time zone, start time, and state.",
+    "version":        "1.1.0",
+    "description":    "List all Scheduled Power Automate Cloud Flows by Solution with decoded recurrence timing, time zone, state, and a chronological Timeline view of upcoming runs.",
     "icon":           "⏰",
     "category":       "Flow",
     "author":         "Ashish Vishwakarma",
@@ -25,14 +25,94 @@
       display: inline-block; font-family: ui-monospace, monospace; font-size: 11px;
       padding: 2px 6px; border-radius: 4px; background: var(--bg-header); border: 1px solid var(--border);
     }
+    .sol-chip {
+      display: inline-block; font-size: 10.5px; font-weight: 600;
+      padding: 1px 6px; border-radius: 999px;
+      background: rgba(0, 120, 212, 0.1); color: var(--accent, #0078d4);
+      border: 1px solid rgba(0, 120, 212, 0.25); margin-right: 4px; margin-top: 2px;
+    }
     .row-click { cursor: pointer; }
+
+    /* View Segmented Switcher & Timeline */
+    .view-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .view-btn {
+      border: none; background: var(--bg-header); color: var(--text-sec);
+      padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .view-btn + .view-btn { border-left: 1px solid var(--border); }
+    .view-btn.active { background: var(--accent, #0078d4); color: #fff; }
+
+    .tl-wrap { display: none; flex-direction: column; gap: 14px; padding: 14px; }
+    .tl-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card);
+    }
+    .tl-card {
+      border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); overflow: hidden;
+    }
+    .tl-card-head {
+      padding: 9px 12px; background: var(--bg-header); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+      font-size: 12px; font-weight: 700;
+    }
+    .tl-axis-row {
+      display: grid; grid-template-columns: 270px 1fr; align-items: center;
+      border-bottom: 1px solid var(--border); background: var(--bg-header);
+      font-size: 10.5px; color: var(--text-sec); font-family: ui-monospace, monospace;
+    }
+    .tl-axis-label { padding: 6px 12px; font-weight: 700; border-right: 1px solid var(--border); }
+    .tl-axis-ticks { position: relative; height: 24px; }
+    .tl-tick {
+      position: absolute; top: 4px; transform: translateX(-50%); white-space: nowrap;
+    }
+    .tl-tick:first-child { transform: none; left: 4px !important; }
+    .tl-tick:last-child { transform: translateX(-100%); }
+    .tl-lane {
+      display: grid; grid-template-columns: 270px 1fr; align-items: center;
+      border-bottom: 1px solid var(--border); cursor: pointer;
+    }
+    .tl-lane:hover { background: var(--row-hover, rgba(0, 120, 212, 0.05)); }
+    .tl-lane-meta {
+      padding: 8px 12px; border-right: 1px solid var(--border); min-width: 0;
+    }
+    .tl-lane-name { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tl-lane-sub { font-size: 10.5px; color: var(--text-sec); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tl-track { position: relative; height: 38px; overflow: hidden; }
+    .tl-gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); opacity: 0.45; pointer-events: none; }
+    .tl-dot {
+      position: absolute; top: 50%; transform: translate(-50%, -50%);
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--accent, #0078d4); border: 2px solid var(--bg-card);
+      box-shadow: 0 0 0 1px rgba(0, 120, 212, 0.45);
+    }
+    .tl-dot.off { background: var(--warn-color, #d97706); box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.45); opacity: 0.7; }
+    .tl-dot.high { background: var(--err-color, #d13438); width: 7px; height: 7px; }
+    .tl-seq-badge {
+      display: inline-block; min-width: 28px; text-align: center;
+      font-family: ui-monospace, monospace; font-size: 11px; font-weight: 700;
+      padding: 2px 6px; border-radius: 4px; background: var(--bg-header); border: 1px solid var(--border);
+    }
+    .tl-countdown {
+      font-family: ui-monospace, monospace; font-size: 11px; font-weight: 600;
+      color: var(--ok-color, #107c10);
+    }
+    @media (max-width: 780px) {
+      .tl-axis-row, .tl-lane { grid-template-columns: 180px 1fr; }
+    }
   </style>
 </head>
 <body class="dv-app">
 
   <div class="dv-toolbar">
     <strong>⏰ Scheduled Cloud Flows</strong>
-    <input type="text" id="f-search" placeholder="Filter by flow name, timing, timezone, owner…" style="min-width:250px;">
+    <div class="view-switch" role="group" aria-label="View mode">
+      <button type="button" class="view-btn active" id="view-table-btn">📋 Table</button>
+      <button type="button" class="view-btn" id="view-tl-btn">📈 Timeline</button>
+    </div>
+    <input type="text" id="f-search" placeholder="Filter by flow, solution, timing, timezone…" style="min-width:220px;">
+    <select id="f-solution" style="max-width:200px;">
+      <option value="ALL">All Solutions</option>
+    </select>
     <select id="f-state">
       <option value="ALL">All States</option>
       <option value="1">Activated (On)</option>
@@ -48,7 +128,7 @@
       <option value="Month">Month</option>
       <option value="Second">Second</option>
     </select>
-    <select id="f-tz" style="max-width:190px;">
+    <select id="f-tz" style="max-width:170px;">
       <option value="ALL">All Time Zones</option>
     </select>
     <div class="dv-spacer"></div>
@@ -64,27 +144,77 @@
     <span>High-Freq (&lt; Hourly): <strong id="st-high" style="color:var(--err-color)">0</strong></span>
     <span>Total Cloud Flows Scanned: <strong id="st-all">0</strong></span>
     <div class="dv-spacer"></div>
-    <span style="font-size:11px;color:var(--text-sec);">Click any row to inspect raw recurrence JSON</span>
+    <span style="font-size:11px;color:var(--text-sec);">Click any row or swimlane to inspect raw recurrence JSON</span>
   </div>
 
-  <div class="dv-scroll">
+  <div class="dv-scroll" id="table-view">
     <table class="dv-table">
       <thead>
         <tr>
-          <th style="min-width:220px;">Flow Name</th>
+          <th style="min-width:240px;">Flow Name &amp; Solution</th>
           <th style="width:90px;">State</th>
-          <th style="width:105px;">Frequency</th>
-          <th style="min-width:240px;">Recurrence Timing</th>
-          <th style="width:185px;">Time Zone</th>
-          <th style="width:165px;">Start Time</th>
-          <th style="width:140px;">Owner</th>
-          <th style="width:95px;text-align:center;">Open</th>
+          <th style="width:100px;">Frequency</th>
+          <th style="min-width:220px;">Recurrence Timing</th>
+          <th style="width:175px;">Next Run (Est.)</th>
+          <th style="width:170px;">Time Zone</th>
+          <th style="width:130px;">Owner</th>
+          <th style="width:70px;text-align:center;">Open</th>
         </tr>
       </thead>
       <tbody id="sched-tbody">
         <tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">Connecting to Dataverse…</td></tr>
       </tbody>
     </table>
+  </div>
+
+  <div class="dv-scroll tl-wrap" id="timeline-view">
+    <div class="tl-bar">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <strong style="font-size:12.5px;">Projection Window:</strong>
+        <select id="tl-horizon">
+          <option value="6">Next 6 Hours</option>
+          <option value="24" selected>Next 24 Hours</option>
+          <option value="168">Next 7 Days</option>
+          <option value="720">Next 30 Days</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" id="tl-only-on" checked>
+          Activated flows only
+        </label>
+      </div>
+      <div id="tl-summary" style="font-size:12px;color:var(--text-sec);">—</div>
+    </div>
+
+    <div class="tl-card">
+      <div class="tl-card-head">
+        <span>📊 Visual Schedule Swimlanes (Ordered by Soonest Next Run)</span>
+        <span style="font-size:11px;font-weight:400;color:var(--text-sec);">Markers show projected fire times in local browser time</span>
+      </div>
+      <div id="tl-swimlanes"></div>
+    </div>
+
+    <div class="tl-card">
+      <div class="tl-card-head">
+        <span>🕒 Chronological Run Sequence (Upcoming Executions)</span>
+        <span id="tl-seq-count" style="font-size:11px;font-weight:500;color:var(--text-sec);">—</span>
+      </div>
+      <div style="max-height:360px;overflow-y:auto;">
+        <table class="dv-table">
+          <thead>
+            <tr>
+              <th style="width:65px;">Seq #</th>
+              <th style="width:185px;">When (Local Time)</th>
+              <th style="width:110px;">In</th>
+              <th style="min-width:210px;">Flow &amp; Solution</th>
+              <th style="width:95px;">State</th>
+              <th style="min-width:190px;">Schedule Rule</th>
+              <th style="width:140px;">Time Zone</th>
+            </tr>
+          </thead>
+          <tbody id="tl-seq-tbody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <footer class="dv-footer">
@@ -116,6 +246,7 @@
     let context = null;
     let flows = [];
     let totalScanned = 0;
+    let activeView = 'table'; // 'table' | 'timeline'
 
     function toHost(type, payload = {}) {
       window.parent?.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
@@ -263,19 +394,297 @@
       return `${d.toLocaleDateString()} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })}`;
     }
 
+    /* ─── Time Zone & Recurrence Run Projector ─────────────── */
+    const WIN_TZ_TO_IANA = {
+      'UTC': 'UTC',
+      'Coordinated Universal Time': 'UTC',
+      'GMT Standard Time': 'Europe/London',
+      'Greenwich Standard Time': 'Atlantic/Reykjavik',
+      'W. Europe Standard Time': 'Europe/Berlin',
+      'Central Europe Standard Time': 'Europe/Budapest',
+      'Romance Standard Time': 'Europe/Paris',
+      'Central European Standard Time': 'Europe/Warsaw',
+      'E. Europe Standard Time': 'Europe/Bucharest',
+      'Eastern Standard Time': 'America/New_York',
+      'US Eastern Standard Time': 'America/Indiana/Indianapolis',
+      'Central Standard Time': 'America/Chicago',
+      'Mountain Standard Time': 'America/Denver',
+      'US Mountain Standard Time': 'America/Phoenix',
+      'Pacific Standard Time': 'America/Los_Angeles',
+      'Alaskan Standard Time': 'America/Anchorage',
+      'Hawaiian Standard Time': 'Pacific/Honolulu',
+      'Atlantic Standard Time': 'America/Halifax',
+      'SA Eastern Standard Time': 'America/Sao_Paulo',
+      'E. South America Standard Time': 'America/Sao_Paulo',
+      'India Standard Time': 'Asia/Kolkata',
+      'Sri Lanka Standard Time': 'Asia/Colombo',
+      'Arabian Standard Time': 'Asia/Dubai',
+      'Pakistan Standard Time': 'Asia/Karachi',
+      'Bangladesh Standard Time': 'Asia/Dhaka',
+      'SE Asia Standard Time': 'Asia/Bangkok',
+      'Singapore Standard Time': 'Asia/Singapore',
+      'China Standard Time': 'Asia/Shanghai',
+      'Taipei Standard Time': 'Asia/Taipei',
+      'Tokyo Standard Time': 'Asia/Tokyo',
+      'Korea Standard Time': 'Asia/Seoul',
+      'AUS Eastern Standard Time': 'Australia/Sydney',
+      'E. Australia Standard Time': 'Australia/Brisbane',
+      'Cen. Australia Standard Time': 'Australia/Adelaide',
+      'W. Australia Standard Time': 'Australia/Perth',
+      'New Zealand Standard Time': 'Pacific/Auckland',
+      'South Africa Standard Time': 'Africa/Johannesburg'
+    };
+
+    const WEEKDAY_MAP = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+
+    function resolveIanaTz(winTz) {
+      if (!winTz || winTz === 'UTC (default)') return 'UTC';
+      if (WIN_TZ_TO_IANA[winTz]) return WIN_TZ_TO_IANA[winTz];
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone: winTz });
+        return winTz;
+      } catch {
+        return 'UTC';
+      }
+    }
+
+    function getTzParts(date, ianaTz) {
+      const dtf = new Intl.DateTimeFormat('en-US', {
+        timeZone: ianaTz, hour12: false,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        weekday: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+      const map = {};
+      for (const p of dtf.formatToParts(date)) map[p.type] = p.value;
+      const wd = String(map.weekday || '').toLowerCase();
+      const wdIdx = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 }[wd.slice(0, 3)] ?? 0;
+      const hr = Number(map.hour) === 24 ? 0 : Number(map.hour);
+      return {
+        year: Number(map.year), month: Number(map.month), day: Number(map.day),
+        weekday: wdIdx, hour: hr, minute: Number(map.minute), second: Number(map.second)
+      };
+    }
+
+    function getAnchorStartDate(rec, refNow) {
+      if (rec?.startTime) {
+        const parsed = new Date(rec.startTime);
+        if (!isNaN(parsed.getTime())) return parsed;
+      }
+      return new Date(Math.floor(refNow.getTime() / 60000) * 60000);
+    }
+
+    function computeUpcomingRuns(flow, fromDate, toDate, maxCount = 60) {
+      const rec = flow.recurrence || {};
+      const freq = flow.frequency || 'Day';
+      const interval = Math.max(1, Number(flow.interval) || 1);
+      const fromMs = fromDate.getTime();
+      const toMs = toDate.getTime();
+      const endBoundMs = rec.endTime && !isNaN(new Date(rec.endTime).getTime())
+        ? Math.min(toMs, new Date(rec.endTime).getTime())
+        : toMs;
+      if (endBoundMs < fromMs) return [];
+
+      const anchor = getAnchorStartDate(rec, fromDate);
+      const anchorMs = anchor.getTime();
+      const effectiveFromMs = Math.max(fromMs, anchorMs);
+      const ianaTz = resolveIanaTz(rec.timeZone);
+      const sched = rec.schedule && typeof rec.schedule === 'object' ? rec.schedule : {};
+      const runs = [];
+
+      // Fast arithmetic steps for Second / Minute / Hour without schedule arrays,
+      // and minute-granularity/slot matching for schedule objects or Day/Week/Month.
+      if (freq === 'Second' || freq === 'Minute' || (freq === 'Hour' && !Array.isArray(sched.minutes) && !Array.isArray(sched.hours))) {
+        const stepMs = freq === 'Second' ? Math.max(15, interval) * 1000
+          : freq === 'Minute' ? interval * 60000
+          : interval * 3600000;
+        let n = effectiveFromMs > anchorMs ? Math.ceil((effectiveFromMs - anchorMs) / stepMs) : 0;
+        let t = anchorMs + n * stepMs;
+        while (t <= endBoundMs && runs.length < maxCount) {
+          if (t >= fromMs) runs.push(new Date(t));
+          t += stepMs;
+        }
+        return runs;
+      }
+
+      if (freq === 'Hour') {
+        const minSlots = Array.isArray(sched.minutes) && sched.minutes.length
+          ? [...new Set(sched.minutes.map(Number).filter(n => n >= 0 && n <= 59))].sort((a, b) => a - b)
+          : [getTzParts(anchor, ianaTz).minute];
+        const anchorHourStart = Math.floor(anchorMs / 3600000) * 3600000;
+        let hCursor = Math.floor(effectiveFromMs / 3600000) * 3600000;
+        const hrsOffset = Math.round((hCursor - anchorHourStart) / 3600000);
+        const mod = ((hrsOffset % interval) + interval) % interval;
+        if (mod !== 0) hCursor += (interval - mod) * 3600000;
+
+        while (hCursor <= endBoundMs && runs.length < maxCount) {
+          for (const m of minSlots) {
+            const candidate = hCursor + m * 60000;
+            if (candidate >= effectiveFromMs && candidate <= endBoundMs) {
+              runs.push(new Date(candidate));
+              if (runs.length >= maxCount) break;
+            }
+          }
+          hCursor += interval * 3600000;
+        }
+        return runs;
+      }
+
+      // Day / Week / Month calendar walk (stepping hour or day slots accurately in target TZ)
+      const anchorParts = getTzParts(anchor, ianaTz);
+      const hours = Array.isArray(sched.hours) && sched.hours.length
+        ? [...new Set(sched.hours.map(Number).filter(n => n >= 0 && n <= 23))].sort((a, b) => a - b)
+        : [anchorParts.hour];
+      const minutes = Array.isArray(sched.minutes) && sched.minutes.length
+        ? [...new Set(sched.minutes.map(Number).filter(n => n >= 0 && n <= 59))].sort((a, b) => a - b)
+        : [anchorParts.minute];
+
+      const weekDays = Array.isArray(sched.weekDays) && sched.weekDays.length
+        ? new Set(sched.weekDays.map(d => WEEKDAY_MAP[String(d).toLowerCase()]).filter(x => x !== undefined))
+        : null;
+      const monthDays = Array.isArray(sched.monthDays) && sched.monthDays.length
+        ? sched.monthDays.map(Number).filter(n => !isNaN(n))
+        : null;
+      const monthlyOcc = Array.isArray(sched.monthlyOccurrences) && sched.monthlyOccurrences.length
+        ? sched.monthlyOccurrences
+        : null;
+
+      // Scan day-by-day across [effectiveFrom - 1d .. endBound + 1d] at discrete hour/minute slots
+      const startDayUtc = Date.UTC(
+        getTzParts(new Date(effectiveFromMs), ianaTz).year,
+        getTzParts(new Date(effectiveFromMs), ianaTz).month - 1,
+        getTzParts(new Date(effectiveFromMs), ianaTz).day
+      );
+      const totalDays = Math.ceil((endBoundMs - effectiveFromMs) / 86400000) + 2;
+      const anchorDayEpoch = Math.floor(Date.UTC(anchorParts.year, anchorParts.month - 1, anchorParts.day) / 86400000);
+      const anchorMonthIdx = anchorParts.year * 12 + (anchorParts.month - 1);
+
+      const seenTs = new Set();
+      for (let dOff = -1; dOff <= totalDays && runs.length < maxCount; dOff++) {
+        // Probe noon UTC for this calendar day shift, then test candidate wall clocks
+        const probeNoon = new Date(startDayUtc + dOff * 86400000 + 12 * 3600000);
+        const dp = getTzParts(probeNoon, ianaTz);
+        const dayEpoch = Math.floor(Date.UTC(dp.year, dp.month - 1, dp.day) / 86400000);
+        if (dayEpoch < anchorDayEpoch) continue;
+
+        let dayMatches = false;
+        if (freq === 'Day') {
+          dayMatches = ((dayEpoch - anchorDayEpoch) % interval) === 0;
+        } else if (freq === 'Week') {
+          const anchorSundayEpoch = anchorDayEpoch - anchorParts.weekday;
+          const curSundayEpoch = dayEpoch - dp.weekday;
+          const weekDiff = Math.round((curSundayEpoch - anchorSundayEpoch) / 7);
+          const targetDays = weekDays || new Set([anchorParts.weekday]);
+          dayMatches = weekDiff >= 0 && (weekDiff % interval) === 0 && targetDays.has(dp.weekday);
+        } else if (freq === 'Month') {
+          const curMonthIdx = dp.year * 12 + (dp.month - 1);
+          const mDiff = curMonthIdx - anchorMonthIdx;
+          if (mDiff >= 0 && (mDiff % interval) === 0) {
+            const daysInMonth = new Date(Date.UTC(dp.year, dp.month, 0)).getUTCDate();
+            if (monthDays) {
+              dayMatches = monthDays.some(md => (md === -1 ? dp.day === daysInMonth : dp.day === md));
+            } else if (monthlyOcc) {
+              dayMatches = monthlyOcc.some(o => {
+                const targetWd = WEEKDAY_MAP[String(o.day || '').toLowerCase()];
+                if (targetWd !== dp.weekday) return false;
+                const occNum = Number(o.occurrence);
+                if (occNum === -1) return dp.day + 7 > daysInMonth;
+                return Math.ceil(dp.day / 7) === occNum;
+              });
+            } else {
+              dayMatches = dp.day === Math.min(anchorParts.day, daysInMonth);
+            }
+          }
+        }
+
+        if (!dayMatches) continue;
+
+        for (const h of hours) {
+          for (const m of minutes) {
+            // Convert wall-clock (dp.year, dp.month, dp.day, h, m) in ianaTz -> UTC epoch via offset refinement
+            const naiveUtc = Date.UTC(dp.year, dp.month - 1, dp.day, h, m, 0);
+            const probe1 = getTzParts(new Date(naiveUtc), ianaTz);
+            const probe1Naive = Date.UTC(probe1.year, probe1.month - 1, probe1.day, probe1.hour, probe1.minute, 0);
+            const candidateMs = naiveUtc + (naiveUtc - probe1Naive);
+            if (candidateMs >= effectiveFromMs && candidateMs <= endBoundMs && !seenTs.has(candidateMs)) {
+              seenTs.add(candidateMs);
+              runs.push(new Date(candidateMs));
+              if (runs.length >= maxCount) break;
+            }
+          }
+          if (runs.length >= maxCount) break;
+        }
+      }
+
+      runs.sort((a, b) => a - b);
+      return runs;
+    }
+
+    function formatCountdown(msDiff) {
+      if (msDiff <= 0) return 'Now';
+      const sec = Math.round(msDiff / 1000);
+      if (sec < 60) return `in ${sec}s`;
+      const min = Math.floor(sec / 60);
+      if (min < 60) return `in ${min}m`;
+      const hr = Math.floor(min / 60);
+      const remM = min % 60;
+      if (hr < 24) return remM ? `in ${hr}h ${remM}m` : `in ${hr}h`;
+      const d = Math.floor(hr / 24);
+      const remH = hr % 24;
+      return remH ? `in ${d}d ${remH}h` : `in ${d}d`;
+    }
+
+    function getNextRunForFlow(flow, now = new Date()) {
+      const lookaheadDays = flow.frequency === 'Month' ? 400 : flow.frequency === 'Week' ? 90 : 30;
+      const horizon = new Date(now.getTime() + lookaheadDays * 86400000);
+      const list = computeUpcomingRuns(flow, now, horizon, 1);
+      return list[0] || null;
+    }
+
+    async function loadSolutionMapping() {
+      try {
+        const [solRes, compRes] = await Promise.all([
+          fetchAllPages('/solutions?$select=solutionid,friendlyname,uniquename,ismanaged,isvisible&$filter=isvisible eq true&$orderby=friendlyname asc'),
+          fetchAllPages('/solutioncomponents?$select=_solutionid_value,objectid&$filter=componenttype eq 29')
+        ]);
+        const solById = new Map();
+        for (const s of solRes) {
+          solById.set(String(s.solutionid).toLowerCase(), {
+            id: String(s.solutionid).toLowerCase(),
+            name: s.friendlyname || s.uniquename || 'Solution',
+            uniqueName: s.uniquename || ''
+          });
+        }
+        const wfSolutions = new Map();
+        for (const c of compRes) {
+          const wfId = String(c.objectid || '').toLowerCase();
+          const sol = solById.get(String(c._solutionid_value || '').toLowerCase());
+          if (!wfId || !sol) continue;
+          const arr = wfSolutions.get(wfId) || [];
+          if (!arr.some(x => x.id === sol.id)) arr.push(sol);
+          wfSolutions.set(wfId, arr);
+        }
+        return wfSolutions;
+      } catch (e) {
+        console.warn('[ScheduledFlows] Solution mapping skipped:', e.message);
+        return new Map();
+      }
+    }
+
     async function loadScheduledFlows() {
       document.getElementById('sched-tbody').innerHTML =
-        '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">Querying Cloud Flows and parsing recurrence triggers…</td></tr>';
+        '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-sec);">Querying Cloud Flows, Solution mappings, and parsing recurrence triggers…</td></tr>';
       try {
-        const rawFlows = await fetchAllPages(
-          '/workflows?$select=workflowid,name,statecode,statuscode,_ownerid_value,modifiedon,ismanaged,description,clientdata&$filter=category eq 5 and type eq 1&$orderby=name asc'
-        );
+        const [rawFlows, wfSolutions] = await Promise.all([
+          fetchAllPages('/workflows?$select=workflowid,name,statecode,statuscode,_ownerid_value,modifiedon,ismanaged,description,clientdata&$filter=category eq 5 and type eq 1&$orderby=name asc'),
+          loadSolutionMapping()
+        ]);
         totalScanned = rawFlows.length;
         const parsed = [];
         for (const f of rawFlows) {
           const trig = extractRecurrenceTrigger(f.clientdata);
           if (!trig) continue;
           const timing = formatRecurrenceTiming(trig.recurrence);
+          const sols = wfSolutions.get(String(f.workflowid).toLowerCase()) || [];
           parsed.push({
             id: f.workflowid,
             name: f.name || 'Unnamed Flow',
@@ -285,6 +694,8 @@
             modifiedon: f.modifiedon || '',
             ismanaged: !!f.ismanaged,
             description: f.description || '',
+            solutions: sols,
+            solutionNames: sols.map(s => s.name).join(', '),
             triggerName: trig.triggerName,
             recurrence: trig.recurrence,
             frequency: timing.frequency,
@@ -297,8 +708,9 @@
           });
         }
         flows = parsed;
+        populateSolutionFilter();
         populateTzFilter();
-        renderTable();
+        renderActiveView();
         DV.notify(`Found ${flows.length} scheduled flows out of ${totalScanned} Cloud Flows.`, 'success');
       } catch (err) {
         document.getElementById('sched-tbody').innerHTML =
@@ -310,16 +722,17 @@
     function loadSampleData() {
       totalScanned = 24;
       const sampleDefs = [
-        { id: '11111111-1111-1111-1111-111111111101', name: 'Sync Inventory Stock Levels', statecode: 1, owner: 'Integration Svc', ismanaged: true, description: 'Polls ERP warehouse delta every 5 minutes.', recurrence: { frequency: 'Minute', interval: 5, timeZone: 'UTC', startTime: '2026-01-01T00:00:00Z' } },
-        { id: '11111111-1111-1111-1111-111111111102', name: 'Daily Executive Pipeline Digest', statecode: 1, owner: 'Ashish V.', ismanaged: false, description: 'Sends Teams + Email digest each morning.', recurrence: { frequency: 'Day', interval: 1, timeZone: 'India Standard Time', startTime: '2026-02-10T03:30:00Z', schedule: { hours: [9], minutes: [0] } } },
-        { id: '11111111-1111-1111-1111-111111111103', name: 'Mon/Wed/Fri Stale Lead Cleanup', statecode: 1, owner: 'CRM Ops', ismanaged: false, description: 'Archives untouched leads older than 90 days.', recurrence: { frequency: 'Week', interval: 1, timeZone: 'Eastern Standard Time', schedule: { weekDays: ['Monday', 'Wednesday', 'Friday'], hours: [2], minutes: [30] } } },
-        { id: '11111111-1111-1111-1111-111111111104', name: 'Monthly Billing Rollup (1st Monday)', statecode: 1, owner: 'Finance Bot', ismanaged: true, description: 'Generates monthly invoice batch.', recurrence: { frequency: 'Month', interval: 1, timeZone: 'Pacific Standard Time', schedule: { monthlyOccurrences: [{ day: 'Monday', occurrence: 1 }], hours: [6], minutes: [0] } } },
-        { id: '11111111-1111-1111-1111-111111111105', name: 'Hourly Sandbox Data Anonymizer', statecode: 0, owner: 'Ashish V.', ismanaged: false, description: 'Turned off in production.', recurrence: { frequency: 'Hour', interval: 2, timeZone: 'UTC', schedule: { minutes: [15] } } }
+        { id: '11111111-1111-1111-1111-111111111101', name: 'Sync Inventory Stock Levels', statecode: 1, owner: 'Integration Svc', ismanaged: true, solutions: [{ id: 'sol-erp', name: 'ERP Integration Core' }], description: 'Polls ERP warehouse delta every 5 minutes.', recurrence: { frequency: 'Minute', interval: 5, timeZone: 'UTC', startTime: '2026-01-01T00:00:00Z' } },
+        { id: '11111111-1111-1111-1111-111111111102', name: 'Daily Executive Pipeline Digest', statecode: 1, owner: 'Ashish V.', ismanaged: false, solutions: [{ id: 'sol-sales', name: 'Contoso Sales Core' }], description: 'Sends Teams + Email digest each morning.', recurrence: { frequency: 'Day', interval: 1, timeZone: 'India Standard Time', startTime: '2026-02-10T03:30:00Z', schedule: { hours: [9, 18], minutes: [0] } } },
+        { id: '11111111-1111-1111-1111-111111111103', name: 'Mon/Wed/Fri Stale Lead Cleanup', statecode: 1, owner: 'CRM Ops', ismanaged: false, solutions: [{ id: 'sol-sales', name: 'Contoso Sales Core' }], description: 'Archives untouched leads older than 90 days.', recurrence: { frequency: 'Week', interval: 1, timeZone: 'Eastern Standard Time', schedule: { weekDays: ['Monday', 'Wednesday', 'Friday'], hours: [2], minutes: [30] } } },
+        { id: '11111111-1111-1111-1111-111111111104', name: 'Monthly Billing Rollup (1st Monday)', statecode: 1, owner: 'Finance Bot', ismanaged: true, solutions: [{ id: 'sol-fin', name: 'Finance Automation' }], description: 'Generates monthly invoice batch.', recurrence: { frequency: 'Month', interval: 1, timeZone: 'Pacific Standard Time', schedule: { monthlyOccurrences: [{ day: 'Monday', occurrence: 1 }], hours: [6], minutes: [0] } } },
+        { id: '11111111-1111-1111-1111-111111111105', name: 'Hourly Sandbox Data Anonymizer', statecode: 0, owner: 'Ashish V.', ismanaged: false, solutions: [{ id: 'sol-ops', name: 'DevOps Utilities' }], description: 'Turned off in production.', recurrence: { frequency: 'Hour', interval: 2, timeZone: 'UTC', schedule: { minutes: [15] } } }
       ];
       flows = sampleDefs.map(s => {
         const timing = formatRecurrenceTiming(s.recurrence);
         return {
           ...s,
+          solutionNames: s.solutions.map(x => x.name).join(', '),
           stateText: stateInfo(s.statecode).label,
           triggerName: 'Recurrence',
           modifiedon: new Date().toISOString(),
@@ -332,9 +745,26 @@
           endTime: timing.endTime
         };
       });
+      populateSolutionFilter();
       populateTzFilter();
-      renderTable();
+      renderActiveView();
       DV.notify(`Loaded ${flows.length} sample scheduled flows.`, 'info');
+    }
+
+    function populateSolutionFilter() {
+      const sel = document.getElementById('f-solution');
+      const prev = sel.value;
+      const solMap = new Map();
+      let hasUnassigned = false;
+      for (const f of flows) {
+        if (!f.solutions?.length) { hasUnassigned = true; continue; }
+        for (const s of f.solutions) solMap.set(s.id, s.name);
+      }
+      const sorted = [...solMap.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+      sel.innerHTML = '<option value="ALL">All Solutions</option>' +
+        sorted.map(([id, name]) => `<option value="${DV.esc(id)}">${DV.esc(name)}</option>`).join('') +
+        (hasUnassigned ? '<option value="UNASSIGNED">(No Visible Solution)</option>' : '');
+      if (prev === 'UNASSIGNED' || solMap.has(prev)) sel.value = prev;
     }
 
     function populateTzFilter() {
@@ -348,27 +778,39 @@
 
     function getFiltered() {
       const q = document.getElementById('f-search').value.trim().toLowerCase();
+      const sol = document.getElementById('f-solution').value;
       const st = document.getElementById('f-state').value;
       const fr = document.getElementById('f-freq').value;
       const tz = document.getElementById('f-tz').value;
 
       return flows.filter(f => {
+        if (sol === 'UNASSIGNED' && f.solutions?.length) return false;
+        if (sol !== 'ALL' && sol !== 'UNASSIGNED' && !f.solutions?.some(s => s.id === sol)) return false;
         if (st !== 'ALL' && String(f.statecode) !== st) return false;
         if (fr !== 'ALL' && f.frequency !== fr) return false;
         if (tz !== 'ALL' && f.timeZone !== tz) return false;
         if (!q) return true;
-        return `${f.name} ${f.summary} ${f.details} ${f.timeZone} ${f.owner} ${f.description}`.toLowerCase().includes(q);
+        return `${f.name} ${f.solutionNames} ${f.summary} ${f.details} ${f.timeZone} ${f.owner} ${f.description}`.toLowerCase().includes(q);
       });
     }
 
-    function renderTable() {
+    function updateSummaryCounters() {
       document.getElementById('st-total').textContent = flows.length;
       document.getElementById('st-on').textContent = flows.filter(f => f.statecode === 1).length;
       document.getElementById('st-off').textContent = flows.filter(f => f.statecode !== 1).length;
       document.getElementById('st-high').textContent = flows.filter(f => f.frequency === 'Minute' || f.frequency === 'Second').length;
       document.getElementById('st-all').textContent = totalScanned;
       DV.setTitle(`Scheduled Flows (${flows.length})`);
+    }
 
+    function renderActiveView() {
+      updateSummaryCounters();
+      if (activeView === 'timeline') renderTimelineView();
+      else renderTable();
+    }
+
+    function renderTable() {
+      const now = new Date();
       const rows = getFiltered();
       const tbody = document.getElementById('sched-tbody');
       if (!rows.length) {
@@ -380,9 +822,14 @@
         const st = stateInfo(f.statecode);
         const fType = freqBadgeType(f.frequency);
         const paUrl = getFlowUrl(f.id);
+        const nextRun = getNextRunForFlow(f, now);
+        const solHtml = f.solutions?.length
+          ? f.solutions.map(s => `<span class="sol-chip">${DV.esc(s.name)}</span>`).join('')
+          : '';
         return `<tr class="row-click" data-idx="${idx}">
           <td>
             <div class="sched-main">${DV.esc(f.name)}</div>
+            <div>${solHtml}</div>
             <div class="sched-sub">${f.ismanaged ? 'Managed' : 'Unmanaged'}${f.description ? ` · ${DV.esc(f.description.slice(0, 60))}` : ''}</div>
           </td>
           <td>${DV.ui.badge(st.label, st.type)}</td>
@@ -391,8 +838,13 @@
             <div class="sched-main">${DV.esc(f.summary)}</div>
             ${f.details ? `<div class="sched-sub">${DV.esc(f.details)}</div>` : ''}
           </td>
+          <td>
+            ${nextRun
+              ? `<div style="font-family:monospace;font-size:11px;">${DV.esc(nextRun.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} ${DV.esc(nextRun.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }))}</div>
+                 <div class="tl-countdown">${DV.esc(formatCountdown(nextRun.getTime() - now.getTime()))}</div>`
+              : '<span style="color:var(--text-sec);">—</span>'}
+          </td>
           <td><span class="tz-chip">${DV.esc(f.timeZone)}</span></td>
-          <td style="font-family:monospace;font-size:11px;">${DV.esc(formatStartTime(f.startTime))}</td>
           <td>${DV.esc(f.owner)}</td>
           <td style="text-align:center;white-space:nowrap;">
             <a href="${DV.esc(paUrl)}" target="_blank" rel="noopener noreferrer" class="dv-btn dv-btn-sm" title="Open in Power Automate" onclick="event.stopPropagation();" style="text-decoration:none;">🚀↗</a>
@@ -408,12 +860,148 @@
       });
     }
 
+    function renderTimelineView() {
+      const hours = Number(document.getElementById('tl-horizon').value) || 24;
+      const onlyOn = document.getElementById('tl-only-on').checked;
+      const now = new Date();
+      const end = new Date(now.getTime() + hours * 3600000);
+      const spanMs = end.getTime() - now.getTime();
+
+      let list = getFiltered();
+      if (onlyOn) list = list.filter(f => f.statecode === 1);
+
+      const flowProjections = list.map(f => {
+        const runs = computeUpcomingRuns(f, now, end, 48);
+        const nextRun = runs[0] || getNextRunForFlow(f, now);
+        return { flow: f, runs, nextRun };
+      }).sort((a, b) => {
+        const ta = a.nextRun ? a.nextRun.getTime() : Number.MAX_SAFE_INTEGER;
+        const tb = b.nextRun ? b.nextRun.getTime() : Number.MAX_SAFE_INTEGER;
+        return ta - tb;
+      });
+
+      // Chronological sequence occurrences across all flows
+      const allSeq = [];
+      const slotBuckets = new Map();
+      for (const item of flowProjections) {
+        const occ = computeUpcomingRuns(item.flow, now, end, 60);
+        for (const runDate of occ) {
+          allSeq.push({ flow: item.flow, runDate });
+          const minKey = Math.floor(runDate.getTime() / 60000);
+          slotBuckets.set(minKey, (slotBuckets.get(minKey) || 0) + 1);
+        }
+      }
+      allSeq.sort((a, b) => a.runDate - b.runDate || a.flow.name.localeCompare(b.flow.name));
+
+      const collisionSlots = [...slotBuckets.values()].filter(cnt => cnt >= 2).length;
+      document.getElementById('tl-summary').innerHTML =
+        `<strong>${flowProjections.length}</strong> flow${flowProjections.length === 1 ? '' : 's'} · <strong>${allSeq.length}</strong> scheduled run${allSeq.length === 1 ? '' : 's'} in window` +
+        (collisionSlots ? ` · <span style="color:var(--warn-color);font-weight:600;">⚡ ${collisionSlots} overlapping minute slot${collisionSlots === 1 ? '' : 's'}</span>` : '');
+
+      // Swimlane chart
+      const swimEl = document.getElementById('tl-swimlanes');
+      if (!flowProjections.length) {
+        swimEl.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-sec);">No scheduled flows match current filters.</div>';
+      } else {
+        const ticks = [0, 0.25, 0.5, 0.75, 1];
+        const tickHtml = ticks.map(pct => {
+          const t = new Date(now.getTime() + pct * spanMs);
+          const lbl = pct === 0 ? 'Now' : hours <= 24
+            ? t.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
+            : t.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', hour12: false });
+          return `<span class="tl-tick" style="left:${pct * 100}%">${DV.esc(lbl)}</span>`;
+        }).join('');
+        const gridHtml = ticks.slice(1, -1).map(pct => `<span class="tl-gridline" style="left:${pct * 100}%"></span>`).join('');
+
+        swimEl.innerHTML = `
+          <div class="tl-axis-row">
+            <div class="tl-axis-label">Flow (Soonest Next Run First)</div>
+            <div class="tl-axis-ticks">${tickHtml}</div>
+          </div>
+          ${flowProjections.map((p, idx) => {
+            const f = p.flow;
+            const dots = p.runs.map(d => {
+              const pct = Math.max(0.5, Math.min(99.5, ((d.getTime() - now.getTime()) / spanMs) * 100));
+              const cls = f.statecode !== 1 ? 'tl-dot off' : (f.frequency === 'Minute' || f.frequency === 'Second' ? 'tl-dot high' : 'tl-dot');
+              return `<span class="${cls}" style="left:${pct.toFixed(2)}%" title="${DV.esc(f.name)} · ${DV.esc(d.toLocaleString())} (${DV.esc(formatCountdown(d.getTime() - now.getTime()))})"></span>`;
+            }).join('');
+            const solLabel = f.solutions?.length ? ` · ${f.solutions[0].name}` : '';
+            const nextTxt = p.nextRun ? `Next ${formatCountdown(p.nextRun.getTime() - now.getTime())}` : 'No upcoming run';
+            return `<div class="tl-lane" data-pidx="${idx}">
+              <div class="tl-lane-meta">
+                <div class="tl-lane-name" title="${DV.esc(f.name)}">${f.statecode !== 1 ? '⏸️ ' : '⚡ '}${DV.esc(f.name)}</div>
+                <div class="tl-lane-sub">${DV.esc(nextTxt)} · ${DV.esc(f.summary)}${DV.esc(solLabel)}</div>
+              </div>
+              <div class="tl-track">${gridHtml}${dots}</div>
+            </div>`;
+          }).join('')}
+        `;
+
+        swimEl.querySelectorAll('.tl-lane').forEach(el => {
+          el.addEventListener('click', () => {
+            const p = flowProjections[Number(el.dataset.pidx)];
+            if (p) openDetailModal(p.flow);
+          });
+        });
+      }
+
+      // Chronological sequence table
+      const maxSeq = 250;
+      const shown = allSeq.slice(0, maxSeq);
+      document.getElementById('tl-seq-count').textContent = allSeq.length > maxSeq
+        ? `Showing first ${maxSeq} of ${allSeq.length} runs`
+        : `${allSeq.length} runs in order`;
+
+      const seqBody = document.getElementById('tl-seq-tbody');
+      if (!shown.length) {
+        seqBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-sec);">No runs projected inside this horizon (try increasing window to Next 7 Days or 30 Days).</td></tr>';
+        return;
+      }
+
+      seqBody.innerHTML = shown.map((s, idx) => {
+        const f = s.flow;
+        const st = stateInfo(f.statecode);
+        const minKey = Math.floor(s.runDate.getTime() / 60000);
+        const colCount = slotBuckets.get(minKey) || 1;
+        const solHtml = f.solutions?.length
+          ? f.solutions.map(x => `<span class="sol-chip">${DV.esc(x.name)}</span>`).join('')
+          : '';
+        return `<tr class="row-click" data-sidx="${idx}">
+          <td><span class="tl-seq-badge">#${idx + 1}</span></td>
+          <td style="font-family:monospace;font-size:11.5px;">
+            ${DV.esc(s.runDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }))}
+            <strong>${DV.esc(s.runDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }))}</strong>
+            ${colCount > 1 ? `<span title="${colCount} flows share this minute slot" style="color:var(--warn-color);">⚡×${colCount}</span>` : ''}
+          </td>
+          <td><span class="tl-countdown">${DV.esc(formatCountdown(s.runDate.getTime() - now.getTime()))}</span></td>
+          <td>
+            <div class="sched-main">${DV.esc(f.name)}</div>
+            <div>${solHtml}</div>
+          </td>
+          <td>${DV.ui.badge(st.label, st.type)}</td>
+          <td>${DV.esc(f.summary)}</td>
+          <td><span class="tz-chip">${DV.esc(f.timeZone)}</span></td>
+        </tr>`;
+      }).join('');
+
+      seqBody.querySelectorAll('tr.row-click').forEach(tr => {
+        tr.addEventListener('click', () => {
+          const item = shown[Number(tr.dataset.sidx)];
+          if (item) openDetailModal(item.flow);
+        });
+      });
+    }
+
     function openDetailModal(f) {
+      const sols = f.solutions?.length ? f.solutions.map(s => s.name).join(', ') : 'None / Default';
+      const nextRun = getNextRunForFlow(f);
       document.getElementById('md-title').textContent = `⏰ ${f.name}`;
       document.getElementById('md-meta').innerHTML = `
         <strong>State:</strong> ${DV.esc(f.stateText)} &nbsp;|&nbsp;
+        <strong>Solutions:</strong> ${DV.esc(sols)}<br>
         <strong>Timing:</strong> ${DV.esc(f.summary)} &nbsp;|&nbsp;
-        <strong>Time Zone:</strong> <code>${DV.esc(f.timeZone)}</code><br>
+        <strong>Time Zone:</strong> <code>${DV.esc(f.timeZone)}</code> &nbsp;|&nbsp;
+        <strong>Next Est.:</strong> ${nextRun ? `${DV.esc(nextRun.toLocaleString())} (${DV.esc(formatCountdown(nextRun.getTime() - Date.now()))})` : '—'}<br>
         <strong>Trigger:</strong> <code>${DV.esc(f.triggerName)}</code> &nbsp;|&nbsp;
         <strong>Start:</strong> <code>${DV.esc(f.startTime || 'Not set')}</code>${f.endTime ? ` &nbsp;|&nbsp; <strong>End:</strong> <code>${DV.esc(f.endTime)}</code>` : ''}
       `;
@@ -433,8 +1021,22 @@
       if (e.target === document.getElementById('detail-modal')) document.getElementById('detail-modal').classList.remove('open');
     });
 
-    ['f-search', 'f-state', 'f-freq', 'f-tz'].forEach(id => {
-      document.getElementById(id).addEventListener(id === 'f-search' ? 'input' : 'change', renderTable);
+    function setActiveView(view) {
+      activeView = view;
+      document.getElementById('view-table-btn').classList.toggle('active', view === 'table');
+      document.getElementById('view-tl-btn').classList.toggle('active', view === 'timeline');
+      document.getElementById('table-view').style.display = view === 'table' ? 'block' : 'none';
+      document.getElementById('timeline-view').style.display = view === 'timeline' ? 'flex' : 'none';
+      renderActiveView();
+    }
+
+    document.getElementById('view-table-btn').addEventListener('click', () => setActiveView('table'));
+    document.getElementById('view-tl-btn').addEventListener('click', () => setActiveView('timeline'));
+    document.getElementById('tl-horizon').addEventListener('change', renderActiveView);
+    document.getElementById('tl-only-on').addEventListener('change', renderActiveView);
+
+    ['f-search', 'f-solution', 'f-state', 'f-freq', 'f-tz'].forEach(id => {
+      document.getElementById(id).addEventListener(id === 'f-search' ? 'input' : 'change', renderActiveView);
     });
     document.getElementById('btn-refresh').addEventListener('click', () => {
       if (context) loadScheduledFlows();
@@ -445,8 +1047,11 @@
       const rows = getFiltered();
       DV.exportCsv(
         `scheduled_cloud_flows_${new Date().toISOString().slice(0, 10)}.csv`,
-        ['Name', 'State', 'Frequency', 'Interval', 'RecurrenceTiming', 'ScheduleDetails', 'TimeZone', 'StartTime', 'Owner', 'Managed', 'FlowId'],
-        rows.map(f => [f.name, f.stateText, f.frequency, f.interval, f.summary, f.details, f.timeZone, f.startTime, f.owner, f.ismanaged ? 'Yes' : 'No', f.id])
+        ['Name', 'Solutions', 'State', 'Frequency', 'Interval', 'RecurrenceTiming', 'ScheduleDetails', 'NextEstimatedRun', 'TimeZone', 'StartTime', 'Owner', 'Managed', 'FlowId'],
+        rows.map(f => {
+          const nr = getNextRunForFlow(f);
+          return [f.name, f.solutionNames, f.stateText, f.frequency, f.interval, f.summary, f.details, nr ? nr.toISOString() : '', f.timeZone, f.startTime, f.owner, f.ismanaged ? 'Yes' : 'No', f.id];
+        })
       );
     });
   </script>

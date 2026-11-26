@@ -125,9 +125,9 @@
     "name": "Scheduled Flows",
     "icon": "⏰",
     "category": "Flow",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "minHostVersion": "2025.11.1",
-    "description": "List all Scheduled Power Automate Cloud Flows with decoded recurrence frequency, interval, days/times schedule, time zone, start time, and state."
+    "description": "List all Scheduled Power Automate Cloud Flows by Solution with decoded recurrence timing, time zone, state, and a chronological Timeline view of upcoming runs."
   },
   {
     "wrName": "dvopentools_erd.html",
