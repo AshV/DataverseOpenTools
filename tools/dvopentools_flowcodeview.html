@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow CodeView Reader</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "flow-codeview",
+    "name":           "Flow CodeView Reader",
+    "version":        "1.0.0",
+    "description":    "Decode Cloud Flow clientdata or Peek-Code JSON into a readable action tree by resolving OptionSet integer codes to labels and GUIDs to actual Dataverse record names.",
+    "icon":           "🧬",
+    "category":       "Flow",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+
+  <style>
+    .cv-split {
+      display: grid; grid-template-columns: 380px 1fr; gap: 0;
+      flex: 1; min-height: 0; overflow: hidden;
+    }
+    .cv-left {
+      border-right: 1px solid var(--border); display: flex; flex-direction: column;
+      background: var(--bg-card); min-height: 0;
+    }
+    .cv-right {
+      display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+      background: var(--bg);
+    }
+    .cv-panel-head {
+      padding: 8px 12px; background: var(--bg-header); border-bottom: 1px solid var(--border);
+      font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .cv-textarea {
+      flex: 1; width: 100%; border: none; resize: none; padding: 10px 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px;
+      line-height: 1.45; background: var(--bg); color: var(--text); outline: none;
+    }
+    .cv-tabs { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .cv-tab {
+      border: none; background: var(--bg-header); color: var(--text-sec);
+      padding: 4px 10px; font-size: 11.5px; font-weight: 600; cursor: pointer;
+    }
+    .cv-tab + .cv-tab { border-left: 1px solid var(--border); }
+    .cv-tab.active { background: var(--accent, #0078d4); color: #fff; }
+
+    .cv-body { flex: 1; overflow: auto; padding: 14px; }
+
+    /* Decoded Action Nodes */
+    .node-card {
+      border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card);
+      margin-bottom: 10px; overflow: hidden;
+    }
+    .node-card.trigger { border-left: 4px solid #0078d4; }
+    .node-card.control { border-left: 4px solid #7c3aed; }
+    .node-card.action  { border-left: 4px solid #0f766e; }
+    .node-head {
+      padding: 8px 12px; background: var(--bg-header); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+      cursor: pointer;
+    }
+    .node-title { font-weight: 700; font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+    .node-meta { font-size: 11px; color: var(--text-sec); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .node-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+    .node-children { margin-top: 6px; padding-left: 14px; border-left: 2px dashed var(--border); }
+    .branch-label {
+      font-size: 11px; font-weight: 700; color: var(--text-sec); margin: 6px 0 4px;
+      text-transform: uppercase; letter-spacing: 0.03em;
+    }
+
+    .kv-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+    .kv-table td {
+      padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: top;
+    }
+    .kv-table tr:last-child td { border-bottom: none; }
+    .kv-key { width: 220px; font-weight: 600; color: var(--text); }
+    .kv-sub { display: block; font-family: ui-monospace, monospace; font-size: 10px; color: var(--text-sec); font-weight: 400; }
+
+    /* Inline decoded chips */
+    .chip-opt {
+      display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 4px;
+      background: rgba(15, 118, 110, 0.12); color: var(--ok-color, #0f766e);
+      border: 1px solid rgba(15, 118, 110, 0.3); font-weight: 600; font-size: 11px;
+    }
+    .chip-rec {
+      display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 4px;
+      background: rgba(0, 120, 212, 0.1); color: var(--accent, #0078d4);
+      border: 1px solid rgba(0, 120, 212, 0.3); font-weight: 600; font-size: 11px;
+      text-decoration: none; cursor: pointer;
+    }
+    .chip-rec:hover { text-decoration: underline; }
+    .chip-expr {
+      display: inline-block; font-family: ui-monospace, monospace; font-size: 11px;
+      padding: 2px 6px; border-radius: 4px; background: var(--bg-header); border: 1px solid var(--border);
+      word-break: break-word;
+    }
+    .chip-err {
+      display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 4px;
+      background: rgba(209, 52, 56, 0.1); color: var(--err-color, #d13438);
+      border: 1px solid rgba(209, 52, 56, 0.25); font-size: 10.5px; font-weight: 600;
+    }
+    .annot-pre {
+      margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 12px;
+    }
+    .annot-cmt { color: #0f766e; font-weight: 600; }
+    @media (max-width: 900px) {
+      .cv-split { grid-template-columns: 1fr; grid-template-rows: 260px 1fr; }
+      .cv-left { border-right: none; border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <strong>🧬 Flow CodeView Reader</strong>
+    <select id="flow-select" style="min-width:220px;max-width:290px;">
+      <option value="">Load Cloud Flow from Dataverse…</option>
+    </select>
+    <select id="default-entity" style="max-width:200px;" title="Optional fallback table when pasting single-action Peek Code JSON without entityName">
+      <option value="">Auto-detect Table</option>
+    </select>
+    <button class="dv-btn dv-btn-primary" id="btn-decode">🧬 Decode &amp; Resolve</button>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-sample" title="Load sample Cloud Flow CodeView JSON">🧪 Sample</button>
+    <button class="dv-btn" id="btn-copy-md">📋 Copy Markdown</button>
+  </div>
+
+  <div class="dv-strip">
+    <span>Steps Decoded: <strong id="st-steps">0</strong></span>
+    <span>OptionSets Resolved: <strong id="st-opts" style="color:var(--ok-color)">0</strong></span>
+    <span>GUIDs → Records: <strong id="st-recs" style="color:var(--accent,#0078d4)">0</strong></span>
+    <span>Tables Touched: <strong id="st-tables">0</strong></span>
+    <div class="dv-spacer"></div>
+    <div class="cv-tabs" role="tablist">
+      <button type="button" class="cv-tab active" data-tab="tree">🪜 Decoded Flow Tree</button>
+      <button type="button" class="cv-tab" data-tab="annotated">📝 Annotated JSON</button>
+      <button type="button" class="cv-tab" data-tab="tokens">🔍 Resolved Tokens (<span id="tok-count">0</span>)</button>
+    </div>
+  </div>
+
+  <div class="cv-split">
+    <section class="cv-left">
+      <div class="cv-panel-head">
+        <span>CodeView JSON (Flow <code>clientdata</code> or Peek Code)</span>
+        <button class="dv-btn dv-btn-sm" id="btn-format">✨ Format</button>
+      </div>
+      <textarea id="json-input" class="cv-textarea" placeholder='Paste Power Automate CodeView / Peek Code JSON here, or pick a Cloud Flow above…'></textarea>
+    </section>
+
+    <section class="cv-right">
+      <div class="cv-body" id="tab-tree">
+        <div class="dv-empty">Select a Cloud Flow above, paste CodeView / Peek-Code JSON on the left, or click <strong>🧪 Sample</strong> to preview.</div>
+      </div>
+      <div class="cv-body" id="tab-annotated" style="display:none;"></div>
+      <div class="cv-body" id="tab-tokens" style="display:none;"></div>
+    </section>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Flow CodeView Reader · OptionSet &amp; Record Resolver</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let context = null;
+    let isSampleMode = false;
+
+    // Metadata & resolution caches
+    let entitiesByLogical = new Map(); // logicalName -> { logicalName, entitySetName, displayName, primaryId, primaryName }
+    let entitiesBySet     = new Map(); // entitySetName -> entity
+    const attrMetaCache   = new Map(); // logicalName -> Map(attrLogical -> { displayName, type, options: Map(intStr -> label), targets: [] })
+    const recordCache     = new Map(); // `${logicalName}:${guid}` -> { name, url, entity, guid }
+    const flowsNameCache  = new Map(); // workflowid -> name
+
+    let lastDecodedResult = null;
+    let activeTab = 'tree';
+
+    const DV_TRIGGER_MESSAGES = {
+      1: 'Added (Create)', 2: 'Deleted', 3: 'Modified (Update)',
+      4: 'Added or Modified', 5: 'Added or Deleted', 6: 'Modified or Deleted', 7: 'Added, Modified, or Deleted'
+    };
+    const DV_TRIGGER_SCOPES = {
+      1: 'User', 2: 'Business Unit', 3: 'Parent: Child Business Units', 4: 'Organization'
+    };
+
+    const GUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+    const GUID_GLOBAL_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+    const ODATA_BIND_RE = /^\/?([a-z0-9_]+)\(([0-9a-f-]{36})\)$/i;
+
+    function toHost(type, payload = {}) {
+      window.parent?.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
+    }
+
+    toHost('TOOL_READY');
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') {
+        context = e.data.payload;
+        initMetadataAndFlows();
+      }
+      if (e.data.type === 'TOOL_LAUNCH' && e.data.payload?.flowId) {
+        selectAndLoadFlow(e.data.payload.flowId);
+      }
+    });
+
+    /* ─── Dataverse Metadata & Record Helpers ───────────────── */
+    async function fetchAllPages(path) {
+      const all = [];
+      let next = path;
+      while (next && all.length < 3000) {
+        const res = await DV.fetch(next);
+        all.push(...(res.value || []));
+        next = res['@odata.nextLink'] || '';
+      }
+      return all;
+    }
+
+    function getDataverseAppUrl() {
+      if (context?.dataverseUrl && /^https?:\/\//i.test(context.dataverseUrl)) {
+        return context.dataverseUrl.replace(/\/+$/, '');
+      }
+      const env = context?.environmentUrl || '';
+      if (/^https:\/\/[a-z0-9.-]+\.(dynamics\.com|dynamics\.cn|microsoftdynamics\.de|microsoftdynamics\.us|appsplatform\.us)$/i.test(env)) {
+        return env.replace(/\/+$/, '');
+      }
+      return '';
+    }
+
+    function buildRecordUrl(logicalName, guid) {
+      const base = getDataverseAppUrl();
+      if (!base || !logicalName || !guid) return '';
+      return `${base}/main.aspx?etn=${encodeURIComponent(logicalName)}&pagetype=entityrecord&id=${encodeURIComponent(guid)}`;
+    }
+
+    async function initMetadataAndFlows() {
+      try {
+        const [entRes, flowRes] = await Promise.all([
+          DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName,DisplayName,PrimaryIdAttribute,PrimaryNameAttribute&$filter=IsIntersect eq false'),
+          fetchAllPages('/workflows?$select=workflowid,name,statecode&$filter=category eq 5 and type eq 1&$orderby=name asc')
+        ]);
+
+        entitiesByLogical = new Map();
+        entitiesBySet = new Map();
+        for (const e of (entRes.value || [])) {
+          if (!e.LogicalName) continue;
+          const info = {
+            logicalName: e.LogicalName,
+            entitySetName: (e.EntitySetName || '').toLowerCase(),
+            displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+            primaryId: e.PrimaryIdAttribute || '',
+            primaryName: e.PrimaryNameAttribute || ''
+          };
+          entitiesByLogical.set(info.logicalName.toLowerCase(), info);
+          if (info.entitySetName) entitiesBySet.set(info.entitySetName, info);
+        }
+
+        const defSel = document.getElementById('default-entity');
+        defSel.innerHTML = '<option value="">Auto-detect Table</option>' +
+          [...entitiesByLogical.values()]
+            .sort((a, b) => a.displayName.localeCompare(b.displayName))
+            .map(e => `<option value="${DV.esc(e.logicalName)}">${DV.esc(e.displayName)} (${DV.esc(e.logicalName)})</option>`)
+            .join('');
+
+        const fSel = document.getElementById('flow-select');
+        flowsNameCache.clear();
+        flowRes.forEach(f => flowsNameCache.set(String(f.workflowid).toLowerCase(), f.name || f.workflowid));
+        fSel.innerHTML = '<option value="">Load Cloud Flow from Dataverse…</option>' +
+          flowRes.map(f => `<option value="${DV.esc(f.workflowid)}">${f.statecode === 1 ? '⚡' : '⏸️'} ${DV.esc(f.name || f.workflowid)}</option>`).join('');
+
+        DV.notify(`Loaded ${entitiesByLogical.size} tables & ${flowRes.length} Cloud Flows.`, 'success');
+      } catch (err) {
+        DV.notify(`Init warning: ${err.message}`, 'warning');
+      }
+    }
+
+    async function selectAndLoadFlow(flowId) {
+      const sel = document.getElementById('flow-select');
+      if (sel) sel.value = flowId;
+      try {
+        const res = await DV.fetch(`/workflows(${flowId})?$select=workflowid,name,clientdata`);
+        if (!res?.clientdata) { DV.notify('Selected flow has empty clientdata.', 'warning'); return; }
+        let formatted = res.clientdata;
+        try { formatted = JSON.stringify(JSON.parse(res.clientdata), null, 2); } catch {}
+        document.getElementById('json-input').value = formatted;
+        isSampleMode = false;
+        await decodeAndRender();
+      } catch (err) {
+        DV.notify(err.message, 'error');
+      }
+    }
+
+    async function loadEntityAttributeMeta(logicalName) {
+      const ln = (logicalName || '').toLowerCase();
+      if (!ln) return null;
+      if (attrMetaCache.has(ln)) return attrMetaCache.get(ln);
+      if (!context || isSampleMode) return attrMetaCache.get(ln) || null;
+
+      const attrMap = new Map();
+      const encLn = encodeURIComponent(ln);
+      const addOptions = (items, opts) => {
+        for (const o of (opts || [])) {
+          if (o?.Value !== undefined && o?.Value !== null) {
+            const lbl = o.Label?.UserLocalizedLabel?.Label || o.Label?.LocalizedLabels?.[0]?.Label || String(o.Value);
+            items.set(String(o.Value), lbl);
+          }
+        }
+      };
+
+      try {
+        const [baseAttrs, picklists, states, statuses, multiPick, bools, lookups] = await Promise.all([
+          DV.fetch(`/EntityDefinitions(LogicalName='${encLn}')/Attributes?$select=LogicalName,DisplayName,AttributeType`).catch(() => ({ value: [] })),
+          DV.fetch(`/EntityDefinitions(LogicalName='${encLn}')/Attributes/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$select=LogicalName,DisplayName&$expand=OptionSet($select=Options)`).catch(() => ({ value: [] })),
+          DV.fetch(`/EntityDefinitions(LogicalName='${encLn}')/Attributes/Microsoft.Dynamics.CRM.StateAttributeMetadata?$select=LogicalName,DisplayName&$expand=OptionSet($select=Options)`).catch(() => ({ value: [] })),
+          DV.fetch(`/EntityDefinitions(LogicalName='${encLn}')/Attributes/Microsoft.Dynamics.CRM.StatusAttributeMetadata?$select=LogicalName,DisplayName&$expand=OptionSet($select=Options)`).catch(() => ({ value: [] })),
+          DV.fetch(`/EntityDefinitions(LogicalName='${encLn}')/Attributes/Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata?$select=LogicalName,DisplayName&$expand=OptionSet($select=Options)`).catch(() => ({ value: [] })),
+          DV.fetch(`/EntityDefinitions(LogicalName='${encLn}')/Attributes/Microsoft.Dynamics.CRM.BooleanAttributeMetadata?$select=LogicalName,DisplayName&$expand=OptionSet($select=TrueOption,FalseOption)`).catch(() => ({ value: [] })),
+          DV.fetch(`/EntityDefinitions(LogicalName='${encLn}')/Attributes/Microsoft.Dynamics.CRM.LookupAttributeMetadata?$select=LogicalName,DisplayName,Targets`).catch(() => ({ value: [] }))
+        ]);
+
+        for (const a of (baseAttrs.value || [])) {
+          attrMap.set(a.LogicalName.toLowerCase(), {
+            logicalName: a.LogicalName,
+            displayName: a.DisplayName?.UserLocalizedLabel?.Label || a.LogicalName,
+            type: a.AttributeType || '',
+            options: new Map(),
+            targets: []
+          });
+        }
+        for (const list of [picklists.value, states.value, statuses.value, multiPick.value]) {
+          for (const a of (list || [])) {
+            const entry = attrMap.get(a.LogicalName.toLowerCase()) || {
+              logicalName: a.LogicalName, displayName: a.DisplayName?.UserLocalizedLabel?.Label || a.LogicalName,
+              type: 'OptionSet', options: new Map(), targets: []
+            };
+            addOptions(entry.options, a.OptionSet?.Options);
+            attrMap.set(a.LogicalName.toLowerCase(), entry);
+          }
+        }
+        for (const b of (bools.value || [])) {
+          const entry = attrMap.get(b.LogicalName.toLowerCase()) || {
+            logicalName: b.LogicalName, displayName: b.DisplayName?.UserLocalizedLabel?.Label || b.LogicalName,
+            type: 'Boolean', options: new Map(), targets: []
+          };
+          const tLbl = b.OptionSet?.TrueOption?.Label?.UserLocalizedLabel?.Label;
+          const fLbl = b.OptionSet?.FalseOption?.Label?.UserLocalizedLabel?.Label;
+          if (tLbl) entry.options.set('true', tLbl), entry.options.set('1', tLbl);
+          if (fLbl) entry.options.set('false', fLbl), entry.options.set('0', fLbl);
+          attrMap.set(b.LogicalName.toLowerCase(), entry);
+        }
+        for (const l of (lookups.value || [])) {
+          const entry = attrMap.get(l.LogicalName.toLowerCase()) || {
+            logicalName: l.LogicalName, displayName: l.DisplayName?.UserLocalizedLabel?.Label || l.LogicalName,
+            type: 'Lookup', options: new Map(), targets: []
+          };
+          entry.targets = Array.isArray(l.Targets) ? l.Targets : [];
+          attrMap.set(l.LogicalName.toLowerCase(), entry);
+        }
+      } catch {}
+
+      attrMetaCache.set(ln, attrMap);
+      return attrMap;
+    }
+
+    async function resolveRecordDisplay(logicalName, guid) {
+      const ln = (logicalName || '').toLowerCase();
+      const id = String(guid || '').replace(/[{}]/g, '').toLowerCase();
+      if (!ln || !id || !GUID_RE.test(id)) return null;
+      const key = `${ln}:${id}`;
+      if (recordCache.has(key)) return recordCache.get(key);
+
+      if (ln === 'workflow' && flowsNameCache.has(id)) {
+        const out = { name: flowsNameCache.get(id), entity: ln, guid: id, url: buildRecordUrl(ln, id) };
+        recordCache.set(key, out);
+        return out;
+      }
+
+      if (!context || isSampleMode) return null;
+      const ent = entitiesByLogical.get(ln);
+      if (!ent || !ent.entitySetName) return null;
+
+      try {
+        const cols = [ent.primaryId, ent.primaryName].filter(Boolean).join(',');
+        const rec = await DV.fetch(`/${ent.entitySetName}(${id})${cols ? `?$select=${cols}` : ''}`);
+        const name = (ent.primaryName && rec[ent.primaryName]) ? String(rec[ent.primaryName]) : id;
+        const out = { name, entity: ent.logicalName, entityDisplay: ent.displayName, guid: id, url: buildRecordUrl(ent.logicalName, id) };
+        recordCache.set(key, out);
+        return out;
+      } catch {
+        const miss = { name: null, entity: ent.logicalName, entityDisplay: ent.displayName, guid: id, url: buildRecordUrl(ent.logicalName, id), error: 'Not found / no access' };
+        recordCache.set(key, miss);
+        return miss;
+      }
+    }
+
+    /* ─── CodeView AST & Structure Normalization ─────────────── */
+    function parseCodeViewRoot(rawObj) {
+      if (!rawObj || typeof rawObj !== 'object') throw new Error('Input must be a JSON object.');
+
+      // 1. Full Power Automate workflow clientdata
+      if (rawObj.properties?.definition) {
+        const def = rawObj.properties.definition;
+        return {
+          mode: 'full_flow',
+          triggers: def.triggers || {},
+          actions: def.actions || {},
+          parameters: def.parameters || {},
+          connRefs: rawObj.properties.connectionReferences || {}
+        };
+      }
+      // 2. Logic Apps definition directly
+      if (rawObj.triggers || rawObj.actions) {
+        return {
+          mode: 'definition',
+          triggers: rawObj.triggers || {},
+          actions: rawObj.actions || {},
+          parameters: rawObj.parameters || {},
+          connRefs: {}
+        };
+      }
+      // 3. Single Peek-Code node ({ type, kind, inputs, metadata, ... } or named { "My_Action": { type, ... } })
+      if (rawObj.type && (rawObj.inputs || rawObj.expression || rawObj.actions || rawObj.cases || rawObj.recurrence)) {
+        const name = rawObj.metadata?.operationMetadataId ? 'PeekCode_Node' : (rawObj.kind || rawObj.type || 'Node');
+        const isTrig = /recurrence|webhook|trigger/i.test(String(rawObj.type)) || /webhook|trigger/i.test(String(rawObj.kind || ''));
+        return isTrig
+          ? { mode: 'peek_single', triggers: { [name]: rawObj }, actions: {}, parameters: {}, connRefs: {} }
+          : { mode: 'peek_single', triggers: {}, actions: { [name]: rawObj }, parameters: {}, connRefs: {} };
+      }
+      const keys = Object.keys(rawObj);
+      if (keys.length >= 1 && typeof rawObj[keys[0]] === 'object' && rawObj[keys[0]]?.type) {
+        return { mode: 'peek_map', triggers: {}, actions: rawObj, parameters: {}, connRefs: {} };
+      }
+
+      throw new Error('Unrecognized JSON format. Paste Flow clientdata, Logic Apps definition, or Designer Peek Code JSON.');
+    }
+
+    function normalizeBindKey(rawKey) {
+      // "item/primarycontactid@odata.bind" -> "primarycontactid", "item/new_tier" -> "new_tier"
+      let k = rawKey.replace(/^item\//i, '').replace(/@odata\.bind$/i, '');
+      // Handle Power Automate typed lookup suffix e.g. parentcustomerid_account -> parentcustomerid
+      return k;
+    }
+
+    function inferNodeEntity(node) {
+      const p = node?.inputs?.parameters || {};
+      const bodyEntity = p.entityName || p.tableName || p['subscriptionRequest/entityname'];
+      if (bodyEntity && typeof bodyEntity === 'string') return bodyEntity.toLowerCase();
+      // Check @odata.bind values for entityset hint
+      for (const v of Object.values(p)) {
+        if (typeof v === 'string') {
+          const m = v.match(ODATA_BIND_RE);
+          if (m && entitiesBySet.has(m[1].toLowerCase())) {
+            return entitiesBySet.get(m[1].toLowerCase()).logicalName.toLowerCase();
+          }
+        }
+      }
+      return (document.getElementById('default-entity')?.value || '').toLowerCase();
+    }
+
+    function collectTablesAndTargets(root) {
+      const tables = new Set();
+      const defEnt = (document.getElementById('default-entity')?.value || '').toLowerCase();
+      if (defEnt) tables.add(defEnt);
+
+      const recordRequests = []; // { entity, guid }
+      const actionOutputTables = new Map(); // actionName -> logicalName
+
+      const walkActions = (map) => {
+        if (!map || typeof map !== 'object') return;
+        for (const [name, node] of Object.entries(map)) {
+          if (!node || typeof node !== 'object') continue;
+          const ent = inferNodeEntity(node);
+          if (ent) {
+            tables.add(ent);
+            actionOutputTables.set(name, ent);
+          }
+
+          const p = node.inputs?.parameters || {};
+          // Direct recordId + entityName
+          if (ent && typeof p.recordId === 'string' && GUID_RE.test(p.recordId)) {
+            recordRequests.push({ entity: ent, guid: p.recordId.match(GUID_RE)[0] });
+          }
+          // @odata.bind values
+          for (const val of Object.values(p)) {
+            if (typeof val === 'string') {
+              const bm = val.match(ODATA_BIND_RE);
+              if (bm) {
+                const entInfo = entitiesBySet.get(bm[1].toLowerCase());
+                const ln = entInfo ? entInfo.logicalName : bm[1].toLowerCase();
+                tables.add(ln);
+                recordRequests.push({ entity: ln, guid: bm[2] });
+              }
+            }
+          }
+          // Run a Child Flow
+          const wfId = node.inputs?.host?.workflowReferenceName || p.workflowid;
+          if (typeof wfId === 'string' && GUID_RE.test(wfId)) {
+            tables.add('workflow');
+            recordRequests.push({ entity: 'workflow', guid: wfId.match(GUID_RE)[0] });
+          }
+
+          if (node.actions) walkActions(node.actions);
+          if (node.else?.actions) walkActions(node.else.actions);
+          if (node.cases) {
+            for (const c of Object.values(node.cases)) {
+              if (c?.actions) walkActions(c.actions);
+            }
+          }
+          if (node.default?.actions) walkActions(node.default.actions);
+        }
+      };
+
+      for (const [tName, tr] of Object.entries(root.triggers || {})) {
+        const ent = inferNodeEntity(tr);
+        if (ent) {
+          tables.add(ent);
+          actionOutputTables.set(tName, ent);
+          actionOutputTables.set('__TRIGGER__', ent);
+        }
+      }
+      walkActions(root.actions);
+
+      // Deduplicate record requests
+      const seenRec = new Set();
+      const uniqueRecs = [];
+      for (const r of recordRequests) {
+        const key = `${r.entity}:${r.guid.toLowerCase()}`;
+        if (!seenRec.has(key)) { seenRec.add(key); uniqueRecs.push(r); }
+      }
+
+      return { tables: [...tables], recordRequests: uniqueRecs, actionOutputTables };
+    }
+
+    /* ─── Decoding Helpers (OptionSets, Expressions, OData, GUIDs) ─── */
+    function lookupOptionLabel(attrMap, attrName, rawVal) {
+      if (!attrMap || !attrName) return null;
+      const cleanName = attrName.toLowerCase();
+      const meta = attrMap.get(cleanName);
+      if (!meta || !meta.options || meta.options.size === 0) return null;
+
+      // Support comma-separated MultiSelect Picklist values e.g. "100000001,100000002"
+      const s = String(rawVal).trim();
+      if (s.includes(',')) {
+        const parts = s.split(',').map(x => x.trim());
+        const mapped = parts.map(p => meta.options.get(p)).filter(Boolean);
+        if (mapped.length) return { attrDisplay: meta.displayName, label: mapped.join(' + '), isMulti: true };
+      }
+
+      const lbl = meta.options.get(s);
+      if (!lbl) return null;
+      return { attrDisplay: meta.displayName, label: lbl };
+    }
+
+    function decodeODataFilter(filterStr, entityName, resolvedTokens) {
+      if (!filterStr || typeof filterStr !== 'string') return { raw: filterStr, annotations: [] };
+      const attrMap = attrMetaCache.get((entityName || '').toLowerCase());
+      const annotations = [];
+
+      // Match patterns like `statuscode eq 1` or `new_tier ne 100000002`
+      for (const m of filterStr.matchAll(/\b([a-z0-9_]+)\s+(eq|ne|gt|lt|ge|le)\s+(-?\d+|true|false)\b/gi)) {
+        const col = m[1];
+        const val = m[3];
+        const hit = lookupOptionLabel(attrMap, col, val);
+        if (hit) {
+          const text = `${hit.attrDisplay} (${col}): ${val} → "${hit.label}"`;
+          annotations.push({ type: 'optionset', col, val, label: hit.label, text });
+          resolvedTokens.push({ kind: 'OptionSet', context: `$filter (${entityName})`, raw: `${col} ${m[2]} ${val}`, resolved: hit.label });
+        }
+      }
+
+      // Match GUIDs inside filter (`_accountid_value eq <guid>`)
+      for (const m of filterStr.matchAll(/\b([a-z0-9_]+)\s+(eq|ne)\s+'?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'?/gi)) {
+        const col = m[1].replace(/^_/, '').replace(/_value$/, '');
+        const guid = m[3].toLowerCase();
+        const meta = attrMap?.get(col.toLowerCase());
+        const targetEntity = meta?.targets?.[0] || '';
+        const rec = targetEntity ? recordCache.get(`${targetEntity.toLowerCase()}:${guid}`) : null;
+        if (rec?.name) {
+          annotations.push({ type: 'record', rec, text: `${m[1]}: ${guid} → ${rec.name} (${rec.entity})` });
+          resolvedTokens.push({ kind: 'Record', context: `$filter (${entityName})`, raw: guid, resolved: `${rec.name} (${rec.entity})`, url: rec.url, entity: rec.entity, guid });
+        }
+      }
+
+      return { raw: filterStr, annotations };
+    }
+
+    function decodeExpressionText(exprStr, actionOutputTables, fallbackEntity, resolvedTokens) {
+      if (typeof exprStr !== 'string' || !exprStr.includes('@')) return null;
+      const hints = [];
+
+      // Detect @equals(outputs('Step')?['body/statuscode'], 2) or triggerOutputs()?['body/new_type']
+      const eqRe = /(outputs\('([^']+)'\)|triggerOutputs\(\)|triggerBody\(\)|items\('[^']+'\))\??\['(?:body\/)?([a-z0-9_]+)'\]\s*,\s*(-?\d+|true|false|'[0-9a-f-]{36}')/gi;
+      for (const m of exprStr.matchAll(eqRe)) {
+        const srcStep = m[2];
+        const col = m[3];
+        const val = m[4].replace(/^'|'$/g, '');
+        const ent = (srcStep ? actionOutputTables.get(srcStep) : actionOutputTables.get('__TRIGGER__')) || fallbackEntity;
+        const attrMap = ent ? attrMetaCache.get(ent) : null;
+        const hit = lookupOptionLabel(attrMap, col, val);
+        if (hit) {
+          hints.push({ kind: 'optionset', text: `${hit.attrDisplay} (${col}): ${val} → "${hit.label}"` });
+          resolvedTokens.push({ kind: 'OptionSet', context: `Expression (${ent || 'auto'})`, raw: `${col} = ${val}`, resolved: hit.label });
+        }
+      }
+
+      return hints;
+    }
+
+    function orderActionsTopological(actionsMap) {
+      const entries = Object.entries(actionsMap || {});
+      const done = new Set();
+      const ordered = [];
+      while (ordered.length < entries.length) {
+        let progress = false;
+        for (const [name, node] of entries) {
+          if (done.has(name)) continue;
+          const deps = Object.keys(node?.runAfter || {});
+          if (deps.every(d => done.has(d) || !actionsMap[d])) {
+            ordered.push([name, node]);
+            done.add(name);
+            progress = true;
+          }
+        }
+        if (!progress) {
+          for (const [name, node] of entries) {
+            if (!done.has(name)) ordered.push([name, node]);
+          }
+          break;
+        }
+      }
+      return ordered;
+    }
+
+    /* ─── Main Decode Orchestrator ──────────────────────────── */
+    async function decodeAndRender() {
+      const rawText = document.getElementById('json-input').value.trim();
+      if (!rawText) {
+        DV.notify('Paste CodeView JSON or pick a Cloud Flow first.', 'warning');
+        return;
+      }
+
+      let rawObj;
+      try {
+        rawObj = JSON.parse(rawText);
+      } catch (err) {
+        DV.notify(`Invalid JSON: ${err.message}`, 'error');
+        document.getElementById('tab-tree').innerHTML = DV.ui.error(`Invalid JSON: ${err.message}`);
+        return;
+      }
+
+      let root;
+      try {
+        root = parseCodeViewRoot(rawObj);
+      } catch (err) {
+        DV.notify(err.message, 'warning');
+        document.getElementById('tab-tree').innerHTML = DV.ui.error(err.message);
+        return;
+      }
+
+      document.getElementById('tab-tree').innerHTML = DV.ui.empty('Resolving Dataverse OptionSets, Lookup Targets, and Record Names…');
+
+      const { tables, recordRequests, actionOutputTables } = collectTablesAndTargets(root);
+
+      // Step 1: Load Attribute/OptionSet metadata for all referenced tables
+      await Promise.allSettled(tables.map(t => loadEntityAttributeMeta(t)));
+
+      // Step 2: Check for any additional lookup/target entities in $filter GUIDs
+      for (const node of [...Object.values(root.triggers), ...Object.values(root.actions)]) {
+        const ent = inferNodeEntity(node);
+        const p = node?.inputs?.parameters || {};
+        if (ent && typeof p.$filter === 'string') {
+          const attrMap = attrMetaCache.get(ent);
+          for (const m of p.$filter.matchAll(/\b([a-z0-9_]+)\s+(?:eq|ne)\s+'?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'?/gi)) {
+            const col = m[1].replace(/^_/, '').replace(/_value$/, '').toLowerCase();
+            const meta = attrMap?.get(col);
+            const targetEnt = meta?.targets?.[0];
+            if (targetEnt) recordRequests.push({ entity: targetEnt.toLowerCase(), guid: m[2] });
+          }
+        }
+      }
+
+      // Step 3: Resolve all discovered Record GUIDs (capped cleanly at 40 concurrent/unique records)
+      await Promise.allSettled(recordRequests.slice(0, 40).map(r => resolveRecordDisplay(r.entity, r.guid)));
+
+      // Step 4: Build decoded UI tree, annotated JSON, and resolved token list
+      const resolvedTokens = [];
+      let stepsCount = 0;
+
+      const renderValueCell = (rawKey, val, entity, resolvedTokensOut) => {
+        const cleanKey = normalizeBindKey(rawKey);
+        const attrMap = entity ? attrMetaCache.get(entity) : null;
+
+        // 1. OData bind value (/accounts(guid))
+        if (typeof val === 'string') {
+          const bm = val.match(ODATA_BIND_RE);
+          if (bm) {
+            const entInfo = entitiesBySet.get(bm[1].toLowerCase());
+            const ln = entInfo ? entInfo.logicalName : bm[1].toLowerCase();
+            const rec = recordCache.get(`${ln}:${bm[2].toLowerCase()}`);
+            const label = rec?.name || `${ln}(${bm[2]})`;
+            resolvedTokensOut.push({ kind: 'Record', context: `${entity || ln}.${cleanKey}`, raw: val, resolved: `${label} (${ln})`, url: rec?.url, entity: ln, guid: bm[2] });
+            return renderRecordChip(label, ln, bm[2], rec?.url, val);
+          }
+
+          // 2. OData $filter / filterExpression
+          if (cleanKey === '$filter' || cleanKey === 'filterExpression') {
+            const dec = decodeODataFilter(val, entity, resolvedTokensOut);
+            const annHtml = dec.annotations.map(a => `<div style="margin-top:4px;">${a.type === 'optionset' ? `<span class="chip-opt">🏷️ ${DV.esc(a.text)}</span>` : `<span class="chip-rec">📄 ${DV.esc(a.text)}</span>`}</div>`).join('');
+            return `<code class="chip-expr">${DV.esc(val)}</code>${annHtml}`;
+          }
+
+          // 3. Dataverse Expression (@...)
+          if (val.startsWith('@')) {
+            const hints = decodeExpressionText(val, actionOutputTables, entity, resolvedTokensOut) || [];
+            const hintHtml = hints.map(h => `<div style="margin-top:4px;"><span class="chip-opt">🏷️ ${DV.esc(h.text)}</span></div>`).join('');
+            return `<code class="chip-expr">${DV.esc(val)}</code>${hintHtml}`;
+          }
+
+          // 4. Bare GUID matching known recordId or workflowId
+          if (GUID_RE.test(val) && val.trim().length <= 38) {
+            const g = val.trim().replace(/[{}]/g, '').toLowerCase();
+            const rec = (entity && recordCache.get(`${entity}:${g}`)) || recordCache.get(`workflow:${g}`);
+            if (rec) {
+              resolvedTokensOut.push({ kind: 'Record', context: `${entity || 'workflow'}.${cleanKey}`, raw: val, resolved: `${rec.name || g} (${rec.entity})`, url: rec.url, entity: rec.entity, guid: g });
+              return renderRecordChip(rec.name || g, rec.entity, g, rec.url, val);
+            }
+          }
+        }
+
+        // 5. OptionSet / State / Status numeric or boolean value
+        if (typeof val === 'number' || typeof val === 'boolean' || (typeof val === 'string' && /^-?\d+(,\s*-?\d+)*$/.test(val.trim()))) {
+          const hit = lookupOptionLabel(attrMap, cleanKey, val);
+          if (hit) {
+            resolvedTokensOut.push({ kind: 'OptionSet', context: `${entity}.${cleanKey}`, raw: String(val), resolved: hit.label });
+            return `<span class="chip-opt">🏷️ ${DV.esc(hit.label)}</span> <span style="font-family:monospace;font-size:11px;color:var(--text-sec);">(${DV.esc(String(val))})</span>`;
+          }
+        }
+
+        // 6. Nested JSON / object
+        if (val !== null && typeof val === 'object') {
+          return `<code class="chip-expr">${DV.esc(JSON.stringify(val))}</code>`;
+        }
+
+        return `<span style="font-family:monospace;font-size:11.5px;">${DV.esc(String(val))}</span>`;
+      };
+
+      const renderRecordChip = (label, entity, guid, url, rawVal) => {
+        const text = `📄 ${label} (${entity})`;
+        const rawNote = rawVal ? ` <span style="font-family:monospace;font-size:10px;color:var(--text-sec);" title="${DV.esc(rawVal)}">${DV.esc(guid.slice(0, 8))}…</span>` : '';
+        return `<a class="chip-rec" data-insp-ent="${DV.esc(entity)}" data-insp-id="${DV.esc(guid)}" href="${DV.esc(url || '#')}" target="_blank" rel="noopener noreferrer" title="Open ${DV.esc(entity)} record (${DV.esc(guid)})">${DV.esc(text)}</a>${rawNote}`;
+      };
+
+      const renderNodeCard = (name, node, role = 'action') => {
+        stepsCount++;
+        const ent = inferNodeEntity(node) || (role === 'trigger' ? '' : actionOutputTables.get(name) || '');
+        const entMeta = ent ? entitiesByLogical.get(ent) : null;
+        const attrMap = ent ? attrMetaCache.get(ent) : null;
+        const p = node?.inputs?.parameters || {};
+        const opId = node?.inputs?.host?.operationId || node?.kind || node?.type || 'Step';
+        const runAfter = node?.runAfter ? Object.entries(node.runAfter) : [];
+        const hasErrBranch = runAfter.some(([, statuses]) => Array.isArray(statuses) && statuses.some(s => s !== 'Succeeded'));
+
+        let kvRows = '';
+        // Decode Trigger-specific enums (message / scope)
+        if (role === 'trigger') {
+          const msgCode = p['subscriptionRequest/message'];
+          const scopeCode = p['subscriptionRequest/scope'];
+          if (msgCode !== undefined && DV_TRIGGER_MESSAGES[msgCode]) {
+            resolvedTokens.push({ kind: 'Trigger Message', context: name, raw: String(msgCode), resolved: DV_TRIGGER_MESSAGES[msgCode] });
+            kvRows += `<tr><td class="kv-key">Trigger Event<span class="kv-sub">subscriptionRequest/message</span></td><td><span class="chip-opt">⚡ ${DV.esc(DV_TRIGGER_MESSAGES[msgCode])}</span> (${msgCode})</td></tr>`;
+          }
+          if (scopeCode !== undefined && DV_TRIGGER_SCOPES[scopeCode]) {
+            resolvedTokens.push({ kind: 'Trigger Scope', context: name, raw: String(scopeCode), resolved: DV_TRIGGER_SCOPES[scopeCode] });
+            kvRows += `<tr><td class="kv-key">Trigger Scope<span class="kv-sub">subscriptionRequest/scope</span></td><td><span class="chip-opt">🌐 ${DV.esc(DV_TRIGGER_SCOPES[scopeCode])}</span> (${scopeCode})</td></tr>`;
+          }
+          if (node.recurrence) {
+            kvRows += `<tr><td class="kv-key">Recurrence<span class="kv-sub">trigger.recurrence</span></td><td><code class="chip-expr">${DV.esc(JSON.stringify(node.recurrence))}</code></td></tr>`;
+          }
+        }
+
+        // Control expressions (If / Switch / Foreach / Query)
+        if (node.expression) {
+          const expStr = typeof node.expression === 'string' ? node.expression : JSON.stringify(node.expression);
+          const hints = decodeExpressionText(expStr, actionOutputTables, ent, resolvedTokens) || [];
+          const hintHtml = hints.map(h => `<div style="margin-top:4px;"><span class="chip-opt">🏷️ ${DV.esc(h.text)}</span></div>`).join('');
+          kvRows += `<tr><td class="kv-key">Expression<span class="kv-sub">${DV.esc(node.type)}</span></td><td><code class="chip-expr">${DV.esc(expStr)}</code>${hintHtml}</td></tr>`;
+        }
+        if (node.foreach) {
+          kvRows += `<tr><td class="kv-key">Loop Over<span class="kv-sub">foreach</span></td><td><code class="chip-expr">${DV.esc(node.foreach)}</code></td></tr>`;
+        }
+
+        // Run a Child Flow name lookup
+        const wfId = node.inputs?.host?.workflowReferenceName || p.workflowid;
+        if (typeof wfId === 'string' && GUID_RE.test(wfId)) {
+          const gid = wfId.match(GUID_RE)[0].toLowerCase();
+          const rec = recordCache.get(`workflow:${gid}`);
+          const wfName = rec?.name || flowsNameCache.get(gid) || gid;
+          resolvedTokens.push({ kind: 'Child Flow', context: name, raw: gid, resolved: wfName, url: rec?.url, entity: 'workflow', guid: gid });
+          kvRows += `<tr><td class="kv-key">Child Flow<span class="kv-sub">workflowReferenceName</span></td><td>${renderRecordChip(wfName, 'workflow', gid, rec?.url, gid)}</td></tr>`;
+        }
+
+        // Parameters table (hide duplicate subscriptionRequest/message already decoded above)
+        for (const [k, v] of Object.entries(p)) {
+          if (role === 'trigger' && (k === 'subscriptionRequest/message' || k === 'subscriptionRequest/scope')) continue;
+          const cleanK = normalizeBindKey(k);
+          const meta = attrMap?.get(cleanK.toLowerCase());
+          const colDisplay = meta?.displayName || cleanK;
+          kvRows += `<tr>
+            <td class="kv-key">${DV.esc(colDisplay)}<span class="kv-sub">${DV.esc(k)}</span></td>
+            <td>${renderValueCell(k, v, ent, resolvedTokens)}</td>
+          </tr>`;
+        }
+
+        // Nested Control Blocks
+        let childrenHtml = '';
+        if (node.actions && Object.keys(node.actions).length) {
+          const branchTitle = node.type === 'If' ? 'If True Branch' : node.type === 'Foreach' ? 'Loop Body' : 'Scope Actions';
+          childrenHtml += `<div class="branch-label">${branchTitle}</div><div class="node-children">${orderActionsTopological(node.actions).map(([cn, cnode]) => renderNodeCard(cn, cnode, 'action')).join('')}</div>`;
+        }
+        if (node.else?.actions && Object.keys(node.else.actions).length) {
+          childrenHtml += `<div class="branch-label">If False (Else) Branch</div><div class="node-children">${orderActionsTopological(node.else.actions).map(([cn, cnode]) => renderNodeCard(cn, cnode, 'action')).join('')}</div>`;
+        }
+        if (node.cases) {
+          // Resolve Switch case key if expression compares against an OptionSet field!
+          const swAttrMatch = typeof node.expression === 'string' && node.expression.match(/\['(?:body\/)?([a-z0-9_]+)'\]/i);
+          const swCol = swAttrMatch ? swAttrMatch[1] : null;
+          const swSrcMatch = typeof node.expression === 'string' && node.expression.match(/outputs\('([^']+)'\)/i);
+          const swEnt = (swSrcMatch ? actionOutputTables.get(swSrcMatch[1]) : '') || ent;
+          const swAttrMap = swEnt ? attrMetaCache.get(swEnt) : attrMap;
+
+          for (const [caseKey, caseObj] of Object.entries(node.cases)) {
+            const caseVal = caseObj?.case ?? caseKey;
+            const hit = swCol ? lookupOptionLabel(swAttrMap, swCol, caseVal) : null;
+            const lbl = hit ? `Case "${hit.label}" (${caseVal})` : `Case ${caseVal}`;
+            if (hit) resolvedTokens.push({ kind: 'OptionSet', context: `Switch (${name})`, raw: String(caseVal), resolved: hit.label });
+            childrenHtml += `<div class="branch-label">${DV.esc(lbl)}</div><div class="node-children">${orderActionsTopological(caseObj?.actions || {}).map(([cn, cnode]) => renderNodeCard(cn, cnode, 'action')).join('')}</div>`;
+          }
+        }
+        if (node.default?.actions && Object.keys(node.default.actions).length) {
+          childrenHtml += `<div class="branch-label">Switch Default Branch</div><div class="node-children">${orderActionsTopological(node.default.actions).map(([cn, cnode]) => renderNodeCard(cn, cnode, 'action')).join('')}</div>`;
+        }
+
+        const isCtrl = ['If', 'Switch', 'Foreach', 'Scope', 'Until'].includes(node.type);
+        const cardCls = role === 'trigger' ? 'trigger' : isCtrl ? 'control' : 'action';
+        const icon = role === 'trigger' ? '⚡' : isCtrl ? '🔀' : '⚙️';
+        const entBadge = entMeta ? DV.ui.badge(`${entMeta.displayName} (${entMeta.logicalName})`, 'info') : (ent ? DV.ui.badge(ent, 'info') : '');
+        const runAfterText = runAfter.length
+          ? runAfter.map(([dep, st]) => `${dep} [${st.join(',')}]`).join('; ')
+          : '';
+
+        return `
+          <div class="node-card ${cardCls}">
+            <div class="node-head">
+              <div class="node-title">${icon} ${DV.esc(name.replace(/_/g, ' '))} <span style="font-weight:400;color:var(--text-sec);font-size:11px;">(${DV.esc(opId)})</span></div>
+              <div class="node-meta">
+                ${entBadge}
+                ${hasErrBranch ? `<span class="chip-err" title="Runs on failure/timeout">⚠️ Error Handler Branch</span>` : ''}
+                ${runAfterText ? `<span style="font-size:10.5px;">After: <code>${DV.esc(runAfterText)}</code></span>` : ''}
+              </div>
+            </div>
+            <div class="node-body">
+              ${kvRows ? `<table class="kv-table"><tbody>${kvRows}</tbody></table>` : '<span style="color:var(--text-sec);font-size:11px;">No inputs / parameters</span>'}
+              ${childrenHtml}
+            </div>
+          </div>
+        `;
+      };
+
+      let treeHtml = '';
+      for (const [tName, tNode] of Object.entries(root.triggers || {})) {
+        treeHtml += renderNodeCard(tName, tNode, 'trigger');
+      }
+      for (const [aName, aNode] of orderActionsTopological(root.actions)) {
+        treeHtml += renderNodeCard(aName, aNode, 'action');
+      }
+
+      // Build Annotated JSON with inline human comments
+      const prettyJson = JSON.stringify(rawObj, null, 2);
+      const tokenLookup = new Map();
+      for (const t of resolvedTokens) {
+        if (t.raw) tokenLookup.set(t.raw.toLowerCase(), t.resolved);
+      }
+      const annotatedLines = prettyJson.split('\n').map(line => {
+        const escaped = DV.esc(line);
+        const comments = [];
+        const bindM = line.match(/"([^"]+)"\s*:\s*"(\/?[a-z0-9_]+\([0-9a-f-]{36}\))"/i);
+        if (bindM && tokenLookup.has(bindM[2].toLowerCase())) {
+          comments.push(tokenLookup.get(bindM[2].toLowerCase()));
+        }
+        const kvNumM = line.match(/"(?:item\/)?([a-z0-9_]+)"\s*:\s*(-?\d+|true|false|"[^"]+")/i);
+        if (kvNumM) {
+          const col = kvNumM[1].toLowerCase();
+          const val = kvNumM[2].replace(/^"|"$/g, '');
+          for (const t of resolvedTokens) {
+            if (t.kind === 'OptionSet' && t.context.toLowerCase().endsWith(`.${col}`) && t.raw === val) {
+              comments.push(`OptionSet: ${t.resolved}`);
+              break;
+            }
+          }
+        }
+        for (const t of resolvedTokens) {
+          if (t.kind === 'Record' && t.guid && line.toLowerCase().includes(t.guid.toLowerCase()) && !bindM) {
+            comments.push(t.resolved);
+            break;
+          }
+        }
+        return comments.length
+          ? `${escaped}  <span class="annot-cmt">// ${DV.esc(comments.join(' | '))}</span>`
+          : escaped;
+      }).join('\n');
+
+      // Render Resolved Tokens Tab
+      const optCount = resolvedTokens.filter(t => t.kind === 'OptionSet' || t.kind.startsWith('Trigger')).length;
+      const recCount = resolvedTokens.filter(t => t.kind === 'Record' || t.kind === 'Child Flow').length;
+
+      document.getElementById('st-steps').textContent = stepsCount;
+      document.getElementById('st-opts').textContent = optCount;
+      document.getElementById('st-recs').textContent = recCount;
+      document.getElementById('st-tables').textContent = tables.length;
+      document.getElementById('tok-count').textContent = resolvedTokens.length;
+      DV.setTitle(`CodeView (${stepsCount} steps)`);
+
+      document.getElementById('tab-tree').innerHTML = treeHtml || DV.ui.empty('No triggers or actions found.');
+      document.getElementById('tab-annotated').innerHTML = `<pre class="annot-pre">${annotatedLines}</pre>`;
+      document.getElementById('tab-tokens').innerHTML = resolvedTokens.length
+        ? `<table class="dv-table"><thead><tr><th>Type</th><th>Where</th><th>Raw Value</th><th>Decoded Label / Record</th><th>Inspect</th></tr></thead><tbody>
+            ${resolvedTokens.map(t => `<tr>
+              <td>${DV.ui.badge(t.kind, t.kind === 'OptionSet' ? 'ok' : 'info')}</td>
+              <td><code>${DV.esc(t.context)}</code></td>
+              <td><code style="font-size:11px;">${DV.esc(t.raw)}</code></td>
+              <td><strong>${DV.esc(t.resolved)}</strong></td>
+              <td>${t.entity && t.guid ? `<button class="dv-btn dv-btn-sm btn-open-ri" data-ent="${DV.esc(t.entity)}" data-id="${DV.esc(t.guid)}">🔎 Record Inspector</button>` : '—'}</td>
+            </tr>`).join('')}
+          </tbody></table>`
+        : DV.ui.empty('No OptionSet integers or Record GUIDs matched yet. Select a table or connect Dataverse to resolve live metadata.');
+
+      // Wire clickable record chips inside tree to open in Dataverse or Record Inspector when unlinked
+      document.querySelectorAll('.chip-rec').forEach(a => {
+        a.addEventListener('click', e => {
+          if (a.getAttribute('href') === '#') {
+            e.preventDefault();
+            DV.openTool('record-inspector', { entity: a.dataset.inspEnt, id: a.dataset.inspId });
+          }
+        });
+      });
+      document.querySelectorAll('.btn-open-ri').forEach(btn => {
+        btn.addEventListener('click', () => {
+          DV.openTool('record-inspector', { entity: btn.dataset.ent, id: btn.dataset.id });
+        });
+      });
+
+      lastDecodedResult = { stepsCount, resolvedTokens, tables };
+    }
+
+    function loadSampleCodeView() {
+      isSampleMode = true;
+      // Populate sample entity, optionSet, and record caches cleanly so offline preview resolves everything!
+      entitiesByLogical = new Map([
+        ['invoice', { logicalName: 'invoice', entitySetName: 'invoices', displayName: 'Invoice', primaryId: 'invoiceid', primaryName: 'name' }],
+        ['account', { logicalName: 'account', entitySetName: 'accounts', displayName: 'Account', primaryId: 'accountid', primaryName: 'name' }],
+        ['contact', { logicalName: 'contact', entitySetName: 'contacts', displayName: 'Contact', primaryId: 'contactid', primaryName: 'fullname' }]
+      ]);
+      entitiesBySet = new Map([
+        ['invoices', entitiesByLogical.get('invoice')],
+        ['accounts', entitiesByLogical.get('account')],
+        ['contacts', entitiesByLogical.get('contact')]
+      ]);
+      attrMetaCache.set('invoice', new Map([
+        ['statuscode', { logicalName: 'statuscode', displayName: 'Status Reason', type: 'Status', options: new Map([['1', 'New'], ['2', 'Partially Shipped'], ['100001', 'Complete']]), targets: [] }],
+        ['statecode', { logicalName: 'statecode', displayName: 'Status', type: 'State', options: new Map([['0', 'Active'], ['1', 'Closed (deprecated)'], ['2', 'Paid']]), targets: [] }],
+        ['new_erpsyncstatus', { logicalName: 'new_erpsyncstatus', displayName: 'ERP Sync Status', type: 'Picklist', options: new Map([['100000000', 'Pending'], ['100000001', 'Synced'], ['100000002', 'Failed']]), targets: [] }],
+        ['customerid', { logicalName: 'customerid', displayName: 'Customer', type: 'Lookup', options: new Map(), targets: ['account', 'contact'] }]
+      ]));
+      recordCache.set('account:8f7a1122-3344-5566-7788-99aabbccddee', { name: 'Contoso Ltd', entity: 'account', guid: '8f7a1122-3344-5566-7788-99aabbccddee', url: '' });
+      recordCache.set('contact:c3a12233-4455-6677-8899-001122334455', { name: 'Priya Sharma', entity: 'contact', guid: 'c3a12233-4455-6677-8899-001122334455', url: '' });
+      recordCache.set('workflow:7f3a9921-1234-4567-89ab-cdef01234567', { name: 'Notify Account Owner (Child Flow)', entity: 'workflow', guid: '7f3a9921-1234-4567-89ab-cdef01234567', url: '' });
+
+      const sampleFlow = {
+        properties: {
+          definition: {
+            triggers: {
+              When_an_Invoice_is_Modified: {
+                type: 'OpenApiConnectionWebhook',
+                inputs: {
+                  host: { operationId: 'SubscribeWebhookTrigger' },
+                  parameters: {
+                    'subscriptionRequest/entityname': 'invoice',
+                    'subscriptionRequest/message': 3,
+                    'subscriptionRequest/scope': 4,
+                    'subscriptionRequest/filteringattributes': 'statuscode,new_erpsyncstatus',
+                    'subscriptionRequest/filterExpression': 'statecode eq 0 and new_erpsyncstatus eq 100000000'
+                  }
+                }
+              }
+            },
+            actions: {
+              Check_Status_and_Sync: {
+                type: 'If',
+                expression: "@equals(triggerOutputs()?['body/statuscode'], 2)",
+                actions: {
+                  Update_Invoice_as_Synced: {
+                    type: 'OpenApiConnection',
+                    inputs: {
+                      host: { operationId: 'UpdateRecord' },
+                      parameters: {
+                        entityName: 'invoice',
+                        recordId: "@triggerOutputs()?['body/invoiceid']",
+                        'item/new_erpsyncstatus': 100000001,
+                        'item/customerid_account@odata.bind': '/accounts(8f7a1122-3344-5566-7788-99aabbccddee)',
+                        'item/primarycontactid@odata.bind': '/contacts(c3a12233-4455-6677-8899-001122334455)'
+                      }
+                    }
+                  }
+                },
+                else: {
+                  actions: {
+                    Call_Owner_Notification_Child_Flow: {
+                      type: 'Workflow',
+                      runAfter: {},
+                      inputs: {
+                        host: { workflowReferenceName: '7f3a9921-1234-4567-89ab-cdef01234567' },
+                        body: { Message: 'Invoice skipped sync' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      };
+
+      document.getElementById('json-input').value = JSON.stringify(sampleFlow, null, 2);
+      decodeAndRender();
+      DV.notify('Loaded sample CodeView JSON with resolved OptionSets & Records.', 'info');
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.cv-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      document.getElementById('tab-tree').style.display = tab === 'tree' ? 'block' : 'none';
+      document.getElementById('tab-annotated').style.display = tab === 'annotated' ? 'block' : 'none';
+      document.getElementById('tab-tokens').style.display = tab === 'tokens' ? 'block' : 'none';
+    }
+
+    document.querySelectorAll('.cv-tab').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+    document.getElementById('btn-decode').addEventListener('click', () => {
+      if (isSampleMode && context) isSampleMode = false;
+      decodeAndRender();
+    });
+    document.getElementById('btn-sample').addEventListener('click', loadSampleCodeView);
+    document.getElementById('flow-select').addEventListener('change', e => {
+      if (e.target.value) selectAndLoadFlow(e.target.value);
+    });
+    document.getElementById('btn-format').addEventListener('click', () => {
+      const inp = document.getElementById('json-input');
+      try { inp.value = JSON.stringify(JSON.parse(inp.value), null, 2); }
+      catch (e) { DV.notify(`Invalid JSON: ${e.message}`, 'error'); }
+    });
+    document.getElementById('btn-copy-md').addEventListener('click', () => {
+      if (!lastDecodedResult) { DV.notify('Decode a flow first.', 'warning'); return; }
+      const lines = [
+        '# Cloud Flow CodeView Summary',
+        `- **Steps:** ${lastDecodedResult.stepsCount}`,
+        `- **Tables:** ${lastDecodedResult.tables.join(', ') || '—'}`,
+        '',
+        '## Resolved OptionSets & Records',
+        '| Type | Context | Raw | Decoded |',
+        '|---|---|---|---|',
+        ...lastDecodedResult.resolvedTokens.map(t => `| ${t.kind} | \`${t.context}\` | \`${t.raw}\` | ${t.resolved} |`)
+      ];
+      navigator.clipboard?.writeText(lines.join('\n')).then(() => DV.notify('Copied Markdown summary to clipboard', 'success'));
+    });
+  </script>
+</body>
+</html>
