@@ -34,6 +34,8 @@ function parseArgs(argv) {
     auth: (process.env.DV_AUTH_MODE || 'auto').toLowerCase(),
     localOnly: false,
     buildManifest: false,
+    buildBundle: false,
+    bundleOut: '',
     help: false
   };
 
@@ -42,6 +44,11 @@ function parseArgs(argv) {
     if (arg === '--help' || arg === '-h') opts.help = true;
     else if (arg === '--local-only') opts.localOnly = true;
     else if (arg === '--build-manifest') opts.buildManifest = true;
+    else if (arg === '--build-bundle') {
+      opts.buildBundle = true;
+      if (argv[i + 1] && !argv[i + 1].startsWith('--')) opts.bundleOut = argv[++i];
+    }
+    else if (arg.startsWith('--build-bundle=')) { opts.buildBundle = true; opts.bundleOut = arg.slice(15); }
     else if (arg === '--env' && argv[i + 1]) opts.envUrl = normalizeEnvUrl(argv[++i]);
     else if (arg.startsWith('--env=')) opts.envUrl = normalizeEnvUrl(arg.slice(6));
     else if (arg === '--port' && argv[i + 1]) opts.port = parseInt(argv[++i], 10) || 8787;
@@ -166,7 +173,8 @@ function buildToolsManifest(prefix = 'dvopentools_') {
       category: meta.category || 'General',
       version: meta.version || '1.0.0',
       minHostVersion: meta.minHostVersion || null,
-      description: meta.description || ''
+      description: meta.description || '',
+      sizeBytes: fs.statSync(fullPath).size
     });
   }
   items.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
@@ -174,6 +182,65 @@ function buildToolsManifest(prefix = 'dvopentools_') {
     fs.writeFileSync(path.join(TOOLS_DIR, 'manifest.json'), JSON.stringify(items, null, 2) + '\n', 'utf8');
   }
   return items;
+}
+
+function escapeHtmlText(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function buildToolsBundle(outPath = '', prefix = 'dvopentools_') {
+  const manifest = buildToolsManifest(prefix);
+  const bundledTools = [];
+  for (const item of manifest) {
+    const fullPath = resolveSafeLocalFile(item.wrName, TOOLS_DIR) || resolveSafeLocalFile(item.wrName, ROOT_DIR);
+    if (!fullPath) continue;
+    bundledTools.push({
+      id: item.id,
+      wrName: item.wrName,
+      name: item.name,
+      icon: item.icon,
+      category: item.category,
+      version: item.version,
+      minHostVersion: item.minHostVersion,
+      description: item.description,
+      sizeBytes: item.sizeBytes,
+      html: fs.readFileSync(fullPath, 'utf8')
+    });
+  }
+  const payload = {
+    bundleVersion: 1,
+    name: 'DV Open Tools Complete Bundle',
+    createdAt: new Date().toISOString(),
+    tools: bundledTools
+  };
+  const safeJson = JSON.stringify(payload).replace(/</g, '\\u003c');
+  const rowsHtml = bundledTools.map(t =>
+    `<tr><td>${escapeHtmlText(t.icon)} ${escapeHtmlText(t.name)}</td><td><code>${escapeHtmlText(t.wrName)}</code></td><td>${escapeHtmlText(t.category)}</td><td>v${escapeHtmlText(t.version)}</td><td>${(t.sizeBytes / 1024).toFixed(1)} KB</td></tr>`
+  ).join('\n      ');
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DV Open Tools — Bundled Tool Pack (${bundledTools.length} tools)</title>
+  <style>body{font-family:Segoe UI,system-ui,sans-serif;max-width:900px;margin:32px auto;padding:0 16px;color:#1e293b}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}th,td{border:1px solid #cbd5e1;padding:8px 10px;text-align:left}th{background:#f1f5f9}</style>
+</head>
+<body>
+  <h1>📦 DV Open Tools — Bundled Tool Pack (${bundledTools.length} tools)</h1>
+  <p>Upload this single HTML Web Resource alongside <code>dvopentools_host.html</code> (name starting with <code>dvopentools_</code>), or import it in the Host via <strong>Load Tool from File</strong>.</p>
+  <table>
+    <thead><tr><th>Tool</th><th>Source File</th><th>Category</th><th>Version</th><th>Size</th></tr></thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+  <script type="application/json" id="dvopentools-bundle">${safeJson}</script>
+</body>
+</html>\n`;
+
+  const resolvedOut = outPath ? path.resolve(ROOT_DIR, outPath) : path.join(ROOT_DIR, 'dist', 'dvopentools_bundle_all.html');
+  fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
+  fs.writeFileSync(resolvedOut, html, 'utf8');
+  return { outPath: resolvedOut, count: bundledTools.length, bytes: Buffer.byteLength(html, 'utf8') };
 }
 
 function mimeTypeFor(filePath) {
@@ -385,6 +452,7 @@ Options:
   --auth <mode>     Token source: auto (default), pac (\`pac auth token\`), az (\`az account get-access-token\`), or env (DV_TOKEN)
   --local-only      Serve local HTML tools without proxying Dataverse API calls
   --build-manifest  Regenerate tools/manifest.json from tools/dvopentools_*.html and exit
+  --build-bundle    Generate a single-file tool bundle HTML (default: dist/dvopentools_bundle_all.html)
 `);
     process.exit(0);
   }
@@ -392,6 +460,12 @@ Options:
   if (opts.buildManifest) {
     const items = buildToolsManifest();
     console.log(`[dev-server] Wrote tools/manifest.json (${items.length} tools).`);
+    process.exit(0);
+  }
+
+  if (opts.buildBundle) {
+    const res = buildToolsBundle(opts.bundleOut);
+    console.log(`[dev-server] Wrote ${path.relative(ROOT_DIR, res.outPath)} (${res.count} tools, ${(res.bytes / 1024).toFixed(1)} KB).`);
     process.exit(0);
   }
 
@@ -423,4 +497,4 @@ Options:
   });
 }
 
-module.exports = { parseArgs, createDevServer, listLocalToolWebResources, resolveSafeLocalFile, buildToolsManifest };
+module.exports = { parseArgs, createDevServer, listLocalToolWebResources, resolveSafeLocalFile, buildToolsManifest, buildToolsBundle };

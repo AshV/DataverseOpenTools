@@ -243,7 +243,13 @@
       transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     }
     .tool-card:hover { transform: translateY(-2px); border-color: var(--brand); box-shadow: var(--shadow-sm); }
-    .tool-top { display: flex; align-items: flex-start; gap: 11px; }
+    .tool-card.selected { border-color: var(--brand); background: var(--brand-soft); }
+    .tool-top { display: flex; align-items: flex-start; gap: 11px; position: relative; }
+    .tool-chk-wrap {
+      margin-left: auto; display: flex; align-items: center; gap: 4px;
+      cursor: pointer; flex-shrink: 0; padding: 2px;
+    }
+    .tool-chk { width: 16px; height: 16px; accent-color: var(--brand); cursor: pointer; }
     .tool-ico {
       width: 38px; height: 38px; border-radius: 9px;
       background: var(--bg-elev); border: 1px solid var(--border);
@@ -255,6 +261,11 @@
       font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
       background: var(--brand-soft); color: var(--brand);
     }
+    .tool-size {
+      font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+      background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-sec);
+      font-family: ui-monospace, monospace;
+    }
     .tool-desc { font-size: 13px; color: var(--text-sec); margin-top: 4px; }
     .tool-foot {
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -262,6 +273,46 @@
     }
     .tool-file { font-family: ui-monospace, monospace; font-size: 11px; color: var(--text-sec); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tool-links { display: flex; gap: 6px; flex-shrink: 0; }
+
+    /* Bundle Builder Bar */
+    .bundle-bar {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: var(--shadow-sm);
+    }
+    .bundle-row {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .bundle-left, .bundle-right {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    }
+    .bundle-name-input {
+      padding: 6px 10px; border-radius: 7px; border: 1px solid var(--border);
+      background: var(--bg-elev); color: var(--text); font-size: 12.5px;
+      font-family: ui-monospace, monospace; width: 220px; outline: none;
+    }
+    .bundle-name-input:focus { border-color: var(--brand); }
+    .size-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+      background: var(--bg-elev); border: 1px solid var(--border); color: var(--text);
+    }
+    .size-pill.warn { border-color: #d97706; color: #d97706; }
+    .size-meter {
+      width: 100%; height: 5px; border-radius: 999px; background: var(--border); overflow: hidden;
+    }
+    .size-meter-fill {
+      height: 100%; background: var(--brand); transition: width 0.2s ease, background 0.2s ease;
+    }
+    .bundle-status { font-size: 12.5px; color: var(--text-sec); }
+    .bundle-status.ok { color: #0f766e; font-weight: 600; }
+    .bundle-status.err { color: #dc2626; font-weight: 600; }
 
     /* Footer */
     footer {
@@ -359,7 +410,7 @@
           <div class="card">
             <div class="card-icon">☁️</div>
             <h3>1. Inside Power Platform</h3>
-            <p>Upload <code>dvopentools_host.html</code> and any files from <code>tools/</code> as HTML Web Resources. The host auto-discovers tools via <code>/api/data/v9.2/webresourceset</code> using your active session.</p>
+            <p>Upload independent <code>dvopentools_host.html</code> plus either individual tool files or a single <strong>bundled tool pack</strong> (<code>dvopentools_bundle_*.html</code>) as HTML Web Resources. The host auto-discovers and unpacks them using your active Dynamics session.</p>
           </div>
           <div class="card">
             <div class="card-icon">🔌</div>
@@ -392,9 +443,12 @@
         <div class="section-head">
           <div>
             <h2>Included Tools (<span id="tools-count">28</span>)</h2>
-            <p>All tool files live in <code>tools/</code>. Open any tool directly in the host workbench or grab the standalone HTML file for Web Resource upload.</p>
+            <p>Download any single tool HTML, select tools to pack into a single bundle Web Resource, or download all 28 tools together alongside independent <code>dvopentools_host.html</code>.</p>
           </div>
-          <a href="dvopentools_host.html" class="btn btn-primary">Launch Host Workbench →</a>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a id="download-host-btn" href="dvopentools_host.html" download="dvopentools_host.html" class="btn">⬇️ Download Host (<span id="host-size-lbl">124.9 KB</span>)</a>
+            <a href="dvopentools_host.html" class="btn btn-primary">Launch Host Workbench →</a>
+          </div>
         </div>
 
         <div class="toolbar">
@@ -403,6 +457,27 @@
             <input id="tool-search" class="search-input" type="search" placeholder="Filter tools by name, category, or keyword..." />
           </div>
           <div id="cat-pills" class="cat-pills"></div>
+        </div>
+
+        <div class="bundle-bar" aria-label="Tool Bundle Builder">
+          <div class="bundle-row">
+            <div class="bundle-left">
+              <strong>📦 Bundle Builder</strong>
+              <button type="button" id="btn-sel-all" class="btn btn-sm">Select All (<span id="all-count">28</span>)</button>
+              <button type="button" id="btn-sel-filtered" class="btn btn-sm">Select Filtered</button>
+              <button type="button" id="btn-sel-none" class="btn btn-sm">Clear</button>
+              <span id="bundle-size-pill" class="size-pill">0 selected · 0 KB</span>
+            </div>
+            <div class="bundle-right">
+              <input id="bundle-name" class="bundle-name-input" type="text" value="dvopentools_bundle_custom" title="Web Resource filename prefix (saved as .html)" aria-label="Bundle filename" />
+              <button type="button" id="btn-dl-selected" class="btn btn-sm btn-primary" disabled>📦 Download Selected (<span id="btn-sel-size">0 KB</span>)</button>
+              <button type="button" id="btn-dl-all" class="btn btn-sm btn-primary">📥 Download Complete Bundle (<span id="all-size-lbl">~766 KB</span>)</button>
+            </div>
+          </div>
+          <div class="size-meter" title="Estimated bundle size vs Dataverse 5 MB default Web Resource limit">
+            <div id="bundle-meter-fill" class="size-meter-fill" style="width:0%"></div>
+          </div>
+          <div id="bundle-status" class="bundle-status">Tip: Upload independent <code>dvopentools_host.html</code> + one <code>dvopentools_bundle_*.html</code> file into Dataverse (or import the bundle directly in Host via <strong>Load Tool from File</strong>).</div>
         </div>
 
         <div id="tools-grid" class="tools-grid"></div>
@@ -423,39 +498,66 @@
   </footer>
 
   <script>
+    const HOST_SIZE_BYTES = 127851;
+    const DATAVERSE_DEFAULT_WR_LIMIT = 5 * 1024 * 1024;
     const TOOLS = [
-      { id: 'fetchxml-playground', file: 'tools/dvopentools_fetchxml.html', name: 'FetchXML & Web API', icon: '🔍', category: 'Query', version: '1.1.0', description: 'Execute FetchXML queries (with paging & batch fallback) and OData Web API requests with table inspection, code generation, and CSV/JSON export.' },
-      { id: 'schema-browser', file: 'tools/dvopentools_schemabrowser.html', name: 'Schema Browser', icon: '📖', category: 'Metadata', version: '1.1.0', description: 'Explore Dataverse EntityDefinitions, columns, OptionSet integer mappings, relationships, keys, and Global Option Sets.' },
-      { id: 'erd-visualizer', file: 'tools/dvopentools_erd.html', name: 'ERD Visualizer', icon: '📐', category: 'Metadata', version: '1.0.0', description: 'Select Dataverse tables to render an interactive pure-SVG Entity-Relationship diagram (1:N, N:1, N:N), export SVG, or copy Mermaid erDiagram.' },
-      { id: 'plugin-traces', file: 'tools/dvopentools_plugintraces.html', name: 'Plugin Trace Logs', icon: '📜', category: 'Diagnostics', version: '1.1.0', description: 'Stream and filter Dataverse plugintracelog entries, trace full correlation cascades by depth, inspect stack traces, and spot slow plugins.' },
-      { id: 'access-checker', file: 'tools/dvopentools_accesschecker.html', name: 'Access Diagnostics', icon: '🛡️', category: 'Security', version: '1.1.0', description: 'Diagnose effective record permissions via RetrievePrincipalAccess and inspect Security Roles, Team memberships, and record ownership.' },
-      { id: 'role-matrix', file: 'tools/dvopentools_rolematrix.html', name: 'Role Matrix', icon: '🎭', category: 'Security', version: '1.0.0', description: 'Compare Dataverse Security Role table privileges side-by-side (Create, Read, Write, Delete, Append, Assign, Share) and export security audit CSVs.' },
-      { id: 'bu-queues', file: 'tools/dvopentools_buqueues.html', name: 'BU & Queue Explorer', icon: '🏢', category: 'Security', version: '1.0.0', description: 'Visualize Business Unit hierarchy trees, default teams & divisions, plus inspect Public/Private Queues, email routing, and queue members.' },
-      { id: 'solution-layers', file: 'tools/dvopentools_solutionlayers.html', name: 'Solution Layers', icon: '📦', category: 'Solutions', version: '1.1.0', description: 'Inspect managed vs Active unmanaged solution component layers (msdyn_componentlayer) and diagnose delete blockers via RetrieveDependenciesForDelete.' },
-      { id: 'env-vars', file: 'tools/dvopentools_envvars.html', name: 'Environment Variables', icon: '⚙️', category: 'Configuration', version: '1.1.0', description: 'Inspect Default vs Current Environment Variable values, validate JSON configs, spot missing values, and safely update overrides.' },
-      { id: 'user-settings', file: 'tools/dvopentools_usersettings.html', name: 'User Settings & Views', icon: '👤', category: 'Configuration', version: '1.0.0', description: 'Inspect and bulk-update User Settings (paging limit, timezone, UI language) and manage or reassign user-owned Personal Views and Personal Dashboards.' },
-      { id: 'record-inspector', file: 'tools/dvopentools_recordinspector.html', name: 'Record Inspector', icon: '🔎', category: 'Data', version: '1.0.0', description: 'Inspect all fields (including hidden attributes) on any Dataverse record by pasting a URL or GUID, edit updatable values, or jump to Access Diagnostics.' },
-      { id: 'bulk-ops', file: 'tools/dvopentools_bulkops.html', name: 'Bulk Operations', icon: '♻️', category: 'Data', version: '1.0.0', description: 'Preview records with FetchXML and execute throttled bulk PATCH, state activation/deactivation, or DELETE operations safely under Host Security Gateway.' },
-      { id: 'row-counter', file: 'tools/dvopentools_rowcounter.html', name: 'Row Counter', icon: '📊', category: 'Data', version: '1.0.0', description: 'Count records across Dataverse tables (Total, Active, Inactive, Custom Filter) with HTTP headers inspection & CSV export.' },
-      { id: 'storage-analyzer', file: 'tools/dvopentools_storage.html', name: 'Storage Analyzer', icon: '💾', category: 'Data', version: '1.0.0', description: 'Identify Dataverse log and file storage bloat across AsyncOperations, Plugin Traces, Audits, Notes/Attachments, and Bulk Delete jobs.' },
-      { id: 'dup-rules', file: 'tools/dvopentools_duprules.html', name: 'Duplicate Rules Auditor', icon: '👯', category: 'Data', version: '1.0.0', description: 'Inspect all Dataverse Duplicate Detection Rules, match conditions, operator parameters, case-sensitivity, and test records via RetrieveDuplicates.' },
-      { id: 'table-map', file: 'tools/dvopentools_tablemap.html', name: 'Table Automation Map', icon: '⚡', category: 'Diagnostics', version: '1.0.0', description: 'Unified view of every Plugin Step, Business Rule, Classic Workflow, Business Process Flow, Cloud Flow trigger, and Bound Custom API on any Dataverse table.' },
-      { id: 'process-chain', file: 'tools/dvopentools_processchain.html', name: 'Process Cascade Tracer', icon: '🕸️', category: 'Diagnostics', version: '1.1.0', description: 'Trace multi-hop automation chains across Cloud Flows, Plugins, Webhooks, Classic Workflows, and Business Rules with an interactive Flowchart, Cascade Tree, Edge Table, and loop detection.' },
-      { id: 'env-timeline', file: 'tools/dvopentools_envtimeline.html', name: 'Environment Timeline', icon: '🕒', category: 'Diagnostics', version: '1.0.0', description: 'Unified chronological activity and event timeline across Dataverse: Audits, Plugin Traces, Flow Runs, System Jobs, Solution Operations, and Sync Logs.' },
-      { id: 'flow-calendar', file: 'tools/dvopentools_flowcalendar.html', name: 'Flow Calendar', icon: '📅', category: 'Flow', version: '1.0.0', description: 'Visualise Power Automate cloud flow run history across a 7-day hourly timeline with response headers inspection.' },
-      { id: 'flow-schedules', file: 'tools/dvopentools_flowschedules.html', name: 'Scheduled Flows', icon: '⏰', category: 'Flow', version: '1.1.0', description: 'List all Scheduled Power Automate Cloud Flows by Solution with decoded recurrence timing, time zone, state, and a chronological Timeline view of upcoming runs.' },
-      { id: 'flow-codeview', file: 'tools/dvopentools_flowcodeview.html', name: 'Flow CodeView Reader', icon: '🧬', category: 'Flow', version: '1.0.0', description: 'Decode Cloud Flow clientdata or Peek-Code JSON into a readable action tree by resolving OptionSet integer codes to labels and GUIDs to actual Dataverse record names.' },
-      { id: 'conn-refs', file: 'tools/dvopentools_connrefs.html', name: 'Connection Audit', icon: '🔗', category: 'Flow', version: '1.0.0', description: 'Audit Connection References, map which Cloud Flows depend on each connection, and flag disconnected references or turned-off flows.' },
-      { id: 'plugin-manager', file: 'tools/dvopentools_plugins.html', name: 'Plugin Step Manager', icon: '🧩', category: 'Extensibility', version: '1.0.0', description: 'Browse registered Plugin Assemblies, Types, SDK Message Processing Steps, and Pre/Post Images, with 1-click step Enable/Disable.' },
-      { id: 'webhook-inspector', file: 'tools/dvopentools_webhooks.html', name: 'Webhook Inspector', icon: '🪝', category: 'Extensibility', version: '1.1.0', description: 'Inspect Dataverse Service Endpoints and Webhooks, linked SDK Message Processing Steps, recent Async delivery failures, and build sample RemoteExecutionContext payloads.' },
-      { id: 'wr-code-search', file: 'tools/dvopentools_wrsearch.html', name: 'Web Resource Search', icon: '💻', category: 'Extensibility', version: '1.0.0', description: 'Decode and full-text / regex search across all JavaScript, HTML, CSS, XML, and ResX Web Resources to spot legacy Xrm.Page calls, hardcoded URLs/GUIDs, or field usage.' },
-      { id: 'ribbon-inspector', file: 'tools/dvopentools_ribbon.html', name: 'Command Bar & Ribbon', icon: '🎀', category: 'Extensibility', version: '1.0.0', description: 'Inspect Modern Command Bar buttons (appactions Power Fx & JavaScript) and Classic RibbonDiffXml diffs (ribbondiffs) per table.' },
-      { id: 'form-view', file: 'tools/dvopentools_formview.html', name: 'Form & View XML', icon: '📋', category: 'Metadata', version: '1.0.0', description: 'Audit FormXML JavaScript libraries, OnLoad/OnSave/OnChange handlers, tabs & fields, plus SavedQuery view layouts and FetchXML.' },
-      { id: 'label-explorer', file: 'tools/dvopentools_labels.html', name: 'Label Explorer', icon: '🌍', category: 'Metadata', version: '1.0.0', description: 'Inspect localized Display Labels across all provisioned Dataverse languages (RetrieveProvisionedLanguages) for Tables and Columns, and export translation CSVs.' }
+      { id: 'fetchxml-playground', file: 'tools/dvopentools_fetchxml.html', name: 'FetchXML & Web API', icon: '🔍', category: 'Query', version: '1.1.0', sizeBytes: 26872, description: 'Execute FetchXML queries (with paging & batch fallback) and OData Web API requests with table inspection, code generation, and CSV/JSON export.' },
+      { id: 'schema-browser', file: 'tools/dvopentools_schemabrowser.html', name: 'Schema Browser', icon: '📖', category: 'Metadata', version: '1.1.0', sizeBytes: 21232, description: 'Explore Dataverse EntityDefinitions, columns, OptionSet integer mappings, relationships, keys, and Global Option Sets.' },
+      { id: 'erd-visualizer', file: 'tools/dvopentools_erd.html', name: 'ERD Visualizer', icon: '📐', category: 'Metadata', version: '1.0.0', sizeBytes: 11026, description: 'Select Dataverse tables to render an interactive pure-SVG Entity-Relationship diagram (1:N, N:1, N:N), export SVG, or copy Mermaid erDiagram.' },
+      { id: 'plugin-traces', file: 'tools/dvopentools_plugintraces.html', name: 'Plugin Trace Logs', icon: '📜', category: 'Diagnostics', version: '1.1.0', sizeBytes: 13886, description: 'Stream and filter Dataverse plugintracelog entries, trace full correlation cascades by depth, inspect stack traces, and spot slow plugins.' },
+      { id: 'access-checker', file: 'tools/dvopentools_accesschecker.html', name: 'Access Diagnostics', icon: '🛡️', category: 'Security', version: '1.1.0', sizeBytes: 15402, description: 'Diagnose effective record permissions via RetrievePrincipalAccess and inspect Security Roles, Team memberships, and record ownership.' },
+      { id: 'role-matrix', file: 'tools/dvopentools_rolematrix.html', name: 'Role Matrix', icon: '🎭', category: 'Security', version: '1.0.0', sizeBytes: 8470, description: 'Compare Dataverse Security Role table privileges side-by-side (Create, Read, Write, Delete, Append, Assign, Share) and export security audit CSVs.' },
+      { id: 'bu-queues', file: 'tools/dvopentools_buqueues.html', name: 'BU & Queue Explorer', icon: '🏢', category: 'Security', version: '1.0.0', sizeBytes: 16503, description: 'Visualize Business Unit hierarchy trees, default teams & divisions, plus inspect Public/Private Queues, email routing, and queue members.' },
+      { id: 'solution-layers', file: 'tools/dvopentools_solutionlayers.html', name: 'Solution Layers', icon: '📦', category: 'Solutions', version: '1.1.0', sizeBytes: 14973, description: 'Inspect managed vs Active unmanaged solution component layers (msdyn_componentlayer) and diagnose delete blockers via RetrieveDependenciesForDelete.' },
+      { id: 'env-vars', file: 'tools/dvopentools_envvars.html', name: 'Environment Variables', icon: '⚙️', category: 'Configuration', version: '1.1.0', sizeBytes: 12195, description: 'Inspect Default vs Current Environment Variable values, validate JSON configs, spot missing values, and safely update overrides.' },
+      { id: 'user-settings', file: 'tools/dvopentools_usersettings.html', name: 'User Settings & Views', icon: '👤', category: 'Configuration', version: '1.0.0', sizeBytes: 21382, description: 'Inspect and bulk-update User Settings (paging limit, timezone, UI language) and manage or reassign user-owned Personal Views and Personal Dashboards.' },
+      { id: 'record-inspector', file: 'tools/dvopentools_recordinspector.html', name: 'Record Inspector', icon: '🔎', category: 'Data', version: '1.0.0', sizeBytes: 13710, description: 'Inspect all fields (including hidden attributes) on any Dataverse record by pasting a URL or GUID, edit updatable values, or jump to Access Diagnostics.' },
+      { id: 'bulk-ops', file: 'tools/dvopentools_bulkops.html', name: 'Bulk Operations', icon: '♻️', category: 'Data', version: '1.0.0', sizeBytes: 10957, description: 'Preview records with FetchXML and execute throttled bulk PATCH, state activation/deactivation, or DELETE operations safely under Host Security Gateway.' },
+      { id: 'row-counter', file: 'tools/dvopentools_rowcounter.html', name: 'Row Counter', icon: '📊', category: 'Data', version: '1.0.0', sizeBytes: 49614, description: 'Count records across Dataverse tables (Total, Active, Inactive, Custom Filter) with HTTP headers inspection & CSV export.' },
+      { id: 'storage-analyzer', file: 'tools/dvopentools_storage.html', name: 'Storage Analyzer', icon: '💾', category: 'Data', version: '1.0.0', sizeBytes: 6393, description: 'Identify Dataverse log and file storage bloat across AsyncOperations, Plugin Traces, Audits, Notes/Attachments, and Bulk Delete jobs.' },
+      { id: 'dup-rules', file: 'tools/dvopentools_duprules.html', name: 'Duplicate Rules Auditor', icon: '👯', category: 'Data', version: '1.0.0', sizeBytes: 14289, description: 'Inspect all Dataverse Duplicate Detection Rules, match conditions, operator parameters, case-sensitivity, and test records via RetrieveDuplicates.' },
+      { id: 'table-map', file: 'tools/dvopentools_tablemap.html', name: 'Table Automation Map', icon: '⚡', category: 'Diagnostics', version: '1.0.0', sizeBytes: 10200, description: 'Unified view of every Plugin Step, Business Rule, Classic Workflow, Business Process Flow, Cloud Flow trigger, and Bound Custom API on any Dataverse table.' },
+      { id: 'process-chain', file: 'tools/dvopentools_processchain.html', name: 'Process Cascade Tracer', icon: '🕸️', category: 'Diagnostics', version: '1.1.0', sizeBytes: 61238, description: 'Trace multi-hop automation chains across Cloud Flows, Plugins, Webhooks, Classic Workflows, and Business Rules with an interactive Flowchart, Cascade Tree, Edge Table, and loop detection.' },
+      { id: 'env-timeline', file: 'tools/dvopentools_envtimeline.html', name: 'Environment Timeline', icon: '🕒', category: 'Diagnostics', version: '1.0.0', sizeBytes: 161530, description: 'Unified chronological activity and event timeline across Dataverse: Audits, Plugin Traces, Flow Runs, System Jobs, Solution Operations, and Sync Logs.' },
+      { id: 'flow-calendar', file: 'tools/dvopentools_flowcalendar.html', name: 'Flow Calendar', icon: '📅', category: 'Flow', version: '1.0.0', sizeBytes: 69463, description: 'Visualise Power Automate cloud flow run history across a 7-day hourly timeline with response headers inspection.' },
+      { id: 'flow-schedules', file: 'tools/dvopentools_flowschedules.html', name: 'Scheduled Flows', icon: '⏰', category: 'Flow', version: '1.1.0', sizeBytes: 51634, description: 'List all Scheduled Power Automate Cloud Flows by Solution with decoded recurrence timing, time zone, state, and a chronological Timeline view of upcoming runs.' },
+      { id: 'flow-codeview', file: 'tools/dvopentools_flowcodeview.html', name: 'Flow CodeView Reader', icon: '🧬', category: 'Flow', version: '1.0.0', sizeBytes: 84022, description: 'Decode Cloud Flow clientdata or Peek-Code JSON into a readable action tree by resolving OptionSet integer codes to labels and GUIDs to actual Dataverse record names.' },
+      { id: 'conn-refs', file: 'tools/dvopentools_connrefs.html', name: 'Connection Audit', icon: '🔗', category: 'Flow', version: '1.0.0', sizeBytes: 8094, description: 'Audit Connection References, map which Cloud Flows depend on each connection, and flag disconnected references or turned-off flows.' },
+      { id: 'plugin-manager', file: 'tools/dvopentools_plugins.html', name: 'Plugin Step Manager', icon: '🧩', category: 'Extensibility', version: '1.0.0', sizeBytes: 10148, description: 'Browse registered Plugin Assemblies, Types, SDK Message Processing Steps, and Pre/Post Images, with 1-click step Enable/Disable.' },
+      { id: 'webhook-inspector', file: 'tools/dvopentools_webhooks.html', name: 'Webhook Inspector', icon: '🪝', category: 'Extensibility', version: '1.1.0', sizeBytes: 11600, description: 'Inspect Dataverse Service Endpoints and Webhooks, linked SDK Message Processing Steps, recent Async delivery failures, and build sample RemoteExecutionContext payloads.' },
+      { id: 'wr-code-search', file: 'tools/dvopentools_wrsearch.html', name: 'Web Resource Search', icon: '💻', category: 'Extensibility', version: '1.0.0', sizeBytes: 18314, description: 'Decode and full-text / regex search across all JavaScript, HTML, CSS, XML, and ResX Web Resources to spot legacy Xrm.Page calls, hardcoded URLs/GUIDs, or field usage.' },
+      { id: 'ribbon-inspector', file: 'tools/dvopentools_ribbon.html', name: 'Command Bar & Ribbon', icon: '🎀', category: 'Extensibility', version: '1.0.0', sizeBytes: 17647, description: 'Inspect Modern Command Bar buttons (appactions Power Fx & JavaScript) and Classic RibbonDiffXml diffs (ribbondiffs) per table.' },
+      { id: 'form-view', file: 'tools/dvopentools_formview.html', name: 'Form & View XML', icon: '📋', category: 'Metadata', version: '1.0.0', sizeBytes: 11191, description: 'Audit FormXML JavaScript libraries, OnLoad/OnSave/OnChange handlers, tabs & fields, plus SavedQuery view layouts and FetchXML.' },
+      { id: 'label-explorer', file: 'tools/dvopentools_labels.html', name: 'Label Explorer', icon: '🌍', category: 'Metadata', version: '1.0.0', sizeBytes: 6767, description: 'Inspect localized Display Labels across all provisioned Dataverse languages (RetrieveProvisionedLanguages) for Tables and Columns, and export translation CSVs.' }
     ];
 
     let activeCat = 'All';
     let searchQuery = '';
+    const selectedIds = new Set();
+    const htmlCache = new Map();
+
+    function formatBytes(bytes) {
+      const n = Number(bytes) || 0;
+      if (n < 1024) return `${n} B`;
+      if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+      return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+    }
+
+    function estimateBundleBytes(items) {
+      if (!items.length) return 0;
+      const raw = items.reduce((s, t) => s + (t.sizeBytes || 0), 0);
+      // JSON string escaping + outer wrapper overhead (~1.04x + 1.5 KB)
+      return Math.round(raw * 1.04) + 1500;
+    }
+
+    function getFilteredTools() {
+      const q = searchQuery.trim().toLowerCase();
+      return TOOLS.filter(t => {
+        if (activeCat !== 'All' && t.category !== activeCat) return false;
+        if (!q) return true;
+        return `${t.name} ${t.category} ${t.description} ${t.file}`.toLowerCase().includes(q);
+      });
+    }
 
     function esc(s) {
       return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -477,22 +579,46 @@
       });
     }
 
+    function renderBundleBar() {
+      const selected = TOOLS.filter(t => selectedIds.has(t.id));
+      const estSel = estimateBundleBytes(selected);
+      const estAll = estimateBundleBytes(TOOLS);
+
+      document.getElementById('host-size-lbl').textContent = formatBytes(HOST_SIZE_BYTES);
+      document.getElementById('all-count').textContent = String(TOOLS.length);
+      document.getElementById('all-size-lbl').textContent = `~${formatBytes(estAll)}`;
+      document.getElementById('btn-sel-size').textContent = selected.length ? `~${formatBytes(estSel)}` : '0 KB';
+
+      const pill = document.getElementById('bundle-size-pill');
+      const pct = Math.min(100, (estSel / DATAVERSE_DEFAULT_WR_LIMIT) * 100);
+      pill.textContent = selected.length
+        ? `${selected.length} / ${TOOLS.length} selected · Est. ${formatBytes(estSel)} (${pct.toFixed(1)}% of 5 MB limit)`
+        : `0 / ${TOOLS.length} selected · All 28 total: ~${formatBytes(estAll)}`;
+      pill.classList.toggle('warn', estSel > DATAVERSE_DEFAULT_WR_LIMIT * 0.9);
+
+      const fill = document.getElementById('bundle-meter-fill');
+      fill.style.width = `${pct.toFixed(1)}%`;
+      fill.style.background = estSel > DATAVERSE_DEFAULT_WR_LIMIT ? '#dc2626' : (estSel > DATAVERSE_DEFAULT_WR_LIMIT * 0.8 ? '#d97706' : 'var(--brand)');
+
+      document.getElementById('btn-dl-selected').disabled = selected.length === 0;
+    }
+
     function renderTools() {
-      const q = searchQuery.trim().toLowerCase();
-      const filtered = TOOLS.filter(t => {
-        if (activeCat !== 'All' && t.category !== activeCat) return false;
-        if (!q) return true;
-        return `${t.name} ${t.category} ${t.description} ${t.file}`.toLowerCase().includes(q);
-      });
+      const filtered = getFilteredTools();
 
       document.getElementById('tools-count').textContent = String(TOOLS.length);
       const grid = document.getElementById('tools-grid');
       if (!filtered.length) {
         grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:36px;color:var(--text-sec);">No tools match your filter.</div>';
+        renderBundleBar();
         return;
       }
-      grid.innerHTML = filtered.map(t => `
-        <article class="tool-card">
+      grid.innerHTML = filtered.map(t => {
+        const isSel = selectedIds.has(t.id);
+        const fileName = t.file.replace('tools/', '');
+        const sizeLbl = formatBytes(t.sizeBytes);
+        return `
+        <article class="tool-card${isSel ? ' selected' : ''}">
           <div>
             <div class="tool-top">
               <div class="tool-ico">${t.icon}</div>
@@ -500,20 +626,179 @@
                 <div class="tool-title-row">
                   <span class="tool-title">${esc(t.name)}</span>
                   <span class="tool-cat">${esc(t.category)}</span>
+                  <span class="tool-size">${esc(sizeLbl)}</span>
                 </div>
                 <p class="tool-desc">${esc(t.description)}</p>
               </div>
+              <label class="tool-chk-wrap" title="Include in custom tool bundle">
+                <input type="checkbox" class="tool-chk" data-tool-id="${esc(t.id)}"${isSel ? ' checked' : ''} />
+              </label>
             </div>
           </div>
           <div class="tool-foot">
-            <span class="tool-file" title="${esc(t.file)}">${esc(t.file.replace('tools/', ''))} · v${esc(t.version)}</span>
+            <span class="tool-file" title="${esc(t.file)}">${esc(fileName)} · v${esc(t.version)}</span>
             <div class="tool-links">
+              <a class="btn btn-sm" href="${esc(t.file)}" download="${esc(fileName)}" title="Download single HTML file (${esc(sizeLbl)})">⬇ Save</a>
               <a class="btn btn-sm" href="${esc(t.file)}" title="Open raw HTML file">HTML</a>
               <a class="btn btn-sm btn-primary" href="dvopentools_host.html?tool=${encodeURIComponent(t.id)}">Open →</a>
             </div>
           </div>
-        </article>
-      `).join('');
+        </article>`;
+      }).join('');
+
+      grid.querySelectorAll('.tool-chk').forEach(chk => {
+        chk.addEventListener('change', () => {
+          const id = chk.dataset.toolId;
+          if (chk.checked) selectedIds.add(id);
+          else selectedIds.delete(id);
+          chk.closest('.tool-card')?.classList.toggle('selected', chk.checked);
+          renderBundleBar();
+        });
+      });
+
+      renderBundleBar();
+    }
+
+    function normalizeBundleFilename(raw) {
+      let clean = String(raw || 'dvopentools_bundle_custom')
+        .trim()
+        .replace(/[^a-zA-Z0-9._-]+/g, '_')
+        .replace(/\.html?$/i, '');
+      if (!clean) clean = 'dvopentools_bundle_custom';
+      if (!clean.toLowerCase().startsWith('dvopentools_')) clean = 'dvopentools_' + clean;
+      return `${clean}.html`;
+    }
+
+    async function fetchToolHtmlText(tool) {
+      if (htmlCache.has(tool.file)) return htmlCache.get(tool.file);
+      const res = await fetch(tool.file, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${tool.file}`);
+      const text = await res.text();
+      htmlCache.set(tool.file, text);
+      return text;
+    }
+
+    async function downloadToolBundle(targetTools, filenameRaw) {
+      if (!targetTools.length) return;
+      const statusEl = document.getElementById('bundle-status');
+      const dlSelBtn = document.getElementById('btn-dl-selected');
+      const dlAllBtn = document.getElementById('btn-dl-all');
+      dlSelBtn.disabled = true;
+      dlAllBtn.disabled = true;
+      statusEl.className = 'bundle-status';
+      statusEl.textContent = `Fetching ${targetTools.length} tool file(s) and building bundle…`;
+
+      try {
+        const bundled = await Promise.all(targetTools.map(async t => {
+          const html = await fetchToolHtmlText(t);
+          return {
+            id: t.id,
+            wrName: t.file.replace('tools/', ''),
+            name: t.name,
+            icon: t.icon,
+            category: t.category,
+            version: t.version,
+            minHostVersion: null,
+            description: t.description,
+            sizeBytes: new Blob([html]).size,
+            html
+          };
+        }));
+
+        const fileName = normalizeBundleFilename(filenameRaw);
+        const payload = {
+          bundleVersion: 1,
+          name: fileName.replace(/\.html$/i, ''),
+          createdAt: new Date().toISOString(),
+          tools: bundled
+        };
+        const safeJson = JSON.stringify(payload).replace(/</g, '\\u003c');
+        const rowsHtml = bundled.map(t =>
+          `<tr><td>${esc(t.icon)} ${esc(t.name)}</td><td><code>${esc(t.wrName)}</code></td><td>${esc(t.category)}</td><td>v${esc(t.version)}</td><td>${esc(formatBytes(t.sizeBytes))}</td></tr>`
+        ).join('\n      ');
+
+        const bundleHtml = [
+          '<!DOCTYPE html>',
+          '<html lang="en">',
+          '<head>',
+          '  <meta charset="UTF-8">',
+          `  <title>DV Open Tools — Bundled Tool Pack (${bundled.length} tools)</title>`,
+          '  <style>body{font-family:Segoe UI,system-ui,sans-serif;max-width:900px;margin:32px auto;padding:0 16px;color:#1e293b}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}th,td{border:1px solid #cbd5e1;padding:8px 10px;text-align:left}th{background:#f1f5f9}</style>',
+          '</head>',
+          '<body>',
+          `  <h1>📦 DV Open Tools — Bundled Tool Pack (${bundled.length} tools)</h1>`,
+          '  <p>Upload this single HTML Web Resource alongside independent <code>dvopentools_host.html</code> (name starting with <code>dvopentools_</code>), or import it in Host via <strong>Load Tool from File</strong>.</p>',
+          '  <table>',
+          '    <thead><tr><th>Tool</th><th>Source File</th><th>Category</th><th>Version</th><th>Size</th></tr></thead>',
+          `    <tbody>\n      ${rowsHtml}\n    </tbody>`,
+          '  </table>',
+          `  <script type="application/json" id="dvopentools-bundle">${safeJson}</` + 'script>',
+          '</body>',
+          '</html>\n'
+        ].join('\n');
+
+        const blob = new Blob([bundleHtml], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+        statusEl.className = 'bundle-status ok';
+        statusEl.textContent = `Downloaded ${fileName} (${bundled.length} tools · actual size: ${formatBytes(blob.size)}). Upload alongside independent dvopentools_host.html or load in Host.`;
+      } catch (err) {
+        statusEl.className = 'bundle-status err';
+        statusEl.textContent = location.protocol === 'file:'
+          ? 'Browser file:// security blocks fetching ./tools/*.html for bundling. Serve via GitHub Pages or dev-server (http://127.0.0.1:8787), or run --build-bundle from dev-server CLI.'
+          : `Bundle build failed: ${err.message}`;
+      } finally {
+        dlAllBtn.disabled = false;
+        renderBundleBar();
+      }
+    }
+
+    document.getElementById('btn-sel-all').addEventListener('click', () => {
+      TOOLS.forEach(t => selectedIds.add(t.id));
+      renderTools();
+    });
+    document.getElementById('btn-sel-filtered').addEventListener('click', () => {
+      getFilteredTools().forEach(t => selectedIds.add(t.id));
+      renderTools();
+    });
+    document.getElementById('btn-sel-none').addEventListener('click', () => {
+      selectedIds.clear();
+      renderTools();
+    });
+    document.getElementById('btn-dl-selected').addEventListener('click', () => {
+      const target = TOOLS.filter(t => selectedIds.has(t.id));
+      const customName = document.getElementById('bundle-name').value;
+      downloadToolBundle(target, customName);
+    });
+    document.getElementById('btn-dl-all').addEventListener('click', () => {
+      downloadToolBundle(TOOLS, 'dvopentools_bundle_all');
+    });
+
+    // Live-sync file sizes & metadata from tools/manifest.json when served via HTTP(S)
+    if (location.protocol !== 'file:') {
+      fetch('tools/manifest.json', { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() : null))
+        .then(list => {
+          if (!Array.isArray(list)) return;
+          const byId = new Map(list.map(m => [m.id, m]));
+          let changed = false;
+          for (const t of TOOLS) {
+            const m = byId.get(t.id);
+            if (m && typeof m.sizeBytes === 'number' && m.sizeBytes !== t.sizeBytes) {
+              t.sizeBytes = m.sizeBytes;
+              changed = true;
+            }
+          }
+          if (changed) renderTools();
+        })
+        .catch(() => {});
     }
 
     document.getElementById('tool-search').addEventListener('input', e => {

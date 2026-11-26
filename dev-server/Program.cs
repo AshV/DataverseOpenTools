@@ -47,6 +47,8 @@ internal static class Program
         public string Auth { get; set; } = "auto";
         public bool LocalOnly { get; set; }
         public bool BuildManifest { get; set; }
+        public bool BuildBundle { get; set; }
+        public string BundleOut { get; set; } = "";
         public bool Help { get; set; }
     }
 
@@ -66,6 +68,13 @@ internal static class Program
         {
             var items = BuildToolsManifest(rootDir, toolsDir);
             Console.WriteLine($"[dev-server] Wrote tools/manifest.json ({items.Count} tools).");
+            return 0;
+        }
+
+        if (opts.BuildBundle)
+        {
+            var (outPath, count, bytes) = BuildToolsBundle(rootDir, toolsDir, opts.BundleOut);
+            Console.WriteLine($"[dev-server] Wrote {Path.GetRelativePath(rootDir, outPath)} ({count} tools, {bytes / 1024.0:F1} KB).");
             return 0;
         }
 
@@ -158,6 +167,7 @@ Options:
   --auth <mode>     Token source: auto (default), pac (`pac auth token`), az (`az account get-access-token`), or env (DV_TOKEN)
   --local-only      Serve local HTML tools without proxying Dataverse API calls
   --build-manifest  Regenerate tools/manifest.json from tools/dvopentools_*.html and exit
+  --build-bundle    Generate a single-file tool bundle HTML (default: dist/dvopentools_bundle_all.html)
 """);
     }
 
@@ -202,6 +212,12 @@ Options:
             if (arg is "--help" or "-h") opts.Help = true;
             else if (arg == "--local-only") opts.LocalOnly = true;
             else if (arg == "--build-manifest") opts.BuildManifest = true;
+            else if (arg == "--build-bundle")
+            {
+                opts.BuildBundle = true;
+                if (i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal)) opts.BundleOut = args[++i];
+            }
+            else if (arg.StartsWith("--build-bundle=", StringComparison.Ordinal)) { opts.BuildBundle = true; opts.BundleOut = arg[15..]; }
             else if (arg == "--env" && i + 1 < args.Length) opts.EnvUrl = NormalizeEnvUrl(args[++i]);
             else if (arg.StartsWith("--env=")) opts.EnvUrl = NormalizeEnvUrl(arg[6..]);
             else if (arg == "--port" && i + 1 < args.Length) opts.Port = int.TryParse(args[++i], out var pv) && pv > 0 ? pv : 8787;
@@ -416,7 +432,8 @@ Options:
                 ["category"] = category,
                 ["version"] = meta?["version"]?.GetValue<string>() ?? "1.0.0",
                 ["minHostVersion"] = meta?["minHostVersion"]?.DeepClone(),
-                ["description"] = meta?["description"]?.GetValue<string>() ?? ""
+                ["description"] = meta?["description"]?.GetValue<string>() ?? "",
+                ["sizeBytes"] = new FileInfo(fullPath).Length
             };
             items.Add((category, name, obj));
         }
@@ -439,6 +456,67 @@ Options:
         }
 
         return sorted;
+    }
+
+    private static (string OutPath, int Count, int Bytes) BuildToolsBundle(string rootDir, string toolsDir, string? outPath, string prefix = ToolPrefix)
+    {
+        var manifest = BuildToolsManifest(rootDir, toolsDir, prefix);
+        var bundleTools = new JsonArray();
+        var rows = new StringBuilder();
+        foreach (var item in manifest)
+        {
+            var wrName = item["wrName"]?.GetValue<string>() ?? "";
+            var fullPath = ResolveSafeLocalFile(wrName, toolsDir) ?? ResolveSafeLocalFile(wrName, rootDir);
+            if (fullPath is null) continue;
+            var toolHtml = File.ReadAllText(fullPath, Encoding.UTF8);
+            var clone = item.DeepClone().AsObject();
+            clone["html"] = toolHtml;
+            bundleTools.Add(clone);
+
+            var icon = WebUtility.HtmlEncode(item["icon"]?.GetValue<string>() ?? "🔧");
+            var name = WebUtility.HtmlEncode(item["name"]?.GetValue<string>() ?? wrName);
+            var cat = WebUtility.HtmlEncode(item["category"]?.GetValue<string>() ?? "General");
+            var ver = WebUtility.HtmlEncode(item["version"]?.GetValue<string>() ?? "1.0.0");
+            var sizeKb = (item["sizeBytes"]?.GetValue<long>() ?? 0) / 1024.0;
+            rows.AppendLine($"      <tr><td>{icon} {name}</td><td><code>{WebUtility.HtmlEncode(wrName)}</code></td><td>{cat}</td><td>v{ver}</td><td>{sizeKb:F1} KB</td></tr>");
+        }
+
+        var payload = new JsonObject
+        {
+            ["bundleVersion"] = 1,
+            ["name"] = "DV Open Tools Complete Bundle",
+            ["createdAt"] = DateTimeOffset.UtcNow.ToString("O"),
+            ["tools"] = bundleTools
+        };
+        var rawJson = payload.ToJsonString(new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping })
+            .Replace("<", "\\u003c");
+        var html = $$"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DV Open Tools — Bundled Tool Pack ({{bundleTools.Count}} tools)</title>
+  <style>body{font-family:Segoe UI,system-ui,sans-serif;max-width:900px;margin:32px auto;padding:0 16px;color:#1e293b}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}th,td{border:1px solid #cbd5e1;padding:8px 10px;text-align:left}th{background:#f1f5f9}</style>
+</head>
+<body>
+  <h1>📦 DV Open Tools — Bundled Tool Pack ({{bundleTools.Count}} tools)</h1>
+  <p>Upload this single HTML Web Resource alongside <code>dvopentools_host.html</code> (name starting with <code>dvopentools_</code>), or import it in the Host via <strong>Load Tool from File</strong>.</p>
+  <table>
+    <thead><tr><th>Tool</th><th>Source File</th><th>Category</th><th>Version</th><th>Size</th></tr></thead>
+    <tbody>
+{{rows}}    </tbody>
+  </table>
+  <script type="application/json" id="dvopentools-bundle">{{rawJson}}</script>
+</body>
+</html>
+""";
+        var resolvedOut = string.IsNullOrWhiteSpace(outPath)
+            ? Path.Combine(rootDir, "dist", "dvopentools_bundle_all.html")
+            : Path.GetFullPath(Path.Combine(rootDir, outPath));
+        Directory.CreateDirectory(Path.GetDirectoryName(resolvedOut)!);
+        var bytes = Encoding.UTF8.GetBytes(html);
+        File.WriteAllBytes(resolvedOut, bytes);
+        return (resolvedOut, bundleTools.Count, bytes.Length);
     }
 
     private static string MimeTypeFor(string filePath) => Path.GetExtension(filePath).ToLowerInvariant() switch

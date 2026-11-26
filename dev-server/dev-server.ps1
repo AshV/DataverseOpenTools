@@ -19,6 +19,8 @@ param(
     [string]$Auth = $(if ($env:DV_AUTH_MODE) { $env:DV_AUTH_MODE.ToLowerInvariant() } else { 'auto' }),
     [switch]$LocalOnly,
     [switch]$BuildManifest,
+    [switch]$BuildBundle,
+    [string]$BundleOut = '',
     [switch]$Help,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$ExtraArgs
@@ -34,6 +36,11 @@ if ($ExtraArgs) {
         if ($a -in @('--help', '-h')) { $Help = $true }
         elseif ($a -eq '--local-only') { $LocalOnly = $true }
         elseif ($a -eq '--build-manifest') { $BuildManifest = $true }
+        elseif ($a -eq '--build-bundle') {
+            $BuildBundle = $true
+            if (($i + 1) -lt $ExtraArgs.Count -and -not $ExtraArgs[$i + 1].StartsWith('--')) { $BundleOut = $ExtraArgs[++$i] }
+        }
+        elseif ($a.StartsWith('--build-bundle=')) { $BuildBundle = $true; $BundleOut = $a.Substring(15) }
         elseif ($a -eq '--env' -and ($i + 1) -lt $ExtraArgs.Count) { $Env = $ExtraArgs[++$i] }
         elseif ($a.StartsWith('--env=')) { $Env = $a.Substring(6) }
         elseif ($a -eq '--port' -and ($i + 1) -lt $ExtraArgs.Count) { $Port = [int]$ExtraArgs[++$i] }
@@ -208,6 +215,7 @@ function Build-ToolsManifest([string]$Prefix = 'dvopentools_') {
             version        = if ($meta -and $meta.version) { $meta.version } else { '1.0.0' }
             minHostVersion = if ($meta -and $meta.PSObject.Properties['minHostVersion']) { $meta.minHostVersion } else { $null }
             description    = if ($meta -and $meta.description) { $meta.description } else { '' }
+            sizeBytes      = (Get-Item $fullPath).Length
         }
     }
     $sorted = $items | Sort-Object -Property category, name
@@ -216,6 +224,70 @@ function Build-ToolsManifest([string]$Prefix = 'dvopentools_') {
         [System.IO.File]::WriteAllText((Join-Path $ToolsDir 'manifest.json'), $json, (New-Object System.Text.UTF8Encoding($false)))
     }
     return $sorted
+}
+
+function Build-ToolsBundle([string]$OutPath = '', [string]$Prefix = 'dvopentools_') {
+    $manifest = Build-ToolsManifest $Prefix
+    $bundleTools = @()
+    $rows = New-Object System.Text.StringBuilder
+    foreach ($item in $manifest) {
+        $fullPath = Resolve-SafeLocalFile $item.wrName $ToolsDir
+        if (-not $fullPath) { $fullPath = Resolve-SafeLocalFile $item.wrName $RootDir }
+        if (-not $fullPath) { continue }
+        $toolHtml = [System.IO.File]::ReadAllText($fullPath, [System.Text.Encoding]::UTF8)
+        $bundleTools += [pscustomobject]@{
+            id             = $item.id
+            wrName         = $item.wrName
+            name           = $item.name
+            icon           = $item.icon
+            category       = $item.category
+            version        = $item.version
+            minHostVersion = $item.minHostVersion
+            description    = $item.description
+            sizeBytes      = $item.sizeBytes
+            html           = $toolHtml
+        }
+        $escIcon = [System.Net.WebUtility]::HtmlEncode($item.icon)
+        $escName = [System.Net.WebUtility]::HtmlEncode($item.name)
+        $escWr   = [System.Net.WebUtility]::HtmlEncode($item.wrName)
+        $escCat  = [System.Net.WebUtility]::HtmlEncode($item.category)
+        $escVer  = [System.Net.WebUtility]::HtmlEncode($item.version)
+        $kb      = [Math]::Round($item.sizeBytes / 1024, 1)
+        [void]$rows.AppendLine("      <tr><td>$escIcon $escName</td><td><code>$escWr</code></td><td>$escCat</td><td>v$escVer</td><td>$kb KB</td></tr>")
+    }
+    $payload = [ordered]@{
+        bundleVersion = 1
+        name          = 'DV Open Tools Complete Bundle'
+        createdAt     = [DateTimeOffset]::UtcNow.ToString('O')
+        tools         = $bundleTools
+    }
+    $safeJson = ($payload | ConvertTo-Json -Depth 10 -Compress).Replace('<', '\u003c')
+    $html = @"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DV Open Tools — Bundled Tool Pack ($($bundleTools.Count) tools)</title>
+  <style>body{font-family:Segoe UI,system-ui,sans-serif;max-width:900px;margin:32px auto;padding:0 16px;color:#1e293b}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}th,td{border:1px solid #cbd5e1;padding:8px 10px;text-align:left}th{background:#f1f5f9}</style>
+</head>
+<body>
+  <h1>📦 DV Open Tools — Bundled Tool Pack ($($bundleTools.Count) tools)</h1>
+  <p>Upload this single HTML Web Resource alongside <code>dvopentools_host.html</code> (name starting with <code>dvopentools_</code>), or import it in the Host via <strong>Load Tool from File</strong>.</p>
+  <table>
+    <thead><tr><th>Tool</th><th>Source File</th><th>Category</th><th>Version</th><th>Size</th></tr></thead>
+    <tbody>
+$($rows.ToString())    </tbody>
+  </table>
+  <script type="application/json" id="dvopentools-bundle">$safeJson</script>
+</body>
+</html>
+"@
+    $resolvedOut = if ($OutPath) { [System.IO.Path]::GetFullPath((Join-Path $RootDir $OutPath)) } else { Join-Path (Join-Path $RootDir 'dist') 'dvopentools_bundle_all.html' }
+    $outDir = [System.IO.Path]::GetDirectoryName($resolvedOut)
+    if (-not [System.IO.Directory]::Exists($outDir)) { [void][System.IO.Directory]::CreateDirectory($outDir) }
+    $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($html)
+    [System.IO.File]::WriteAllBytes($resolvedOut, $bytes)
+    return @{ OutPath = $resolvedOut; Count = $bundleTools.Count; Bytes = $bytes.Length }
 }
 
 function Get-MimeType([string]$FilePath) {
@@ -360,6 +432,12 @@ function Invoke-DataverseProxy($Req, $Res, [string]$RawUrl, [string]$EnvUrl, [st
 if ($BuildManifest) {
     $built = Build-ToolsManifest
     Write-Host "[dev-server] Wrote tools/manifest.json ($($built.Count) tools)."
+    exit 0
+}
+
+if ($BuildBundle) {
+    $res = Build-ToolsBundle $BundleOut
+    Write-Host "[dev-server] Wrote $($res.OutPath) ($($res.Count) tools, $([Math]::Round($res.Bytes / 1024, 1)) KB)."
     exit 0
 }
 

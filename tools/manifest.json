@@ -7,7 +7,8 @@
     "category": "Configuration",
     "version": "1.1.0",
     "minHostVersion": "2025.11.1",
-    "description": "Inspect Default vs Current Environment Variable values, validate JSON configs, spot missing values, and safely update overrides."
+    "description": "Inspect Default vs Current Environment Variable values, validate JSON configs, spot missing values, and safely update overrides.",
+    "sizeBytes": 12195
   },
   {
     "wrName": "dvopentools_usersettings.html",
@@ -17,7 +18,8 @@
     "category": "Configuration",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Inspect and bulk-update User Settings (paging limit, timezone, UI language) and manage or reassign user-owned Personal Views and Personal Dashboards."
+    "description": "Inspect and bulk-update User Settings (paging limit, timezone, UI language) and manage or reassign user-owned Personal Views and Personal Dashboards.",
+    "sizeBytes": 21382
   },
   {
     "wrName": "dvopentools_bulkops.html",
@@ -27,7 +29,8 @@
     "category": "Data",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Preview records with FetchXML and execute throttled bulk PATCH, state activation/deactivation, or DELETE operations safely under Host Security Gateway."
+    "description": "Preview records with FetchXML and execute throttled bulk PATCH, state activation/deactivation, or DELETE operations safely under Host Security Gateway.",
+    "sizeBytes": 10957
   },
   {
     "wrName": "dvopentools_duprules.html",
@@ -37,7 +40,8 @@
     "category": "Data",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Inspect all Dataverse Duplicate Detection Rules, match conditions, operator parameters, case-sensitivity, and test records via RetrieveDuplicates."
+    "description": "Inspect all Dataverse Duplicate Detection Rules, match conditions, operator parameters, case-sensitivity, and test records via RetrieveDuplicates.",
+    "sizeBytes": 14289
   },
   {
     "wrName": "dvopentools_recordinspector.html",
@@ -47,7 +51,8 @@
     "category": "Data",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Inspect all fields (including hidden attributes) on any Dataverse record by pasting a URL or GUID, edit updatable values, or jump to Access Diagnostics."
+    "description": "Inspect all fields (including hidden attributes) on any Dataverse record by pasting a URL or GUID, edit updatable values, or jump to Access Diagnostics.",
+    "sizeBytes": 13710
   },
   {
     "wrName": "dvopentools_rowcounter.html",
@@ -57,7 +62,8 @@
     "category": "Data",
     "version": "1.0.0",
     "minHostVersion": "2025.11.0",
-    "description": "Count records across Dataverse tables (Total, Active, Inactive, Custom Filter) with HTTP headers inspection & CSV export."
+    "description": "Count records across Dataverse tables (Total, Active, Inactive, Custom Filter) with HTTP headers inspection & CSV export.",
+    "sizeBytes": 49614
   },
   {
     "wrName": "dvopentools_storage.html",
@@ -67,7 +73,8 @@
     "category": "Data",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Identify Dataverse log and file storage bloat across AsyncOperations, Plugin Traces, Audits, Notes/Attachments, and Bulk Delete jobs."
+    "description": "Identify Dataverse log and file storage bloat across AsyncOperations, Plugin Traces, Audits, Notes/Attachments, and Bulk Delete jobs.",
+    "sizeBytes": 6393
   },
   {
     "wrName": "dvopentools_envtimeline.html",
@@ -77,7 +84,8 @@
     "category": "Diagnostics",
     "version": "1.0.0",
     "minHostVersion": "2025.11.0",
-    "description": "Unified chronological activity and event timeline across Dataverse: Audits, Plugin Traces, Flow Runs, System Jobs, Solution Operations, and Sync Logs."
+    "description": "Unified chronological activity and event timeline across Dataverse: Audits, Plugin Traces, Flow Runs, System Jobs, Solution Operations, and Sync Logs.",
+    "sizeBytes": 161530
   },
   {
     "wrName": "dvopentools_plugintraces.html",
@@ -87,7 +95,8 @@
     "category": "Diagnostics",
     "version": "1.1.0",
     "minHostVersion": "2025.11.1",
-    "description": "Stream and filter Dataverse plugintracelog entries, trace full correlation cascades by depth, inspect stack traces, and spot slow plugins."
+    "description": "Stream and filter Dataverse plugintracelog entries, trace full correlation cascades by depth, inspect stack traces, and spot slow plugins.",
+    "sizeBytes": 13886
   },
   {
     "wrName": "dvopentools_processchain.html",
@@ -97,7 +106,8 @@
     "category": "Diagnostics",
     "version": "1.1.0",
     "minHostVersion": "2025.11.1",
-    "description": "Trace multi-hop automation chains across Cloud Flows, Plugins, Webhooks, Classic Workflows, and Business Rules with an interactive Flowchart, Cascade Tree, Edge Table, and loop detection."
+    "description": "Trace multi-hop automation chains across Cloud Flows, Plugins, Webhooks, Classic Workflows, and Business Rules with an interactive Flowchart, Cascade Tree, Edge Table, and loop detection.",
+    "sizeBytes": 61238
   },
   {
     "wrName": "dvopentools_tablemap.html",
@@ -107,7 +117,8 @@
     "category": "Diagnostics",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Unified view of every Plugin Step, Business Rule, Classic Workflow, Business Process Flow, Cloud Flow trigger, and Bound Custom API on any Dataverse table."
+    "description": "Unified view of every Plugin Step, Business Rule, Classic Workflow, Business Process Flow, Cloud Flow trigger, and Bound Custom API on any Dataverse table.",
+    "sizeBytes": 10200
   },
   {
     "wrName": "dvopentools_ribbon.html",
@@ -117,7 +128,8 @@
     "category": "Extensibility",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Inspect Modern Command Bar buttons (appactions Power Fx & JavaScript) and Classic RibbonDiffXml diffs (ribbondiffs) per table."
+    "description": "Inspect Modern Command Bar buttons (appactions Power Fx & JavaScript) and Classic RibbonDiffXml diffs (ribbondiffs) per table.",
+    "sizeBytes": 17647
   },
   {
     "wrName": "dvopentools_plugins.html",
@@ -127,7 +139,8 @@
     "category": "Extensibility",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Browse registered Plugin Assemblies, Types, SDK Message Processing Steps, and Pre/Post Images, with 1-click step Enable/Disable."
+    "description": "Browse registered Plugin Assemblies, Types, SDK Message Processing Steps, and Pre/Post Images, with 1-click step Enable/Disable.",
+    "sizeBytes": 10148
   },
   {
     "wrName": "dvopentools_wrsearch.html",
@@ -137,7 +150,8 @@
     "category": "Extensibility",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Decode and full-text / regex search across all JavaScript, HTML, CSS, XML, and ResX Web Resources to spot legacy Xrm.Page calls, hardcoded URLs/GUIDs, or field usage."
+    "description": "Decode and full-text / regex search across all JavaScript, HTML, CSS, XML, and ResX Web Resources to spot legacy Xrm.Page calls, hardcoded URLs/GUIDs, or field usage.",
+    "sizeBytes": 18314
   },
   {
     "wrName": "dvopentools_webhooks.html",
@@ -147,7 +161,8 @@
     "category": "Extensibility",
     "version": "1.1.0",
     "minHostVersion": "2025.11.1",
-    "description": "Inspect Dataverse Service Endpoints and Webhooks, linked SDK Message Processing Steps, recent Async delivery failures, and build sample RemoteExecutionContext payloads."
+    "description": "Inspect Dataverse Service Endpoints and Webhooks, linked SDK Message Processing Steps, recent Async delivery failures, and build sample RemoteExecutionContext payloads.",
+    "sizeBytes": 11600
   },
   {
     "wrName": "dvopentools_connrefs.html",
@@ -157,7 +172,8 @@
     "category": "Flow",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Audit Connection References, map which Cloud Flows depend on each connection, and flag disconnected references or turned-off flows."
+    "description": "Audit Connection References, map which Cloud Flows depend on each connection, and flag disconnected references or turned-off flows.",
+    "sizeBytes": 8094
   },
   {
     "wrName": "dvopentools_flowcalendar.html",
@@ -167,7 +183,8 @@
     "category": "Flow",
     "version": "1.0.0",
     "minHostVersion": "2025.11.0",
-    "description": "Visualise Power Automate cloud flow run history across a 7-day hourly timeline with response headers inspection."
+    "description": "Visualise Power Automate cloud flow run history across a 7-day hourly timeline with response headers inspection.",
+    "sizeBytes": 69463
   },
   {
     "wrName": "dvopentools_flowcodeview.html",
@@ -177,7 +194,8 @@
     "category": "Flow",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Decode Cloud Flow clientdata or Peek-Code JSON into a readable action tree by resolving OptionSet integer codes to labels and GUIDs to actual Dataverse record names."
+    "description": "Decode Cloud Flow clientdata or Peek-Code JSON into a readable action tree by resolving OptionSet integer codes to labels and GUIDs to actual Dataverse record names.",
+    "sizeBytes": 84022
   },
   {
     "wrName": "dvopentools_flowschedules.html",
@@ -187,7 +205,8 @@
     "category": "Flow",
     "version": "1.1.0",
     "minHostVersion": "2025.11.1",
-    "description": "List all Scheduled Power Automate Cloud Flows by Solution with decoded recurrence timing, time zone, state, and a chronological Timeline view of upcoming runs."
+    "description": "List all Scheduled Power Automate Cloud Flows by Solution with decoded recurrence timing, time zone, state, and a chronological Timeline view of upcoming runs.",
+    "sizeBytes": 51634
   },
   {
     "wrName": "dvopentools_erd.html",
@@ -197,7 +216,8 @@
     "category": "Metadata",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Select Dataverse tables to render an interactive pure-SVG Entity-Relationship diagram (1:N, N:1, N:N), export SVG, or copy Mermaid erDiagram."
+    "description": "Select Dataverse tables to render an interactive pure-SVG Entity-Relationship diagram (1:N, N:1, N:N), export SVG, or copy Mermaid erDiagram.",
+    "sizeBytes": 11026
   },
   {
     "wrName": "dvopentools_formview.html",
@@ -207,7 +227,8 @@
     "category": "Metadata",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Audit FormXML JavaScript libraries, OnLoad/OnSave/OnChange handlers, tabs & fields, plus SavedQuery view layouts and FetchXML."
+    "description": "Audit FormXML JavaScript libraries, OnLoad/OnSave/OnChange handlers, tabs & fields, plus SavedQuery view layouts and FetchXML.",
+    "sizeBytes": 11191
   },
   {
     "wrName": "dvopentools_labels.html",
@@ -217,7 +238,8 @@
     "category": "Metadata",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Inspect localized Display Labels across all provisioned Dataverse languages (RetrieveProvisionedLanguages) for Tables and Columns, and export translation CSVs."
+    "description": "Inspect localized Display Labels across all provisioned Dataverse languages (RetrieveProvisionedLanguages) for Tables and Columns, and export translation CSVs.",
+    "sizeBytes": 6767
   },
   {
     "wrName": "dvopentools_schemabrowser.html",
@@ -227,7 +249,8 @@
     "category": "Metadata",
     "version": "1.1.0",
     "minHostVersion": "2025.11.1",
-    "description": "Explore Dataverse EntityDefinitions, columns, OptionSet integer mappings, relationships, keys, and Global Option Sets."
+    "description": "Explore Dataverse EntityDefinitions, columns, OptionSet integer mappings, relationships, keys, and Global Option Sets.",
+    "sizeBytes": 21232
   },
   {
     "wrName": "dvopentools_fetchxml.html",
@@ -237,7 +260,8 @@
     "category": "Query",
     "version": "1.1.0",
     "minHostVersion": "2025.11.1",
-    "description": "Execute FetchXML queries (with paging & batch fallback) and OData Web API requests with table inspection, code generation, and CSV/JSON export."
+    "description": "Execute FetchXML queries (with paging & batch fallback) and OData Web API requests with table inspection, code generation, and CSV/JSON export.",
+    "sizeBytes": 26872
   },
   {
     "wrName": "dvopentools_accesschecker.html",
@@ -247,7 +271,8 @@
     "category": "Security",
     "version": "1.1.0",
     "minHostVersion": "2025.11.1",
-    "description": "Diagnose effective record permissions via RetrievePrincipalAccess and inspect Security Roles, Team memberships, and record ownership."
+    "description": "Diagnose effective record permissions via RetrievePrincipalAccess and inspect Security Roles, Team memberships, and record ownership.",
+    "sizeBytes": 15402
   },
   {
     "wrName": "dvopentools_buqueues.html",
@@ -257,7 +282,8 @@
     "category": "Security",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Visualize Business Unit hierarchy trees, default teams & divisions, plus inspect Public/Private Queues, email routing, and queue members."
+    "description": "Visualize Business Unit hierarchy trees, default teams & divisions, plus inspect Public/Private Queues, email routing, and queue members.",
+    "sizeBytes": 16503
   },
   {
     "wrName": "dvopentools_rolematrix.html",
@@ -267,7 +293,8 @@
     "category": "Security",
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
-    "description": "Compare Dataverse Security Role table privileges side-by-side (Create, Read, Write, Delete, Append, Assign, Share) and export security audit CSVs."
+    "description": "Compare Dataverse Security Role table privileges side-by-side (Create, Read, Write, Delete, Append, Assign, Share) and export security audit CSVs.",
+    "sizeBytes": 8470
   },
   {
     "wrName": "dvopentools_solutionlayers.html",
@@ -277,6 +304,7 @@
     "category": "Solutions",
     "version": "1.1.0",
     "minHostVersion": "2025.11.1",
-    "description": "Inspect managed vs Active unmanaged solution component layers (msdyn_componentlayer) and diagnose delete blockers via RetrieveDependenciesForDelete."
+    "description": "Inspect managed vs Active unmanaged solution component layers (msdyn_componentlayer) and diagnose delete blockers via RetrieveDependenciesForDelete.",
+    "sizeBytes": 14973
   }
 ]

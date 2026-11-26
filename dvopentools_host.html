@@ -611,7 +611,7 @@
   <div class="toast-wrap" id="toasts"></div>
 
   <!-- Hidden file input -->
-  <input type="file" id="file-input" accept=".html" multiple style="display:none">
+  <input type="file" id="file-input" accept=".html,.htm,.json" multiple style="display:none">
 
   <!-- ══════════════ APPROVAL MODAL (SECURITY GATEWAY) ══════════════ -->
   <div class="overlay" id="approval-modal">
@@ -738,8 +738,8 @@
         Loading an HTML file executes its JavaScript inside this page.
       </div>
       <p style="font-size:13px;color:var(--text-secondary);line-height:1.65">
-        Select a self-contained <code>.html</code> tool file. This is useful for testing
-        a tool locally before uploading it as a web resource.
+        Select a single <code>.html</code> tool file or a <strong>multi-tool bundle</strong> (<code>dvopentools_bundle_*.html</code> / <code>.json</code>).
+        All tools inside a bundle will be unpacked into your sidebar immediately.
       </p>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="file-cancel">Cancel</button>
@@ -961,6 +961,8 @@
       proxyTargetHost: '',
       proxyTargetUrl: '',
       externalHtmlCache: new Map(),
+      bundleHtmlCache: new Map(),
+      localBundledTools: [],
       tabs: [],         // [{tabId, toolId, name, icon, type:'wr'|'file', wrName?}]
       activeTabId: null,
       tools: [],        // discovered [{id, name, icon, category, description, version, wrName}]
@@ -1176,10 +1178,25 @@
       }
     }
 
+    function mergeDiscoveredTools(discovered) {
+      const byId = new Map();
+      for (const t of discovered) {
+        if (!t?.id) continue;
+        // Standalone explicit WR entries take precedence over bundled duplicates
+        if (!byId.has(t.id) || (byId.get(t.id).bundleWrName && !t.bundleWrName)) {
+          byId.set(t.id, t);
+        }
+      }
+      for (const lt of S.localBundledTools) {
+        if (lt?.id) byId.set(lt.id, lt);
+      }
+      return [...byId.values()].sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+    }
+
     async function discoverTools(force = false) {
       if (S.isExternalMode && !getApiBaseUrl()) {
         setSidebarLoading();
-        S.tools = await discoverStaticFolderTools();
+        S.tools = mergeDiscoveredTools(await discoverStaticFolderTools());
         renderSidebar();
         setStatus(false);
         return;
@@ -1188,7 +1205,11 @@
       setSidebarLoading();
       const cacheKey = `cache::${getApiBaseUrl()}::${S.cfg.prefix}`;
       const hit = ls.get(cacheKey);
-      if (!force && hit && Date.now() - hit.ts < CACHE_TTL) { S.tools = hit.tools; renderSidebar(); return; }
+      if (!force && hit && Date.now() - hit.ts < CACHE_TTL) {
+        S.tools = mergeDiscoveredTools(hit.tools || []);
+        renderSidebar();
+        return;
+      }
 
       try {
         const p = S.cfg.prefix;
@@ -1198,35 +1219,62 @@
         const list   = data.value || [];
         const tools  = [];
 
-        await Promise.allSettled(list.map(wr =>
-          fetchManifest(wr.name).then(m => tools.push({
-            wrName:      wr.name,
-            id:          m?.id          || wrToId(wr.name),
-            name:        m?.name        || wr.displayname || wr.name,
-            icon:        m?.icon        || '🔧',
-            category:    m?.category    || 'General',
-            description: m?.description || '',
-            version:     m?.version     || '—',
-            minHostVer:  m?.minHostVersion || null,
-          })).catch(() => tools.push({
-            wrName: wr.name, id: wrToId(wr.name),
-            name: wr.displayname || wr.name, icon: '🔧',
-            category: 'General', description: '', version: '—',
-          }))
-        ));
+        await Promise.allSettled(list.map(async wr => {
+          try {
+            const html = await fetchToolHtml(wr.name);
+            const bundled = html ? parseBundlePayload(html) : null;
+            if (bundled && bundled.length) {
+              for (const bt of bundled) {
+                const bid = bt.id || wrToId(bt.wrName || wr.name);
+                const bKey = `wr:${wr.name}::${bid}`;
+                if (bt.html) S.bundleHtmlCache.set(bKey, bt.html);
+                tools.push({
+                  wrName:         bt.wrName || wr.name,
+                  bundleWrName:   wr.name,
+                  bundleCacheKey: bKey,
+                  id:             bid,
+                  name:           bt.name || bid,
+                  icon:           bt.icon || '🔧',
+                  category:       bt.category || 'General',
+                  description:    bt.description || '',
+                  version:        bt.version || '—',
+                  minHostVer:     bt.minHostVersion || null,
+                });
+              }
+              return;
+            }
+            const m = html ? parseManifest(html) : null;
+            tools.push({
+              wrName:      wr.name,
+              id:          m?.id          || wrToId(wr.name),
+              name:        m?.name        || wr.displayname || wr.name,
+              icon:        m?.icon        || '🔧',
+              category:    m?.category    || 'General',
+              description: m?.description || '',
+              version:     m?.version     || '—',
+              minHostVer:  m?.minHostVersion || null,
+            });
+          } catch {
+            tools.push({
+              wrName: wr.name, id: wrToId(wr.name),
+              name: wr.displayname || wr.name, icon: '🔧',
+              category: 'General', description: '', version: '—',
+            });
+          }
+        }));
 
-        tools.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
-        S.tools = tools;
-        ls.set(cacheKey, { ts: Date.now(), tools });
+        const merged = mergeDiscoveredTools(tools);
+        S.tools = merged;
+        ls.set(cacheKey, { ts: Date.now(), tools: merged.filter(t => t.source !== 'local_bundle') });
       } catch (e) {
         console.error('[dvopentools] Discovery failed:', e);
         const staticFallback = S.isExternalMode ? await discoverStaticFolderTools() : [];
         if (staticFallback.length) {
-          S.tools = staticFallback;
+          S.tools = mergeDiscoveredTools(staticFallback);
           toast(`Proxy unavailable (${e.message}). Loaded ${staticFallback.length} tools from ./tools/ in preview mode.`, 'warning', 6000);
         } else {
           toast(`Failed to discover tools: ${e.message}`, 'error');
-          S.tools = [];
+          S.tools = mergeDiscoveredTools([]);
         }
       }
       renderSidebar();
@@ -1364,20 +1412,33 @@
       if (!tool) { toast(`Tool "${toolId}" not found in environment.`, 'warning'); return; }
       const tabId = uid();
       const apiBase = getApiBaseUrl();
-      const useBlobFrame = S.isExternalMode && ((apiBase && apiBase !== location.origin) || tool.source === 'static_folder' || !apiBase);
+      const isBundled = !!(tool.bundleCacheKey || tool.bundleWrName);
+      const useBlobFrame = isBundled || (S.isExternalMode && ((apiBase && apiBase !== location.origin) || tool.source === 'static_folder' || !apiBase));
       if (useBlobFrame) {
-        let html = S.externalHtmlCache.get(tool.wrName);
+        let html = tool.bundleCacheKey ? S.bundleHtmlCache.get(tool.bundleCacheKey) : S.externalHtmlCache.get(tool.wrName);
         if (!html) {
           try {
-            html = await fetchToolHtml(tool.wrName, tool.source);
+            if (tool.bundleWrName) {
+              const bundleRaw = await fetchToolHtml(tool.bundleWrName, tool.source);
+              const items = bundleRaw ? parseBundlePayload(bundleRaw) : null;
+              if (items) {
+                for (const bt of items) {
+                  const bid = bt.id || wrToId(bt.wrName || tool.bundleWrName);
+                  if (bt.html) S.bundleHtmlCache.set(`wr:${tool.bundleWrName}::${bid}`, bt.html);
+                }
+              }
+              html = S.bundleHtmlCache.get(tool.bundleCacheKey);
+            } else {
+              html = await fetchToolHtml(tool.wrName, tool.source);
+              if (html) S.externalHtmlCache.set(tool.wrName, html);
+            }
             if (!html) throw new Error('Tool HTML returned empty or 404');
-            S.externalHtmlCache.set(tool.wrName, html);
           } catch (e) {
             toast(`Failed to load "${tool.name}": ${e.message}`, 'error');
             return;
           }
         }
-        S.tabs.push({ tabId, toolId, name: tool.name, icon: tool.icon, type: 'wr', wrName: tool.wrName });
+        S.tabs.push({ tabId, toolId, name: tool.name, icon: tool.icon, type: isBundled ? 'file' : 'wr', wrName: tool.wrName });
         createFrame(tabId, { type: 'file', html });
       } else {
         S.tabs.push({ tabId, toolId, name: tool.name, icon: tool.icon, type: 'wr', wrName: tool.wrName });
@@ -2260,12 +2321,69 @@
 
     document.getElementById('file-input').addEventListener('change', async e => {
       const files = [...(e.target.files || [])];
+      let importedBundleCount = 0;
+      let lastImportedFirstId = '';
       for (const file of files) {
-        const html = await file.text();
-        openFileTool(html, parseManifest(html));
+        const text = await file.text();
+        const bundled = parseBundlePayload(text);
+        if (bundled && bundled.length) {
+          for (const bt of bundled) {
+            const bid = bt.id || wrToId(bt.wrName || file.name);
+            const bKey = `local:${file.name}::${bid}`;
+            if (bt.html) S.bundleHtmlCache.set(bKey, bt.html);
+            const desc = {
+              wrName:         bt.wrName || file.name,
+              bundleCacheKey: bKey,
+              id:             bid,
+              name:           bt.name || bid,
+              icon:           bt.icon || '🔧',
+              category:       bt.category || 'General',
+              description:    bt.description || '',
+              version:        bt.version || '—',
+              minHostVer:     bt.minHostVersion || null,
+              source:         'local_bundle',
+            };
+            const existingIdx = S.localBundledTools.findIndex(x => x.id === bid);
+            if (existingIdx >= 0) S.localBundledTools[existingIdx] = desc;
+            else S.localBundledTools.push(desc);
+            if (!lastImportedFirstId) lastImportedFirstId = bid;
+            importedBundleCount++;
+          }
+        } else {
+          openFileTool(text, parseManifest(text));
+        }
+      }
+      if (importedBundleCount > 0) {
+        S.tools = mergeDiscoveredTools(S.tools.filter(t => t.source !== 'local_bundle'));
+        renderSidebar();
+        if (!S.sidebarOpen) toggleSidebar();
+        toast(`Imported ${importedBundleCount} tool(s) from bundle into the sidebar.`, 'success', 5000);
+        if (importedBundleCount === 1 && lastImportedFirstId) {
+          await openTool(lastImportedFirstId);
+        }
       }
       e.target.value = '';
     });
+
+    function parseBundlePayload(rawText) {
+      if (!rawText) return null;
+      const trimmed = rawText.trim();
+      let payload = null;
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try { payload = JSON.parse(trimmed); } catch { payload = null; }
+      }
+      if (!payload) {
+        try {
+          const doc = new DOMParser().parseFromString(rawText, 'text/html');
+          const el  = doc.getElementById('dvopentools-bundle');
+          if (el) payload = JSON.parse(el.textContent.trim());
+        } catch { payload = null; }
+      }
+      if (!payload) return null;
+      const arr = Array.isArray(payload) ? payload : (Array.isArray(payload.tools) ? payload.tools : null);
+      if (!arr) return null;
+      return arr.filter(t => t && typeof t.html === 'string' && t.html.length > 0);
+    }
 
     function parseManifest(html) {
       try {
@@ -2334,6 +2452,7 @@
       S.cfg.proxyUrl = normalized;
       S.proxyTargetHost = '';
       S.externalHtmlCache.clear();
+      S.bundleHtmlCache.clear();
       ls.set('cfg', S.cfg);
       document.getElementById('proxy-modal').classList.remove('open');
       setStatus(false);
@@ -2344,6 +2463,7 @@
       S.cfg.proxyUrl = '';
       S.proxyTargetHost = '';
       S.externalHtmlCache.clear();
+      S.bundleHtmlCache.clear();
       S.tools = [];
       S.ctx = {
         environmentUrl: location.origin,

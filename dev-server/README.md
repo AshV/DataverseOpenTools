@@ -35,3 +35,4 @@ node dev-server/dev-server.js --env https://yourorg.crm.dynamics.com
 | `--auth auto\|pac\|az\|env` | `-Auth auto\|pac\|az\|env` | Bearer token source |
 | `--local-only` | `-LocalOnly` | Serve local HTML tools without proxying Dataverse APIs |
 | `--build-manifest` | `-BuildManifest` | Regenerate `tools/manifest.json` from `tools/dvopentools_*.html` |
+| `--build-bundle [path]` | `-BuildBundle [-BundleOut path]` | Bundle all tools (without host) into one HTML pack (default `dist/dvopentools_bundle_all.html`) |
