@@ -1179,3 +1179,4 @@ How it works:
 - Merges un-uploaded local tools into `/api/data/*/webresourceset` discovery automatically.
 - Acquires and caches OAuth Bearer tokens **strictly server-side** via `pac auth token` or `az account get-access-token` (`DV_TOKEN` env var optional) — Environment URL and Bearer tokens never touch browser JS or storage.
 - Enables CORS + Chrome Private Network Access headers (`Access-Control-Allow-Origin: *`, `Access-Control-Allow-Private-Network: true`) and exposes `GET /_proxy/status` (metadata only) so external/local-file hosts connect cleanly.
+- Supports JSON environment profiles via `dev-server.config.json` (copy `dev-server/dev-server.config.example.json`) or `--config <path>`, allowing named profiles like `--env dev` / `--env uat` and a `defaultEnvironment`.

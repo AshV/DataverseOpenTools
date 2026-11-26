@@ -11,6 +11,8 @@ desktop.ini
 # Environment variables & local secrets
 .env
 .env.*
+dev-server.config.json
+dev-server.config.local.json
 
 # Node / tooling / logs
 node_modules/

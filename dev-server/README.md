@@ -27,10 +27,30 @@ Requires Node.js 18+ with zero npm dependencies:
 node dev-server/dev-server.js --env https://yourorg.crm.dynamics.com
 ```
 
+## Environment Config JSON (`dev-server.config.json`)
+Copy [`dev-server.config.example.json`](dev-server.config.example.json) to `dev-server.config.json` (in the repo root or `dev-server/` — both are `.gitignore`d) to define named environments:
+```json
+{
+  "defaultEnvironment": "dev",
+  "port": 8787,
+  "auth": "auto",
+  "environments": {
+    "dev": { "url": "https://yourorg-dev.crm.dynamics.com", "auth": "pac" },
+    "uat": { "url": "https://yourorg-uat.crm.dynamics.com", "auth": "az" }
+  }
+}
+```
+Then run with no URL needed (or switch profiles by name):
+```powershell
+dotnet run --project dev-server                # uses defaultEnvironment ("dev")
+dotnet run --project dev-server -- --env uat   # switches to "uat" profile
+```
+
 ## Common Flags
 | Flag (`.cs` / `.js`) | PowerShell Parameter | Description |
 |---|---|---|
-| `--env <url>` | `-Env <url>` | Target Dataverse org URL (auto-detected via `pac org who` if omitted) |
+| `--env <url\|profile>` | `-Env <url\|profile>` | Target Dataverse org URL or named profile in config JSON (auto-detected via `pac org who` if omitted) |
+| `--config <path>` | `-Config <path>` | Explicit path to JSON config (defaults to `./dev-server.config.json` or `dev-server/dev-server.config.json`) |
 | `--port <num>` | `-Port <num>` | Local HTTP port (default `8787`) |
 | `--auth auto\|pac\|az\|env` | `-Auth auto\|pac\|az\|env` | Bearer token source |
 | `--local-only` | `-LocalOnly` | Serve local HTML tools without proxying Dataverse APIs |

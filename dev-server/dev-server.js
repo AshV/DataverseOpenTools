@@ -26,13 +26,47 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const TOOLS_DIR = path.join(ROOT_DIR, 'tools');
 const TOKEN_TTL_MS = 40 * 60 * 1000;
 
-/* ─── CLI Argument Parsing ─────────────────────────────────── */
+/* ─── CLI Argument & JSON Config Parsing ──────────────────── */
+function loadDevServerConfig(explicitPath = '') {
+  const candidates = [];
+  if (explicitPath) {
+    candidates.push(path.isAbsolute(explicitPath) ? explicitPath : path.resolve(process.cwd(), explicitPath));
+  } else {
+    candidates.push(
+      path.join(ROOT_DIR, 'dev-server.config.json'),
+      path.join(__dirname, 'dev-server.config.json')
+    );
+  }
+  for (const p of candidates) {
+    if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+      const raw = fs.readFileSync(p, 'utf8');
+      return { path: p, data: JSON.parse(raw) };
+    }
+  }
+  if (explicitPath) {
+    throw new Error(`Config file not found: ${explicitPath}`);
+  }
+  return null;
+}
+
+function findNamedEnvironment(envsObj, rawName) {
+  if (!envsObj || typeof envsObj !== 'object' || !rawName) return null;
+  const target = String(rawName).trim().toLowerCase();
+  for (const [key, val] of Object.entries(envsObj)) {
+    if (key.toLowerCase() === target && val && typeof val === 'object') {
+      return { name: key, profile: val };
+    }
+  }
+  return null;
+}
+
 function parseArgs(argv) {
-  const opts = {
-    envUrl: (process.env.DV_ENV_URL || '').trim().replace(/\/+$/, ''),
-    port: parseInt(process.env.PORT || '8787', 10) || 8787,
-    auth: (process.env.DV_AUTH_MODE || 'auto').toLowerCase(),
-    localOnly: false,
+  const cli = {
+    configPath: (process.env.DV_CONFIG || '').trim(),
+    rawEnv: '',
+    port: null,
+    auth: '',
+    localOnly: null,
     buildManifest: false,
     buildBundle: false,
     bundleOut: '',
@@ -41,22 +75,64 @@ function parseArgs(argv) {
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--help' || arg === '-h') opts.help = true;
-    else if (arg === '--local-only') opts.localOnly = true;
-    else if (arg === '--build-manifest') opts.buildManifest = true;
+    if (arg === '--help' || arg === '-h') cli.help = true;
+    else if (arg === '--local-only') cli.localOnly = true;
+    else if (arg === '--build-manifest') cli.buildManifest = true;
     else if (arg === '--build-bundle') {
-      opts.buildBundle = true;
-      if (argv[i + 1] && !argv[i + 1].startsWith('--')) opts.bundleOut = argv[++i];
+      cli.buildBundle = true;
+      if (argv[i + 1] && !argv[i + 1].startsWith('--')) cli.bundleOut = argv[++i];
     }
-    else if (arg.startsWith('--build-bundle=')) { opts.buildBundle = true; opts.bundleOut = arg.slice(15); }
-    else if (arg === '--env' && argv[i + 1]) opts.envUrl = normalizeEnvUrl(argv[++i]);
-    else if (arg.startsWith('--env=')) opts.envUrl = normalizeEnvUrl(arg.slice(6));
-    else if (arg === '--port' && argv[i + 1]) opts.port = parseInt(argv[++i], 10) || 8787;
-    else if (arg.startsWith('--port=')) opts.port = parseInt(arg.slice(7), 10) || 8787;
-    else if (arg === '--auth' && argv[i + 1]) opts.auth = argv[++i].toLowerCase();
-    else if (arg.startsWith('--auth=')) opts.auth = arg.slice(7).toLowerCase();
+    else if (arg.startsWith('--build-bundle=')) { cli.buildBundle = true; cli.bundleOut = arg.slice(15); }
+    else if (arg === '--config' && argv[i + 1]) cli.configPath = argv[++i];
+    else if (arg.startsWith('--config=')) cli.configPath = arg.slice(9);
+    else if (arg === '--env' && argv[i + 1]) cli.rawEnv = argv[++i];
+    else if (arg.startsWith('--env=')) cli.rawEnv = arg.slice(6);
+    else if (arg === '--port' && argv[i + 1]) cli.port = parseInt(argv[++i], 10) || null;
+    else if (arg.startsWith('--port=')) cli.port = parseInt(arg.slice(7), 10) || null;
+    else if (arg === '--auth' && argv[i + 1]) cli.auth = argv[++i].toLowerCase();
+    else if (arg.startsWith('--auth=')) cli.auth = arg.slice(7).toLowerCase();
   }
-  return opts;
+
+  const loadedCfg = cli.help || cli.buildManifest || cli.buildBundle ? null : loadDevServerConfig(cli.configPath);
+  const cfg = loadedCfg ? loadedCfg.data : {};
+
+  const envVarUrl = (process.env.DV_ENV_URL || '').trim();
+  const envVarPort = parseInt(process.env.PORT || '', 10) || null;
+  const envVarAuth = (process.env.DV_AUTH_MODE || '').trim().toLowerCase();
+
+  let activeEnvName = '';
+  let profile = null;
+  const requestedEnv = cli.rawEnv || envVarUrl;
+  if (requestedEnv) {
+    const named = findNamedEnvironment(cfg.environments, requestedEnv);
+    if (named) {
+      activeEnvName = named.name;
+      profile = named.profile;
+    }
+  } else if (cfg.defaultEnvironment) {
+    const named = findNamedEnvironment(cfg.environments, cfg.defaultEnvironment);
+    if (named) {
+      activeEnvName = named.name;
+      profile = named.profile;
+    }
+  }
+
+  const rawResolvedEnv = profile
+    ? (profile.url || profile.envUrl || profile.env || '')
+    : (requestedEnv || cfg.envUrl || cfg.env || '');
+
+  return {
+    configFile: loadedCfg ? path.relative(ROOT_DIR, loadedCfg.path) : '',
+    activeEnvName,
+    envUrl: rawResolvedEnv ? normalizeEnvUrl(rawResolvedEnv) : '',
+    port: cli.port || envVarPort || (profile && parseInt(profile.port, 10)) || parseInt(cfg.port, 10) || 8787,
+    auth: cli.auth || envVarAuth || (profile && String(profile.auth || '').toLowerCase()) || String(cfg.auth || 'auto').toLowerCase(),
+    localOnly: cli.localOnly !== null ? cli.localOnly : Boolean(profile?.localOnly ?? cfg.localOnly ?? false),
+    buildManifest: cli.buildManifest,
+    buildBundle: cli.buildBundle,
+    bundleOut: cli.bundleOut,
+    help: cli.help
+  };
 }
 
 function normalizeEnvUrl(raw) {
@@ -444,10 +520,11 @@ if (require.main === module) {
 DV Open Tools — Local Dev Server & Auth Proxy
 
 Usage:
-  node dev-server/dev-server.js [--env https://yourorg.crm.dynamics.com] [--port 8787] [--auth auto|pac|az|env] [--local-only]
+  node dev-server/dev-server.js [--env <url|profile>] [--config dev-server.config.json] [--port 8787] [--auth auto|pac|az|env] [--local-only]
 
 Options:
-  --env <url>       Target Dataverse org URL (auto-detected via \`pac org who\` if omitted)
+  --env <val>       Target Dataverse org URL or named environment in dev-server.config.json (auto-detected via \`pac org who\` if omitted)
+  --config <path>   Path to JSON environment config (default: ./dev-server.config.json or dev-server/dev-server.config.json)
   --port <num>      Local HTTP port (default: 8787)
   --auth <mode>     Token source: auto (default), pac (\`pac auth token\`), az (\`az account get-access-token\`), or env (DV_TOKEN)
   --local-only      Serve local HTML tools without proxying Dataverse API calls
@@ -455,6 +532,11 @@ Options:
   --build-bundle    Generate a single-file tool bundle HTML (default: dist/dvot_bundle_all.html)
 `);
     process.exit(0);
+  }
+
+  if (opts.configFile) {
+    const profMsg = opts.activeEnvName ? ` (profile: ${opts.activeEnvName})` : '';
+    console.log(`[dev-server] Loaded config: ${opts.configFile}${profMsg}`);
   }
 
   if (opts.buildManifest) {

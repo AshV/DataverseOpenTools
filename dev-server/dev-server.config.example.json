@@ -1,0 +1,16 @@
+{
+  "defaultEnvironment": "dev",
+  "port": 8787,
+  "auth": "auto",
+  "localOnly": false,
+  "environments": {
+    "dev": {
+      "url": "https://yourorg-dev.crm.dynamics.com",
+      "auth": "pac"
+    },
+    "uat": {
+      "url": "https://yourorg-uat.crm.dynamics.com",
+      "auth": "az"
+    }
+  }
+}

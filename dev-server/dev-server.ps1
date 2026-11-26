@@ -13,10 +13,11 @@
 [CmdletBinding()]
 param(
     [Alias('EnvUrl')]
-    [string]$Env = $env:DV_ENV_URL,
-    [int]$Port = $(if ($env:PORT -as [int]) { [int]$env:PORT } else { 8787 }),
-    [ValidateSet('auto', 'pac', 'az', 'env')]
-    [string]$Auth = $(if ($env:DV_AUTH_MODE) { $env:DV_AUTH_MODE.ToLowerInvariant() } else { 'auto' }),
+    [string]$Env = '',
+    [string]$Config = $(if ($env:DV_CONFIG) { $env:DV_CONFIG } else { '' }),
+    [int]$Port = 0,
+    [ValidateSet('', 'auto', 'pac', 'az', 'env')]
+    [string]$Auth = '',
     [switch]$LocalOnly,
     [switch]$BuildManifest,
     [switch]$BuildBundle,
@@ -41,6 +42,8 @@ if ($ExtraArgs) {
             if (($i + 1) -lt $ExtraArgs.Count -and -not $ExtraArgs[$i + 1].StartsWith('--')) { $BundleOut = $ExtraArgs[++$i] }
         }
         elseif ($a.StartsWith('--build-bundle=')) { $BuildBundle = $true; $BundleOut = $a.Substring(15) }
+        elseif ($a -eq '--config' -and ($i + 1) -lt $ExtraArgs.Count) { $Config = $ExtraArgs[++$i] }
+        elseif ($a.StartsWith('--config=')) { $Config = $a.Substring(9) }
         elseif ($a -eq '--env' -and ($i + 1) -lt $ExtraArgs.Count) { $Env = $ExtraArgs[++$i] }
         elseif ($a.StartsWith('--env=')) { $Env = $a.Substring(6) }
         elseif ($a -eq '--port' -and ($i + 1) -lt $ExtraArgs.Count) { $Port = [int]$ExtraArgs[++$i] }
@@ -55,14 +58,16 @@ if ($Help) {
 DV Open Tools — PowerShell Local Dev Server & Auth Proxy
 
 Usage:
-  .\dev-server\dev-server.ps1 [-Env https://yourorg.crm.dynamics.com] [-Port 8787] [-Auth auto|pac|az|env] [-LocalOnly]
+  .\dev-server\dev-server.ps1 [-Env <url|profile>] [-Config dev-server.config.json] [-Port 8787] [-Auth auto|pac|az|env] [-LocalOnly]
 
 Options:
-  -Env <url>        Target Dataverse org URL (auto-detected via ``pac org who`` if omitted)
+  -Env <val>        Target Dataverse org URL or named environment in dev-server.config.json (auto-detected via ``pac org who`` if omitted)
+  -Config <path>    Path to JSON environment config (default: ./dev-server.config.json or dev-server/dev-server.config.json)
   -Port <num>       Local HTTP port (default: 8787)
   -Auth <mode>      Token source: auto (default), pac (``pac auth token``), az (``az account get-access-token``), or env (DV_TOKEN)
   -LocalOnly        Serve local HTML tools without proxying Dataverse API calls
   -BuildManifest    Regenerate tools/manifest.json from tools/dvot_*.html and exit
+  -BuildBundle      Generate a single-file tool bundle HTML (default: dist/dvot_bundle_all.html)
 "@
     exit 0
 }
@@ -439,6 +444,99 @@ if ($BuildBundle) {
     $res = Build-ToolsBundle $BundleOut
     Write-Host "[dev-server] Wrote $($res.OutPath) ($($res.Count) tools, $([Math]::Round($res.Bytes / 1024, 1)) KB)."
     exit 0
+}
+
+function Load-DevServerConfig([string]$ExplicitPath) {
+    $candidates = @()
+    if ($ExplicitPath) {
+        $candidates += if ([System.IO.Path]::IsPathRooted($ExplicitPath)) { $ExplicitPath } else { Join-Path (Get-Location).Path $ExplicitPath }
+    } else {
+        $candidates += (Join-Path $RootDir 'dev-server.config.json')
+        $candidates += (Join-Path $PSScriptRoot 'dev-server.config.json')
+    }
+    foreach ($c in $candidates) {
+        if ([System.IO.File]::Exists($c)) {
+            $parsed = ([System.IO.File]::ReadAllText($c, [System.Text.Encoding]::UTF8)) | ConvertFrom-Json
+            return @{ Path = $c; Data = $parsed }
+        }
+    }
+    if ($ExplicitPath) { throw "Config file not found: $ExplicitPath" }
+    return $null
+}
+
+function Find-NamedEnvironment($EnvsObj, [string]$RawName) {
+    if (-not $EnvsObj -or -not $RawName) { return $null }
+    $target = $RawName.Trim()
+    foreach ($prop in $EnvsObj.PSObject.Properties) {
+        if ($prop.Name.Equals($target, [System.StringComparison]::OrdinalIgnoreCase) -and $prop.Value) {
+            return @{ Name = $prop.Name; Profile = $prop.Value }
+        }
+    }
+    return $null
+}
+
+function Get-ObjProp($Obj, [string]$Key) {
+    if ($Obj -and $Obj.PSObject.Properties[$Key]) { return $Obj.$Key }
+    return $null
+}
+
+$loadedCfg = Load-DevServerConfig $Config
+$cfg = if ($loadedCfg) { $loadedCfg.Data } else { $null }
+$envVarUrl = if ($env:DV_ENV_URL) { $env:DV_ENV_URL.Trim() } else { '' }
+$envVarPort = if ($env:PORT -as [int]) { [int]$env:PORT } else { 0 }
+$envVarAuth = if ($env:DV_AUTH_MODE) { $env:DV_AUTH_MODE.Trim().ToLowerInvariant() } else { '' }
+
+$activeEnvName = ''
+$profileObj = $null
+$envsSection = Get-ObjProp $cfg 'environments'
+$requestedEnv = if ($Env) { $Env.Trim() } else { $envVarUrl }
+
+if ($requestedEnv) {
+    $found = Find-NamedEnvironment $envsSection $requestedEnv
+    if ($found) { $activeEnvName = $found.Name; $profileObj = $found.Profile }
+} else {
+    $defName = [string](Get-ObjProp $cfg 'defaultEnvironment')
+    if ($defName) {
+        $found = Find-NamedEnvironment $envsSection $defName
+        if ($found) { $activeEnvName = $found.Name; $profileObj = $found.Profile }
+    }
+}
+
+if ($profileObj) {
+    $pUrl = Get-ObjProp $profileObj 'url'
+    if (-not $pUrl) { $pUrl = Get-ObjProp $profileObj 'envUrl' }
+    if (-not $pUrl) { $pUrl = Get-ObjProp $profileObj 'env' }
+    $Env = [string]$pUrl
+} elseif ($requestedEnv) {
+    $Env = $requestedEnv
+} else {
+    $cUrl = Get-ObjProp $cfg 'envUrl'
+    if (-not $cUrl) { $cUrl = Get-ObjProp $cfg 'env' }
+    $Env = if ($cUrl) { [string]$cUrl } else { '' }
+}
+
+if ($Port -le 0) {
+    $pPort = [int](Get-ObjProp $profileObj 'port')
+    $cPort = [int](Get-ObjProp $cfg 'port')
+    $Port = if ($envVarPort -gt 0) { $envVarPort } elseif ($pPort -gt 0) { $pPort } elseif ($cPort -gt 0) { $cPort } else { 8787 }
+}
+
+if (-not $Auth) {
+    $pAuth = [string](Get-ObjProp $profileObj 'auth')
+    $cAuth = [string](Get-ObjProp $cfg 'auth')
+    $Auth = if ($envVarAuth) { $envVarAuth } elseif ($pAuth) { $pAuth.Trim().ToLowerInvariant() } elseif ($cAuth) { $cAuth.Trim().ToLowerInvariant() } else { 'auto' }
+}
+
+if (-not $PSBoundParameters.ContainsKey('LocalOnly') -and -not $LocalOnly) {
+    $pLocal = Get-ObjProp $profileObj 'localOnly'
+    $cLocal = Get-ObjProp $cfg 'localOnly'
+    if ($null -ne $pLocal) { $LocalOnly = [bool]$pLocal }
+    elseif ($null -ne $cLocal) { $LocalOnly = [bool]$cLocal }
+}
+
+if ($loadedCfg) {
+    $profSuffix = if ($activeEnvName) { " (profile: $activeEnvName)" } else { '' }
+    Write-Host "[dev-server] Loaded config: $($loadedCfg.Path)$profSuffix"
 }
 
 $Env = Normalize-EnvUrl $Env

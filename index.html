@@ -456,17 +456,18 @@
             <div class="proxy-dl-row">
               <div class="proxy-dl-group">
                 <strong style="font-size:13px;">⬇️ Download Local Proxy:</strong>
-                <a class="btn btn-sm" href="dev-server/dev-server.ps1" download="dev-server.ps1">PowerShell · dev-server.ps1 (26.0 KB)</a>
-                <a class="btn btn-sm" href="dev-server/dev-server.js" download="dev-server.js">Node.js · dev-server.js (20.4 KB)</a>
+                <a class="btn btn-sm" href="dev-server/dev-server.ps1" download="dev-server.ps1">PowerShell · dev-server.ps1 (29.9 KB)</a>
+                <a class="btn btn-sm" href="dev-server/dev-server.js" download="dev-server.js">Node.js · dev-server.js (23.4 KB)</a>
                 <a class="btn btn-sm" href="dev-server/DvOpenTools.Proxy.csproj" download="DvOpenTools.Proxy.csproj">C# .csproj (0.3 KB)</a>
-                <a class="btn btn-sm" href="dev-server/Program.cs" download="Program.cs">C# Program.cs (33.4 KB)</a>
+                <a class="btn btn-sm" href="dev-server/Program.cs" download="Program.cs">C# Program.cs (38.7 KB)</a>
+                <a class="btn btn-sm" href="dev-server/dev-server.config.example.json" download="dev-server.config.json">Config JSON Template (0.3 KB)</a>
               </div>
               <div class="proxy-dl-group">
-                <button type="button" id="btn-dl-ds-dotnet" class="btn btn-sm btn-primary">📦 C# .NET Project (.zip · 36.0 KB)</button>
-                <button type="button" id="btn-dl-ds-all" class="btn btn-sm btn-primary">📦 All Dev Servers (.zip · 82.3 KB)</button>
+                <button type="button" id="btn-dl-ds-dotnet" class="btn btn-sm btn-primary">📦 C# .NET Project (.zip · 42.3 KB)</button>
+                <button type="button" id="btn-dl-ds-all" class="btn btn-sm btn-primary">📦 All Dev Servers (.zip · 95.6 KB)</button>
               </div>
             </div>
-            <div id="ds-dl-status" class="bundle-status">Place downloaded proxy file(s) in the same folder as your repo checkout (or run with <code>--env https://yourorg.crm.dynamics.com</code> alongside GitHub Pages).</div>
+            <div id="ds-dl-status" class="bundle-status">Supports JSON environment profiles: save template as <code>dev-server.config.json</code> (next to the server or repo root) and run with <code>--env dev</code> or no args for <code>defaultEnvironment</code>.</div>
           </div>
         </div>
       </div>
@@ -841,11 +842,12 @@
     });
 
     const DEV_SERVER_FILES = [
-      { path: 'dev-server/dev-server.ps1', archivePath: 'dev-server/dev-server.ps1', group: 'ps', sizeBytes: 26651 },
+      { path: 'dev-server/dev-server.ps1', archivePath: 'dev-server/dev-server.ps1', group: 'ps', sizeBytes: 30661 },
       { path: 'dev-server/DvOpenTools.Proxy.csproj', archivePath: 'dev-server/DvOpenTools.Proxy.csproj', group: 'dotnet', sizeBytes: 325 },
-      { path: 'dev-server/Program.cs', archivePath: 'dev-server/Program.cs', group: 'dotnet', sizeBytes: 34228 },
-      { path: 'dev-server/dev-server.js', archivePath: 'dev-server/dev-server.js', group: 'node', sizeBytes: 20922 },
-      { path: 'dev-server/README.md', archivePath: 'dev-server/README.md', group: 'doc', sizeBytes: 2175 }
+      { path: 'dev-server/Program.cs', archivePath: 'dev-server/Program.cs', group: 'dotnet', sizeBytes: 39634 },
+      { path: 'dev-server/dev-server.js', archivePath: 'dev-server/dev-server.js', group: 'node', sizeBytes: 23950 },
+      { path: 'dev-server/dev-server.config.example.json', archivePath: 'dev-server/dev-server.config.example.json', group: 'cfg', sizeBytes: 299 },
+      { path: 'dev-server/README.md', archivePath: 'dev-server/README.md', group: 'doc', sizeBytes: 2911 }
     ];
 
     const CRC32_TABLE = (() => {
@@ -987,7 +989,7 @@
 
     document.getElementById('btn-dl-ds-dotnet').addEventListener('click', () => {
       downloadDevServerZip(
-        DEV_SERVER_FILES.filter(f => f.group === 'dotnet' || f.group === 'doc'),
+        DEV_SERVER_FILES.filter(f => f.group === 'dotnet' || f.group === 'cfg' || f.group === 'doc'),
         'dvot-dev-server-dotnet.zip'
       );
     });

@@ -42,6 +42,8 @@ internal static class Program
 
     private sealed class ProxyOptions
     {
+        public string ConfigFile { get; set; } = "";
+        public string ActiveEnvName { get; set; } = "";
         public string EnvUrl { get; set; } = "";
         public int Port { get; set; } = 8787;
         public string Auth { get; set; } = "auto";
@@ -56,7 +58,7 @@ internal static class Program
     {
         var rootDir = ResolveWorkspaceRoot();
         var toolsDir = Path.Combine(rootDir, "tools");
-        var opts = ParseArgs(args);
+        var opts = ParseArgs(args, rootDir);
 
         if (opts.Help)
         {
@@ -76,6 +78,12 @@ internal static class Program
             var (outPath, count, bytes) = BuildToolsBundle(rootDir, toolsDir, opts.BundleOut);
             Console.WriteLine($"[dev-server] Wrote {Path.GetRelativePath(rootDir, outPath)} ({count} tools, {bytes / 1024.0:F1} KB).");
             return 0;
+        }
+
+        if (!string.IsNullOrEmpty(opts.ConfigFile))
+        {
+            var profMsg = string.IsNullOrEmpty(opts.ActiveEnvName) ? "" : $" (profile: {opts.ActiveEnvName})";
+            Console.WriteLine($"[dev-server] Loaded config: {opts.ConfigFile}{profMsg}");
         }
 
         if (!opts.LocalOnly && string.IsNullOrEmpty(opts.EnvUrl))
@@ -159,10 +167,11 @@ internal static class Program
 DV Open Tools — Local C# (.NET) Dev Server & Auth Proxy
 
 Usage:
-  dotnet run --project dev-server -- [--env https://yourorg.crm.dynamics.com] [--port 8787] [--auth auto|pac|az|env] [--local-only]
+  dotnet run --project dev-server -- [--env <url|profile>] [--config dev-server.config.json] [--port 8787] [--auth auto|pac|az|env] [--local-only]
 
 Options:
-  --env <url>       Target Dataverse org URL (auto-detected via `pac org who` if omitted)
+  --env <val>       Target Dataverse org URL or named environment in dev-server.config.json (auto-detected via `pac org who` if omitted)
+  --config <path>   Path to JSON environment config (default: ./dev-server.config.json or dev-server/dev-server.config.json)
   --port <num>      Local HTTP port (default: 8787)
   --auth <mode>     Token source: auto (default), pac (`pac auth token`), az (`az account get-access-token`), or env (DV_TOKEN)
   --local-only      Serve local HTML tools without proxying Dataverse API calls
@@ -197,35 +206,142 @@ Options:
         return Directory.GetCurrentDirectory();
     }
 
-    private static ProxyOptions ParseArgs(string[] args)
+    private static (string Path, JsonObject Data)? LoadDevServerConfig(string explicitPath, string rootDir)
     {
-        var opts = new ProxyOptions
+        var candidates = new List<string>();
+        if (!string.IsNullOrWhiteSpace(explicitPath))
         {
-            EnvUrl = NormalizeEnvUrl(Environment.GetEnvironmentVariable("DV_ENV_URL") ?? ""),
-            Port = int.TryParse(Environment.GetEnvironmentVariable("PORT"), out var p) && p > 0 ? p : 8787,
-            Auth = (Environment.GetEnvironmentVariable("DV_AUTH_MODE") ?? "auto").Trim().ToLowerInvariant()
-        };
+            candidates.Add(Path.IsPathRooted(explicitPath) ? explicitPath : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), explicitPath)));
+        }
+        else
+        {
+            candidates.Add(Path.Combine(rootDir, "dev-server.config.json"));
+            candidates.Add(Path.Combine(rootDir, "dev-server", "dev-server.config.json"));
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (File.Exists(candidate))
+            {
+                var raw = File.ReadAllText(candidate, Encoding.UTF8);
+                var docOpts = new JsonNodeOptions();
+                var parsed = JsonNode.Parse(raw, docOpts, new JsonDocumentOptions
+                {
+                    CommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true
+                }) as JsonObject;
+                if (parsed is not null) return (candidate, parsed);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(explicitPath))
+            throw new FileNotFoundException($"Config file not found: {explicitPath}");
+        return null;
+    }
+
+    private static (string Name, JsonObject Profile)? FindNamedEnvironment(JsonObject? envsObj, string rawName)
+    {
+        if (envsObj is null || string.IsNullOrWhiteSpace(rawName)) return null;
+        var target = rawName.Trim();
+        foreach (var kv in envsObj)
+        {
+            if (string.Equals(kv.Key, target, StringComparison.OrdinalIgnoreCase) && kv.Value is JsonObject profile)
+            {
+                return (kv.Key, profile);
+            }
+        }
+        return null;
+    }
+
+    private static ProxyOptions ParseArgs(string[] args, string rootDir)
+    {
+        var configPath = (Environment.GetEnvironmentVariable("DV_CONFIG") ?? "").Trim();
+        var rawEnv = "";
+        int? cliPort = null;
+        var cliAuth = "";
+        bool? cliLocalOnly = null;
+        var buildManifest = false;
+        var buildBundle = false;
+        var bundleOut = "";
+        var help = false;
 
         for (var i = 0; i < args.Length; i++)
         {
             var arg = args[i];
-            if (arg is "--help" or "-h") opts.Help = true;
-            else if (arg == "--local-only") opts.LocalOnly = true;
-            else if (arg == "--build-manifest") opts.BuildManifest = true;
+            if (arg is "--help" or "-h") help = true;
+            else if (arg == "--local-only") cliLocalOnly = true;
+            else if (arg == "--build-manifest") buildManifest = true;
             else if (arg == "--build-bundle")
             {
-                opts.BuildBundle = true;
-                if (i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal)) opts.BundleOut = args[++i];
+                buildBundle = true;
+                if (i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal)) bundleOut = args[++i];
             }
-            else if (arg.StartsWith("--build-bundle=", StringComparison.Ordinal)) { opts.BuildBundle = true; opts.BundleOut = arg[15..]; }
-            else if (arg == "--env" && i + 1 < args.Length) opts.EnvUrl = NormalizeEnvUrl(args[++i]);
-            else if (arg.StartsWith("--env=")) opts.EnvUrl = NormalizeEnvUrl(arg[6..]);
-            else if (arg == "--port" && i + 1 < args.Length) opts.Port = int.TryParse(args[++i], out var pv) && pv > 0 ? pv : 8787;
-            else if (arg.StartsWith("--port=")) opts.Port = int.TryParse(arg[7..], out var pv2) && pv2 > 0 ? pv2 : 8787;
-            else if (arg == "--auth" && i + 1 < args.Length) opts.Auth = args[++i].Trim().ToLowerInvariant();
-            else if (arg.StartsWith("--auth=")) opts.Auth = arg[7..].Trim().ToLowerInvariant();
+            else if (arg.StartsWith("--build-bundle=", StringComparison.Ordinal)) { buildBundle = true; bundleOut = arg[15..]; }
+            else if (arg == "--config" && i + 1 < args.Length) configPath = args[++i];
+            else if (arg.StartsWith("--config=", StringComparison.Ordinal)) configPath = arg[9..];
+            else if (arg == "--env" && i + 1 < args.Length) rawEnv = args[++i];
+            else if (arg.StartsWith("--env=")) rawEnv = arg[6..];
+            else if (arg == "--port" && i + 1 < args.Length) cliPort = int.TryParse(args[++i], out var pv) && pv > 0 ? pv : null;
+            else if (arg.StartsWith("--port=")) cliPort = int.TryParse(arg[7..], out var pv2) && pv2 > 0 ? pv2 : null;
+            else if (arg == "--auth" && i + 1 < args.Length) cliAuth = args[++i].Trim().ToLowerInvariant();
+            else if (arg.StartsWith("--auth=")) cliAuth = arg[7..].Trim().ToLowerInvariant();
         }
-        return opts;
+
+        var loadedCfg = (help || buildManifest || buildBundle) ? null : LoadDevServerConfig(configPath, rootDir);
+        var cfg = loadedCfg?.Data;
+
+        var envVarUrl = (Environment.GetEnvironmentVariable("DV_ENV_URL") ?? "").Trim();
+        var envVarPort = int.TryParse(Environment.GetEnvironmentVariable("PORT"), out var ep) && ep > 0 ? ep : (int?)null;
+        var envVarAuth = (Environment.GetEnvironmentVariable("DV_AUTH_MODE") ?? "").Trim().ToLowerInvariant();
+
+        var activeEnvName = "";
+        JsonObject? profile = null;
+        var envsObj = cfg?["environments"] as JsonObject;
+        var requestedEnv = !string.IsNullOrEmpty(rawEnv) ? rawEnv : envVarUrl;
+
+        if (!string.IsNullOrEmpty(requestedEnv))
+        {
+            var found = FindNamedEnvironment(envsObj, requestedEnv);
+            if (found is not null)
+            {
+                activeEnvName = found.Value.Name;
+                profile = found.Value.Profile;
+            }
+        }
+        else
+        {
+            var defName = cfg?["defaultEnvironment"]?.GetValue<string>() ?? "";
+            var found = FindNamedEnvironment(envsObj, defName);
+            if (found is not null)
+            {
+                activeEnvName = found.Value.Name;
+                profile = found.Value.Profile;
+            }
+        }
+
+        static string Str(JsonObject? obj, string key) => obj?[key]?.GetValueKind() == JsonValueKind.String ? obj[key]!.GetValue<string>() : "";
+        static int? Num(JsonObject? obj, string key) => obj?[key] is JsonValue jv && jv.TryGetValue<int>(out var n) && n > 0 ? n : null;
+        static bool? Bool(JsonObject? obj, string key) => obj?[key] is JsonValue jv && jv.TryGetValue<bool>(out var b) ? b : null;
+
+        var rawResolvedUrl = profile is not null
+            ? (Str(profile, "url") is { Length: > 0 } u ? u : (Str(profile, "envUrl") is { Length: > 0 } eu ? eu : Str(profile, "env")))
+            : (!string.IsNullOrEmpty(requestedEnv) ? requestedEnv : (Str(cfg, "envUrl") is { Length: > 0 } ceu ? ceu : Str(cfg, "env")));
+
+        var cfgAuth = Str(profile, "auth") is { Length: > 0 } pa ? pa : Str(cfg, "auth");
+
+        return new ProxyOptions
+        {
+            ConfigFile = loadedCfg is not null ? Path.GetRelativePath(rootDir, loadedCfg.Value.Path) : "",
+            ActiveEnvName = activeEnvName,
+            EnvUrl = NormalizeEnvUrl(rawResolvedUrl),
+            Port = cliPort ?? envVarPort ?? Num(profile, "port") ?? Num(cfg, "port") ?? 8787,
+            Auth = !string.IsNullOrEmpty(cliAuth) ? cliAuth : (!string.IsNullOrEmpty(envVarAuth) ? envVarAuth : (!string.IsNullOrEmpty(cfgAuth) ? cfgAuth.Trim().ToLowerInvariant() : "auto")),
+            LocalOnly = cliLocalOnly ?? Bool(profile, "localOnly") ?? Bool(cfg, "localOnly") ?? false,
+            BuildManifest = buildManifest,
+            BuildBundle = buildBundle,
+            BundleOut = bundleOut,
+            Help = help
+        };
     }
 
     private static string NormalizeEnvUrl(string raw)
