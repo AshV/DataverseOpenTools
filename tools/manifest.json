@@ -90,6 +90,16 @@
     "description": "Stream and filter Dataverse plugintracelog entries, trace full correlation cascades by depth, inspect stack traces, and spot slow plugins."
   },
   {
+    "wrName": "dvopentools_processchain.html",
+    "id": "process-chain",
+    "name": "Process Cascade Tracer",
+    "icon": "🕸️",
+    "category": "Diagnostics",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Trace multi-hop automation chains across Cloud Flows, Plugins, Webhooks, Classic Workflows, and Business Rules when a flow runs or a table field changes—including downstream writes and loop hazards."
+  },
+  {
     "wrName": "dvopentools_tablemap.html",
     "id": "table-map",
     "name": "Table Automation Map",

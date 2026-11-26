@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Process Cascade & Chain Tracer</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "process-chain",
+    "name":           "Process Cascade Tracer",
+    "version":        "1.0.0",
+    "description":    "Trace multi-hop automation chains across Cloud Flows, Plugins, Webhooks, Classic Workflows, and Business Rules when a flow runs or a table field changes—including downstream writes and loop hazards.",
+    "icon":           "🕸️",
+    "category":       "Diagnostics",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+
+  <style>
+    .pc-controls {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg-card); font-size: 12px;
+    }
+    .mode-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .mode-btn {
+      border: none; background: var(--bg-header); color: var(--text-sec);
+      padding: 4px 10px; font-size: 11.5px; font-weight: 600; cursor: pointer;
+    }
+    .mode-btn + .mode-btn { border-left: 1px solid var(--border); }
+    .mode-btn.active { background: var(--accent, #0078d4); color: #fff; }
+
+    .view-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .view-btn {
+      border: none; background: var(--bg-header); color: var(--text-sec);
+      padding: 4px 10px; font-size: 11.5px; font-weight: 600; cursor: pointer;
+    }
+    .view-btn + .view-btn { border-left: 1px solid var(--border); }
+    .view-btn.active { background: #0f766e; color: #fff; }
+
+    /* Cascade Tree Cards */
+    .hop-section { margin-bottom: 12px; }
+    .chain-node {
+      border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card);
+      margin-bottom: 8px; overflow: hidden;
+    }
+    .chain-node.sync  { border-left: 4px solid #7c3aed; }
+    .chain-node.async { border-left: 4px solid #0078d4; }
+    .chain-node.flow  { border-left: 4px solid #0f766e; }
+    .chain-node.loop  { border-left: 4px solid #d13438; background: rgba(209, 52, 56, 0.04); }
+
+    .cn-head {
+      padding: 8px 12px; background: var(--bg-header); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+    }
+    .cn-title { font-weight: 700; font-size: 12.5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .cn-meta  { font-size: 11px; color: var(--text-sec); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .cn-body  { padding: 8px 12px; font-size: 11.5px; display: flex; flex-direction: column; gap: 6px; }
+
+    .cn-children {
+      margin-top: 6px; margin-left: 14px; padding-left: 14px;
+      border-left: 2px dashed var(--border);
+    }
+    .edge-label {
+      display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap;
+      font-size: 11px; padding: 3px 8px; border-radius: 5px;
+      background: rgba(0, 120, 212, 0.08); border: 1px solid rgba(0, 120, 212, 0.25);
+      color: var(--text); margin: 4px 0;
+    }
+    .loop-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 4px;
+      background: rgba(209, 52, 56, 0.12); color: #d13438; border: 1px solid rgba(209, 52, 56, 0.35);
+    }
+    .hop-pill {
+      font-family: ui-monospace, monospace; font-size: 10.5px; font-weight: 700;
+      padding: 1px 6px; border-radius: 4px; background: var(--bg-card); border: 1px solid var(--border);
+    }
+    .attr-pill {
+      display: inline-block; font-family: ui-monospace, monospace; font-size: 10.5px;
+      padding: 1px 5px; border-radius: 4px; background: var(--bg-header); border: 1px solid var(--border); margin: 1px 2px;
+    }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <strong>🕸️ Process Cascade &amp; Chain Tracer</strong>
+    <div class="mode-switch">
+      <button type="button" class="mode-btn active" data-mode="field">🎯 Start from Table / Field</button>
+      <button type="button" class="mode-btn" data-mode="flow">⚡ Start from Flow / Workflow</button>
+    </div>
+    <div class="view-switch">
+      <button type="button" class="view-btn active" data-view="tree">🪜 Cascade Tree</button>
+      <button type="button" class="view-btn" data-view="edges">📊 Edge Table (<span id="cnt-edges">0</span>)</button>
+    </div>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-sample">🧪 Sample Cascade</button>
+    <button class="dv-btn" id="btn-refresh">↻ Reload Org Metadata</button>
+    <button class="dv-btn dv-btn-primary" id="btn-export">📥 Export CSV</button>
+  </div>
+
+  <!-- Start Point Configuration -->
+  <div class="pc-controls" id="bar-field">
+    <label>Table:
+      <select id="start-entity" style="min-width:200px;"><option value="">Loading tables…</option></select>
+    </label>
+    <label>Event:
+      <select id="start-msg">
+        <option value="Update">Update (Modified)</option>
+        <option value="Create">Create (Added)</option>
+        <option value="Delete">Delete (Deleted)</option>
+      </select>
+    </label>
+    <label>Updated Fields (comma-separated, optional):
+      <input type="text" id="start-fields" placeholder="e.g. statuscode, creditlimit (blank = any)" style="width:240px;">
+    </label>
+    <label>Max Hops:
+      <select id="max-hops">
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4" selected>4</option>
+        <option value="6">6</option>
+      </select>
+    </label>
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+      <input type="checkbox" id="chk-active-only" checked> Active / Enabled Only
+    </label>
+    <button class="dv-btn dv-btn-primary" id="btn-trace-field">🕸️ Trace Chain</button>
+  </div>
+
+  <div class="pc-controls" id="bar-flow" style="display:none;">
+    <label>Starting Process:
+      <select id="start-flow" style="min-width:300px;"><option value="">Select Cloud Flow or Classic Workflow…</option></select>
+    </label>
+    <label>Max Hops:
+      <select id="max-hops-flow">
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4" selected>4</option>
+        <option value="6">6</option>
+      </select>
+    </label>
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+      <input type="checkbox" id="chk-active-only-flow" checked> Active / Enabled Only
+    </label>
+    <button class="dv-btn dv-btn-primary" id="btn-trace-flow">🕸️ Trace Downstream Chain</button>
+  </div>
+
+  <div class="dv-strip">
+    <span>Processes Triggered: <strong id="st-procs">0</strong></span>
+    <span>Max Depth Reached: <strong id="st-depth">0</strong></span>
+    <span>Downstream Writes / Calls: <strong id="st-writes">0</strong></span>
+    <span>Loop Hazards: <strong id="st-loops" style="color:var(--err-color)">0</strong></span>
+    <div class="dv-spacer"></div>
+    <span style="font-size:11px;color:var(--text-sec);">Compiled .NET Plugin DLL internals require runtime Plugin Trace Logs</span>
+  </div>
+
+  <div class="dv-scroll dv-pad" id="tree-view">
+    <div class="dv-empty">Choose a starting <strong>Table + Event + Field(s)</strong> or pick a <strong>Cloud Flow</strong> above (or click <strong>🧪 Sample Cascade</strong>) to trace the complete downstream execution chain.</div>
+  </div>
+
+  <div class="dv-scroll" id="edges-view" style="display:none;">
+    <table class="dv-table">
+      <thead>
+        <tr>
+          <th style="width:60px;">Hop</th>
+          <th style="min-width:190px;">Source / Action</th>
+          <th style="min-width:190px;">Table · Event · Fields</th>
+          <th style="min-width:210px;">Triggered Process</th>
+          <th style="width:120px;">Kind / Stage</th>
+          <th style="width:90px;">Mode</th>
+          <th style="width:120px;">Flags</th>
+        </tr>
+      </thead>
+      <tbody id="edges-tbody"></tbody>
+    </table>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg">Process Cascade &amp; Chain Tracer</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let context = null;
+    let startMode = 'field'; // 'field' | 'flow'
+    let activeView = 'tree'; // 'tree' | 'edges'
+    let isSample = false;
+
+    let entities = [];
+    let entitiesBySet = new Map();
+    let pluginSteps = [];
+    let workflows = [];
+    const xamlCache = new Map();
+
+    let lastEdges = [];
+
+    const GUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+    const MSG_BITMASK = {
+      1: ['Create'],
+      2: ['Delete'],
+      3: ['Update'],
+      4: ['Create', 'Update'],
+      5: ['Create', 'Delete'],
+      6: ['Update', 'Delete'],
+      7: ['Create', 'Update', 'Delete']
+    };
+    const STAGE_LABELS = { 10: 'Pre-Validation (10)', 20: 'Pre-Operation (20)', 40: 'Post-Operation (40)' };
+
+    function toHost(type, payload = {}) {
+      window.parent?.postMessage({ source: 'dvopentools-tool', type, payload }, HOST_ORIGIN);
+    }
+
+    toHost('TOOL_READY');
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') {
+        context = e.data.payload;
+        loadOrgProcesses();
+      }
+      if (e.data.type === 'TOOL_LAUNCH' && e.data.payload) {
+        if (e.data.payload.entity) {
+          document.getElementById('start-entity').value = e.data.payload.entity;
+          traceFromUi();
+        } else if (e.data.payload.flowId) {
+          setStartMode('flow');
+          document.getElementById('start-flow').value = e.data.payload.flowId;
+          traceFromUi();
+        }
+      }
+    });
+
+    async function fetchAllPages(path) {
+      const all = [];
+      let next = path;
+      while (next && all.length < 3000) {
+        const res = await DV.fetch(next);
+        all.push(...(res.value || []));
+        next = res['@odata.nextLink'] || '';
+      }
+      return all;
+    }
+
+    function resolveLogicalEntity(raw) {
+      const s = String(raw || '').trim().toLowerCase();
+      if (!s) return '';
+      if (entitiesBySet.has(s)) return entitiesBySet.get(s);
+      return s;
+    }
+
+    /* ─── Trigger & Downstream Side-Effect Parsers ──────────── */
+    function parseCloudFlowTriggerAndEffects(w) {
+      if (!w.clientdata) return { trigger: null, effects: [] };
+      let cd;
+      try { cd = typeof w.clientdata === 'string' ? JSON.parse(w.clientdata) : w.clientdata; } catch { return { trigger: null, effects: [] }; }
+      const def = cd?.properties?.definition || cd;
+      if (!def || typeof def !== 'object') return { trigger: null, effects: [] };
+
+      let trigger = null;
+      for (const [tName, tr] of Object.entries(def.triggers || {})) {
+        const p = tr?.inputs?.parameters || {};
+        const ent = resolveLogicalEntity(p['subscriptionRequest/entityname']);
+        if (ent) {
+          const msgCode = Number(p['subscriptionRequest/message']);
+          const messages = MSG_BITMASK[msgCode] || ['Create', 'Update', 'Delete'];
+          const rawFilt = p['subscriptionRequest/filteringattributes'] || '';
+          const filterAttrs = rawFilt ? rawFilt.split(',').map(x => x.trim().toLowerCase()).filter(Boolean) : [];
+          trigger = {
+            kind: 'dataverse',
+            triggerName: tName,
+            entity: ent,
+            messages,
+            filterAttrs,
+            filterExpression: p['subscriptionRequest/filterExpression'] || ''
+          };
+          break;
+        }
+        if (tr?.recurrence || String(tr?.type).toLowerCase() === 'recurrence') {
+          trigger = { kind: 'schedule', triggerName: tName, summary: `${tr.recurrence?.frequency || 'Schedule'} (${tr.recurrence?.interval || 1})` };
+        } else if (String(tr?.type).toLowerCase() === 'request') {
+          trigger = { kind: 'callable', triggerName: tName, subKind: tr.kind || 'Request' };
+        }
+      }
+
+      const effects = [];
+      const walkActions = (map) => {
+        if (!map || typeof map !== 'object') return;
+        for (const [stepName, node] of Object.entries(map)) {
+          if (!node || typeof node !== 'object') continue;
+          const opId = String(node.inputs?.host?.operationId || '').toLowerCase();
+          const p = node.inputs?.parameters || {};
+          const targetEnt = resolveLogicalEntity(p.entityName || p.tableName);
+
+          // Written columns (`item/statuscode`, `item/customerid_account@odata.bind` -> `customerid`)
+          const writtenCols = Object.keys(p)
+            .filter(k => /^item\//i.test(k))
+            .map(k => k.replace(/^item\//i, '').replace(/@odata\.bind$/i, '').toLowerCase());
+
+          if (targetEnt && (opId === 'createrecord' || opId === 'createitem')) {
+            effects.push({ kind: 'write', stepName, entity: targetEnt, message: 'Create', fields: writtenCols });
+          } else if (targetEnt && (opId === 'updaterecord' || opId === 'updateonlyrecord' || opId === 'patchrecord')) {
+            effects.push({ kind: 'write', stepName, entity: targetEnt, message: 'Update', fields: writtenCols });
+          } else if (targetEnt && (opId === 'deleterecord' || opId === 'deleteitem')) {
+            effects.push({ kind: 'write', stepName, entity: targetEnt, message: 'Delete', fields: [] });
+          } else if (opId === 'performboundaction' || opId === 'performunboundaction') {
+            effects.push({ kind: 'action', stepName, entity: targetEnt || 'Global', actionName: p.actionName || opId });
+          }
+
+          // Run a Child Flow
+          const wfRef = node.inputs?.host?.workflowReferenceName || p.workflowid;
+          if (String(node.type).toLowerCase() === 'workflow' || (typeof wfRef === 'string' && GUID_RE.test(wfRef))) {
+            const cid = (typeof wfRef === 'string' && wfRef.match(GUID_RE)) ? wfRef.match(GUID_RE)[0].toLowerCase() : '';
+            if (cid) effects.push({ kind: 'childflow', stepName, childWorkflowId: cid });
+          }
+
+          if (node.actions) walkActions(node.actions);
+          if (node.else?.actions) walkActions(node.else.actions);
+          if (node.cases) {
+            for (const c of Object.values(node.cases)) {
+              if (c?.actions) walkActions(c.actions);
+            }
+          }
+          if (node.default?.actions) walkActions(node.default.actions);
+        }
+      };
+
+      walkActions(def.actions);
+      return { trigger, effects };
+    }
+
+    function parseWorkflowXamlEffects(xamlStr) {
+      if (!xamlStr || typeof xamlStr !== 'string') return [];
+      const effects = [];
+      // Classic Workflow XAML patterns: CreateEntity, UpdateEntity, SetState, AssignEntity, ChildWorkflow
+      for (const m of xamlStr.matchAll(/<(?:mxswa:)?(CreateEntity|UpdateEntity|AssignEntity|SetState)\b[^>]*EntityName="([^"]+)"/gi)) {
+        const op = m[1].toLowerCase();
+        const ent = resolveLogicalEntity(m[2]);
+        if (!ent) continue;
+        const msg = op === 'createentity' ? 'Create' : 'Update';
+        effects.push({ kind: 'write', stepName: `XAML ${m[1]}`, entity: ent, message: msg, fields: [] });
+      }
+      for (const m of xamlStr.matchAll(/WorkflowId="([0-9a-f-]{36})"/gi)) {
+        effects.push({ kind: 'childflow', stepName: 'Start Child Workflow', childWorkflowId: m[1].toLowerCase() });
+      }
+      return effects;
+    }
+
+    async function loadOrgProcesses() {
+      isSample = false;
+      try {
+        const [eRes, sRes, wRes] = await Promise.all([
+          DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName,DisplayName&$filter=IsIntersect eq false'),
+          fetchAllPages('/sdkmessageprocessingsteps?$select=sdkmessageprocessingstepid,name,stage,mode,rank,filteringattributes,statecode&$expand=sdkmessageid($select=name),sdkmessagefilterid($select=primaryobjecttypecode)&$orderby=stage asc,rank asc'),
+          fetchAllPages('/workflows?$select=workflowid,name,category,type,statecode,mode,primaryentity,triggeroncreate,triggerondelete,triggeronupdateattributelist,clientdata&$filter=type eq 1&$orderby=name asc')
+        ]);
+
+        entities = (eRes.value || []).map(e => ({
+          logicalName: e.LogicalName,
+          entitySetName: (e.EntitySetName || '').toLowerCase(),
+          displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName
+        })).sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+        entitiesBySet = new Map();
+        for (const e of entities) {
+          entitiesBySet.set(e.logicalName.toLowerCase(), e.logicalName.toLowerCase());
+          if (e.entitySetName) entitiesBySet.set(e.entitySetName, e.logicalName.toLowerCase());
+        }
+
+        pluginSteps = sRes.map(s => ({
+          id: String(s.sdkmessageprocessingstepid).toLowerCase(),
+          kind: 'plugin',
+          kindLabel: s.mode === 1 ? 'Async Plugin/Hook' : 'Sync Plugin',
+          name: s.name || 'Unnamed Step',
+          entity: (s.sdkmessagefilterid?.primaryobjecttypecode || '').toLowerCase(),
+          message: (s.sdkmessageid?.name || '').trim(),
+          stage: Number(s.stage) || 40,
+          mode: s.mode === 1 ? 'Async' : 'Sync',
+          rank: Number(s.rank) || 1,
+          filterAttrs: (s.filteringattributes || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean),
+          active: s.statecode === 0,
+          effects: []
+        }));
+
+        workflows = wRes.map(w => normalizeWorkflowRecord(w));
+
+        populateSelectors();
+        DV.notify(`Indexed ${pluginSteps.length} plugin/webhook steps & ${workflows.length} flows/workflows.`, 'success');
+      } catch (err) {
+        DV.notify(err.message, 'error');
+      }
+    }
+
+    function normalizeWorkflowRecord(w) {
+      const cat = Number(w.category);
+      const id = String(w.workflowid).toLowerCase();
+      const active = w.statecode === 1;
+      if (cat === 5) {
+        const parsed = parseCloudFlowTriggerAndEffects(w);
+        return {
+          id,
+          kind: 'flow',
+          kindLabel: 'Cloud Flow',
+          name: w.name || 'Cloud Flow',
+          entity: parsed.trigger?.entity || '',
+          messages: parsed.trigger?.messages || [],
+          filterAttrs: parsed.trigger?.filterAttrs || [],
+          triggerInfo: parsed.trigger,
+          mode: 'Async',
+          stage: 50,
+          rank: 0,
+          active,
+          effects: parsed.effects
+        };
+      }
+      if (cat === 2) {
+        return {
+          id, kind: 'rule', kindLabel: 'Business Rule',
+          name: w.name || 'Business Rule',
+          entity: (w.primaryentity || '').toLowerCase(),
+          messages: ['Create', 'Update'],
+          filterAttrs: [],
+          mode: 'Sync (Client/Server)',
+          stage: 15,
+          rank: 0,
+          active,
+          effects: []
+        };
+      }
+      // Classic Workflow (0) or Action (3)
+      const msgs = [];
+      if (w.triggeroncreate) msgs.push('Create');
+      if (w.triggerondelete) msgs.push('Delete');
+      const updAttrs = (w.triggeronupdateattributelist || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (updAttrs.length) msgs.push('Update');
+      const isSync = Number(w.mode) === 1; // workflow.mode 1 = real-time, 0 = background
+      return {
+        id,
+        kind: cat === 3 ? 'action' : 'workflow',
+        kindLabel: cat === 3 ? 'Custom Action' : (isSync ? 'Real-Time Workflow' : 'Background Workflow'),
+        name: w.name || 'Workflow',
+        entity: (w.primaryentity || '').toLowerCase(),
+        messages: msgs,
+        filterAttrs: updAttrs,
+        mode: isSync ? 'Sync' : 'Async',
+        stage: isSync ? 35 : 45,
+        rank: 0,
+        active,
+        effects: w.xaml ? parseWorkflowXamlEffects(w.xaml) : []
+      };
+    }
+
+    function populateSelectors() {
+      const entSel = document.getElementById('start-entity');
+      const prevEnt = entSel.value;
+      entSel.innerHTML = entities.map(e => `<option value="${DV.esc(e.logicalName)}">${DV.esc(e.displayName)} (${DV.esc(e.logicalName)})</option>`).join('');
+      if (prevEnt && entities.some(e => e.logicalName === prevEnt)) entSel.value = prevEnt;
+      else if (entities.some(e => e.logicalName === 'account')) entSel.value = 'account';
+
+      const flowSel = document.getElementById('start-flow');
+      const prevFlow = flowSel.value;
+      const selectable = workflows.filter(w => w.kind === 'flow' || w.kind === 'workflow').sort((a, b) => a.name.localeCompare(b.name));
+      flowSel.innerHTML = '<option value="">Select Cloud Flow or Classic Workflow…</option>' +
+        selectable.map(w => `<option value="${DV.esc(w.id)}">${w.active ? '⚡' : '⏸️'} [${DV.esc(w.kindLabel)}] ${DV.esc(w.name)}</option>`).join('');
+      if (prevFlow && selectable.some(w => w.id === prevFlow)) flowSel.value = prevFlow;
+    }
+
+    /* ─── Multi-Hop Cascade Graph Engine ────────────────────── */
+    function matchesEventAndFields(proc, message, changedFields) {
+      if (proc.kind === 'plugin') {
+        if (proc.message.toLowerCase() !== message.toLowerCase()) return false;
+      } else {
+        if (!proc.messages.some(m => m.toLowerCase() === message.toLowerCase())) return false;
+      }
+      if (message.toLowerCase() === 'update' && changedFields && changedFields.length > 0 && proc.filterAttrs.length > 0) {
+        return proc.filterAttrs.some(fa => changedFields.includes(fa));
+      }
+      return true;
+    }
+
+    function findMatchingProcesses(entity, message, changedFields, activeOnly) {
+      const ln = resolveLogicalEntity(entity);
+      if (!ln) return [];
+
+      const matchingPlugins = pluginSteps
+        .filter(s => s.entity === ln && (!activeOnly || s.active) && matchesEventAndFields(s, message, changedFields));
+
+      const matchingWfs = workflows
+        .filter(w => w.entity === ln && (!activeOnly || w.active) && matchesEventAndFields(w, message, changedFields));
+
+      return [...matchingPlugins, ...matchingWfs].sort((a, b) => {
+        if (a.stage !== b.stage) return a.stage - b.stage;
+        if (a.mode !== b.mode) return a.mode === 'Sync' ? -1 : 1;
+        return (a.rank || 0) - (b.rank || 0) || a.name.localeCompare(b.name);
+      });
+    }
+
+    async function ensureWorkflowEffectsLoaded(proc) {
+      if ((proc.kind === 'workflow' || proc.kind === 'action') && !proc._xamlLoaded && !isSample && context) {
+        proc._xamlLoaded = true;
+        if (!xamlCache.has(proc.id)) {
+          try {
+            const res = await DV.fetch(`/workflows(${proc.id})?$select=xaml`);
+            xamlCache.set(proc.id, res?.xaml || '');
+          } catch {
+            xamlCache.set(proc.id, '');
+          }
+        }
+        const parsed = parseWorkflowXamlEffects(xamlCache.get(proc.id));
+        if (parsed.length) proc.effects = parsed;
+      }
+    }
+
+    async function buildCascadeTree(rootTriggers, maxHops, activeOnly) {
+      const edges = [];
+      let totalNodes = 0;
+      let maxDepth = 0;
+      let totalWrites = 0;
+      let totalLoops = 0;
+
+      async function expandProcess(proc, hop, viaLabel, pathIds, pathSignatures) {
+        totalNodes++;
+        if (hop > maxDepth) maxDepth = hop;
+
+        await ensureWorkflowEffectsLoaded(proc);
+
+        const isCycle = pathIds.has(proc.id);
+        if (isCycle) totalLoops++;
+
+        const node = {
+          hop,
+          proc,
+          viaLabel,
+          isCycle,
+          branches: []
+        };
+
+        if (isCycle || hop >= maxHops || !proc.effects?.length) {
+          return node;
+        }
+
+        const nextPathIds = new Set(pathIds);
+        nextPathIds.add(proc.id);
+
+        for (const eff of proc.effects) {
+          totalWrites++;
+          if (eff.kind === 'childflow') {
+            const childProc = workflows.find(w => w.id === eff.childWorkflowId);
+            if (childProc && (!activeOnly || childProc.active)) {
+              const childNode = await expandProcess(childProc, hop + 1, `Run Child Flow (${eff.stepName})`, nextPathIds, pathSignatures);
+              edges.push({
+                hop: hop + 1,
+                sourceName: `${proc.name} → ${eff.stepName}`,
+                triggerSummary: 'Child Flow Call',
+                targetProc: childProc,
+                isCycle: childNode.isCycle
+              });
+              node.branches.push({ effect: eff, label: `Run Child Flow via "${eff.stepName}"`, children: [childNode] });
+            } else {
+              node.branches.push({ effect: eff, label: `Run Child Flow (${eff.childWorkflowId}) — not found or inactive`, children: [] });
+            }
+            continue;
+          }
+
+          if (eff.kind === 'write') {
+            const fieldTxt = eff.fields?.length ? eff.fields.join(', ') : '(all fields)';
+            const triggerSig = `${eff.entity}:${eff.message}:${eff.fields?.slice().sort().join(',') || '*'}`;
+            const sigLoop = pathSignatures.has(`${eff.entity}:${eff.message}`) && eff.entity === proc.entity;
+            const nextSigs = new Set(pathSignatures);
+            nextSigs.add(`${eff.entity}:${eff.message}`);
+
+            const downstream = findMatchingProcesses(eff.entity, eff.message, eff.fields, activeOnly);
+            const childNodes = [];
+            for (const dp of downstream) {
+              const cn = await expandProcess(dp, hop + 1, `${eff.stepName}: ${eff.message} ${eff.entity}`, nextPathIds, nextSigs);
+              if (sigLoop && !cn.isCycle && dp.id === proc.id) { cn.isCycle = true; totalLoops++; }
+              edges.push({
+                hop: hop + 1,
+                sourceName: `${proc.name} → ${eff.stepName}`,
+                triggerSummary: `${eff.entity} · ${eff.message} [${fieldTxt}]`,
+                targetProc: dp,
+                isCycle: cn.isCycle
+              });
+              childNodes.push(cn);
+            }
+            node.branches.push({
+              effect: eff,
+              label: `${eff.message} ${eff.entity} (${eff.stepName})`,
+              fields: eff.fields,
+              children: childNodes
+            });
+          } else if (eff.kind === 'action') {
+            node.branches.push({
+              effect: eff,
+              label: `Invoke Action: ${eff.actionName} on ${eff.entity} (${eff.stepName})`,
+              children: []
+            });
+          }
+        }
+
+        return node;
+      }
+
+      const roots = [];
+      for (const rt of rootTriggers) {
+        const sigs = new Set(rt.entity && rt.message ? [`${rt.entity}:${rt.message}`] : []);
+        const node = await expandProcess(rt.proc, 1, rt.viaLabel, new Set(), sigs);
+        edges.push({
+          hop: 1,
+          sourceName: rt.sourceName,
+          triggerSummary: rt.triggerSummary,
+          targetProc: rt.proc,
+          isCycle: node.isCycle
+        });
+        roots.push(node);
+      }
+
+      return { roots, edges, stats: { totalNodes, maxDepth, totalWrites, totalLoops } };
+    }
+
+    /* ─── Rendering ─────────────────────────────────────────── */
+    function renderTreeNodeHtml(node) {
+      const p = node.proc;
+      const cls = node.isCycle ? 'loop' : p.kind === 'flow' ? 'flow' : (p.mode.startsWith('Sync') ? 'sync' : 'async');
+      const icon = p.kind === 'plugin' ? '🧩' : p.kind === 'flow' ? '⚡' : p.kind === 'rule' ? '📏' : '⚙️';
+      const stageBadge = p.kind === 'plugin' ? DV.ui.badge(STAGE_LABELS[p.stage] || `Stage ${p.stage}`, 'info') : DV.ui.badge(p.kindLabel, 'info');
+      const stateBadge = DV.ui.badge(p.active ? 'Active' : 'Inactive', p.active ? 'ok' : 'warn');
+      const filtTxt = p.filterAttrs?.length ? p.filterAttrs.map(a => `<span class="attr-pill">${DV.esc(a)}</span>`).join('') : '<span style="color:var(--text-sec);">All columns</span>';
+
+      const branchesHtml = node.branches.map(br => {
+        const fieldsHtml = br.fields?.length ? ` · Fields: ${br.fields.map(f => `<span class="attr-pill">${DV.esc(f)}</span>`).join('')}` : '';
+        const childrenHtml = br.children.length
+          ? br.children.map(c => renderTreeNodeHtml(c)).join('')
+          : `<div style="font-size:11px;color:var(--text-sec);padding:4px 0 2px;">↳ End of chain (no active downstream triggers detected)</div>`;
+        return `
+          <div class="edge-label">📤 <strong>${DV.esc(br.label)}</strong>${fieldsHtml}</div>
+          <div class="cn-children">${childrenHtml}</div>
+        `;
+      }).join('');
+
+      const noteHtml = p.kind === 'plugin'
+        ? `<div style="font-size:11px;color:var(--text-sec);">Compiled .NET Plugin/Webhook step (#${p.rank}) — check <em>Plugin Trace Logs</em> or <em>Environment Timeline</em> for runtime side effects.</div>`
+        : '';
+
+      const deepLink = p.kind === 'flow'
+        ? `<button type="button" class="dv-btn dv-btn-sm btn-codeview" data-fid="${DV.esc(p.id)}" title="Open in Flow CodeView Reader">🧬 CodeView</button>`
+        : '';
+
+      return `
+        <div class="chain-node ${cls}">
+          <div class="cn-head">
+            <div class="cn-title">
+              <span class="hop-pill">Hop ${node.hop}</span>
+              <span>${icon} ${DV.esc(p.name)}</span>
+              ${node.isCycle ? `<span class="loop-badge">🔄 LOOP / CYCLE DETECTED</span>` : ''}
+            </div>
+            <div class="cn-meta">
+              ${stageBadge}
+              ${DV.ui.badge(p.mode, p.mode.startsWith('Sync') ? 'warn' : 'info')}
+              ${stateBadge}
+              ${deepLink}
+            </div>
+          </div>
+          <div class="cn-body">
+            <div><strong>Triggered on:</strong> <code>${DV.esc(p.entity || '—')}</code> · <strong>Filter:</strong> ${filtTxt}</div>
+            ${noteHtml}
+            ${branchesHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    async function traceFromUi() {
+      const maxHops = Number(document.getElementById(startMode === 'field' ? 'max-hops' : 'max-hops-flow').value) || 4;
+      const activeOnly = document.getElementById(startMode === 'field' ? 'chk-active-only' : 'chk-active-only-flow').checked;
+
+      let rootTriggers = [];
+      let headerDesc = '';
+
+      if (startMode === 'field') {
+        const entity = document.getElementById('start-entity').value;
+        const msg = document.getElementById('start-msg').value;
+        const rawFields = document.getElementById('start-fields').value.trim();
+        const fields = rawFields ? rawFields.split(',').map(x => x.trim().toLowerCase()).filter(Boolean) : [];
+        if (!entity) { DV.notify('Select a starting table first.', 'warning'); return; }
+
+        const matches = findMatchingProcesses(entity, msg, fields, activeOnly);
+        rootTriggers = matches.map(proc => ({
+          proc,
+          entity: resolveLogicalEntity(entity),
+          message: msg,
+          viaLabel: `${entity} · ${msg}`,
+          sourceName: `Initial Trigger (${entity})`,
+          triggerSummary: `${entity} · ${msg} [${fields.join(', ') || 'any field'}]`
+        }));
+        headerDesc = `${entity} · ${msg}${fields.length ? ` (${fields.join(', ')})` : ''}`;
+      } else {
+        const fid = document.getElementById('start-flow').value;
+        const wf = workflows.find(w => w.id === fid);
+        if (!wf) { DV.notify('Select a starting Cloud Flow or Workflow.', 'warning'); return; }
+        rootTriggers = [{
+          proc: wf,
+          entity: wf.entity,
+          message: wf.messages?.[0] || '',
+          viaLabel: `Selected Process (${wf.name})`,
+          sourceName: 'Manual Start Selection',
+          triggerSummary: wf.entity ? `${wf.entity} · ${wf.messages.join('/')}` : wf.kindLabel
+        }];
+        headerDesc = wf.name;
+      }
+
+      document.getElementById('tree-view').innerHTML = DV.ui.empty(`Tracing downstream cascade for ${headerDesc}…`);
+      const result = await buildCascadeTree(rootTriggers, maxHops, activeOnly);
+      lastEdges = result.edges;
+
+      document.getElementById('st-procs').textContent = result.stats.totalNodes;
+      document.getElementById('st-depth').textContent = result.stats.maxDepth;
+      document.getElementById('st-writes').textContent = result.stats.totalWrites;
+      document.getElementById('st-loops').textContent = result.stats.totalLoops;
+      document.getElementById('cnt-edges').textContent = result.edges.length;
+      DV.setTitle(`Chain — ${headerDesc}`);
+
+      const treeEl = document.getElementById('tree-view');
+      if (!result.roots.length) {
+        treeEl.innerHTML = DV.ui.empty(`No active processes found triggering on <strong>${DV.esc(headerDesc)}</strong>.`);
+      } else {
+        treeEl.innerHTML = result.roots.map(r => renderTreeNodeHtml(r)).join('');
+        treeEl.querySelectorAll('.btn-codeview').forEach(b => {
+          b.addEventListener('click', () => DV.openTool('flow-codeview', { flowId: b.dataset.fid }));
+        });
+      }
+
+      const eBody = document.getElementById('edges-tbody');
+      eBody.innerHTML = result.edges.length ? result.edges.map(e => `<tr>
+        <td><span class="hop-pill">Hop ${e.hop}</span></td>
+        <td>${DV.esc(e.sourceName)}</td>
+        <td><code>${DV.esc(e.triggerSummary)}</code></td>
+        <td><strong>${DV.esc(e.targetProc.name)}</strong></td>
+        <td>${DV.ui.badge(e.targetProc.kindLabel, 'info')}</td>
+        <td>${DV.esc(e.targetProc.mode)}</td>
+        <td>${e.isCycle ? `<span class="loop-badge">🔄 Cycle</span>` : DV.ui.badge(e.targetProc.active ? 'Active' : 'Inactive', e.targetProc.active ? 'ok' : 'warn')}</td>
+      </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-sec);">No chain edges found.</td></tr>';
+    }
+
+    function loadSampleCascade() {
+      isSample = true;
+      entities = [
+        { logicalName: 'order', entitySetName: 'salesorders', displayName: 'Order' },
+        { logicalName: 'invoice', entitySetName: 'invoices', displayName: 'Invoice' },
+        { logicalName: 'account', entitySetName: 'accounts', displayName: 'Account' }
+      ];
+      entitiesBySet = new Map([
+        ['order', 'order'], ['salesorders', 'order'],
+        ['invoice', 'invoice'], ['invoices', 'invoice'],
+        ['account', 'account'], ['accounts', 'account']
+      ]);
+      pluginSteps = [
+        { id: 'p1', kind: 'plugin', kindLabel: 'Sync Plugin', name: 'Contoso.Plugins.ValidateInvoiceTax', entity: 'invoice', message: 'Update', stage: 20, mode: 'Sync', rank: 1, filterAttrs: ['new_erpsyncstatus', 'totalamount'], active: true, effects: [] },
+        { id: 'p2', kind: 'plugin', kindLabel: 'Async Plugin/Hook', name: 'ERP Webhook Endpoint (Post Invoice)', entity: 'invoice', message: 'Update', stage: 40, mode: 'Async', rank: 1, filterAttrs: ['statuscode'], active: true, effects: [] }
+      ];
+
+      const wfChild = {
+        workflowid: 'wf-child-1', name: 'Notify Finance Manager (Child Flow)', category: 5, statecode: 1,
+        clientdata: JSON.stringify({
+          properties: {
+            definition: {
+              triggers: { manual: { type: 'Request', kind: 'Button' } },
+              actions: {
+                Mark_Account_Reviewed: {
+                  type: 'OpenApiConnection',
+                  inputs: { host: { operationId: 'UpdateRecord' }, parameters: { entityName: 'accounts', 'item/new_lastinvoicedate': '@utcNow()' } }
+                }
+              }
+            }
+          }
+        })
+      };
+      const wfOrderFlow = {
+        workflowid: 'wf-order-1', name: 'On Order Won → Create & Sync Invoice', category: 5, statecode: 1,
+        clientdata: JSON.stringify({
+          properties: {
+            definition: {
+              triggers: {
+                When_Order_Won: {
+                  type: 'OpenApiConnectionWebhook',
+                  inputs: { parameters: { 'subscriptionRequest/entityname': 'order', 'subscriptionRequest/message': 3, 'subscriptionRequest/filteringattributes': 'statecode,statuscode' } }
+                }
+              },
+              actions: {
+                Update_Related_Invoice: {
+                  type: 'OpenApiConnection',
+                  inputs: { host: { operationId: 'UpdateRecord' }, parameters: { entityName: 'invoices', 'item/new_erpsyncstatus': 100000000, 'item/statuscode': 2 } }
+                }
+              }
+            }
+          }
+        })
+      };
+      const wfInvoiceSync = {
+        workflowid: 'wf-inv-1', name: 'Sync Invoice ERP Status → Trigger Child & Audit Loop', category: 5, statecode: 1,
+        clientdata: JSON.stringify({
+          properties: {
+            definition: {
+              triggers: {
+                When_Invoice_ErpSync_Changes: {
+                  type: 'OpenApiConnectionWebhook',
+                  inputs: { parameters: { 'subscriptionRequest/entityname': 'invoice', 'subscriptionRequest/message': 3, 'subscriptionRequest/filteringattributes': 'new_erpsyncstatus' } }
+                }
+              },
+              actions: {
+                Update_Invoice_Timestamp: {
+                  type: 'OpenApiConnection',
+                  inputs: { host: { operationId: 'UpdateRecord' }, parameters: { entityName: 'invoices', 'item/new_erpsyncstatus': 100000001 } }
+                },
+                Invoke_Child_Notify: {
+                  type: 'Workflow',
+                  inputs: { host: { workflowReferenceName: 'wf-child-1' } }
+                }
+              }
+            }
+          }
+        })
+      };
+      const wfAccScore = {
+        workflowid: 'wf-acc-1', name: 'Recalculate Account Credit Score', category: 5, statecode: 1,
+        clientdata: JSON.stringify({
+          properties: {
+            definition: {
+              triggers: {
+                When_Account_InvoiceDate_Changes: {
+                  type: 'OpenApiConnectionWebhook',
+                  inputs: { parameters: { 'subscriptionRequest/entityname': 'account', 'subscriptionRequest/message': 3, 'subscriptionRequest/filteringattributes': 'new_lastinvoicedate' } }
+                }
+              },
+              actions: {}
+            }
+          }
+        })
+      };
+
+      // Note: wf-child-1 GUID formatted properly for GUID_RE
+      const childGuid = 'aaaaaaaa-1111-2222-3333-444444444444';
+      wfChild.workflowid = childGuid;
+      wfInvoiceSync.clientdata = wfInvoiceSync.clientdata.replace('wf-child-1', childGuid);
+
+      workflows = [wfOrderFlow, wfInvoiceSync, wfChild, wfAccScore].map(normalizeWorkflowRecord);
+      populateSelectors();
+      document.getElementById('start-entity').value = 'order';
+      document.getElementById('start-msg').value = 'Update';
+      document.getElementById('start-fields').value = 'statuscode';
+      traceFromUi();
+      DV.notify('Loaded multi-hop Sample Cascade (Order → Invoice Plugin + Flow → Self-Loop Alert + Child Flow → Account Flow).', 'info', 5000);
+    }
+
+    function setStartMode(mode) {
+      startMode = mode;
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+      document.getElementById('bar-field').style.display = mode === 'field' ? 'flex' : 'none';
+      document.getElementById('bar-flow').style.display = mode === 'flow' ? 'flex' : 'none';
+    }
+
+    document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => setStartMode(b.dataset.mode)));
+    document.querySelectorAll('.view-btn').forEach(b => b.addEventListener('click', () => {
+      activeView = b.dataset.view;
+      document.querySelectorAll('.view-btn').forEach(x => x.classList.toggle('active', x === b));
+      document.getElementById('tree-view').style.display = activeView === 'tree' ? 'block' : 'none';
+      document.getElementById('edges-view').style.display = activeView === 'edges' ? 'block' : 'none';
+    }));
+
+    document.getElementById('btn-trace-field').addEventListener('click', traceFromUi);
+    document.getElementById('btn-trace-flow').addEventListener('click', traceFromUi);
+    document.getElementById('btn-sample').addEventListener('click', loadSampleCascade);
+    document.getElementById('btn-refresh').addEventListener('click', () => context ? loadOrgProcesses() : loadSampleCascade());
+    document.getElementById('btn-export').addEventListener('click', () => {
+      if (!lastEdges.length) { DV.notify('Run a trace first.', 'warning'); return; }
+      DV.exportCsv(`process_cascade_${new Date().toISOString().slice(0, 10)}.csv`,
+        ['Hop', 'Source', 'TriggerDetail', 'TargetProcess', 'Kind', 'Mode', 'CycleHazard'],
+        lastEdges.map(e => [e.hop, e.sourceName, e.triggerSummary, e.targetProc.name, e.targetProc.kindLabel, e.targetProc.mode, e.isCycle ? 'YES' : 'No']));
+    });
+  </script>
+</body>
+</html>
