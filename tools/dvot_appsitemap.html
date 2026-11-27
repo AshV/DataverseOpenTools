@@ -59,14 +59,15 @@
     async function loadAll() {
       $('btn-load').disabled = true;
       try {
-        const [aRes, smRes, compRes] = await Promise.all([
-          DV.fetch('/appmodules?$select=appmoduleid,name,uniquename,description,url,clienttype,publishedon,statecode&$orderby=name asc'),
-          DV.fetch('/sitemaps?$select=sitemapid,sitemapname,sitemapnameunique,sitemapxml'),
-          DV.fetch('/appmodulecomponents?$select=_appmoduleidunique_value,componenttype,objectid').catch(() => ({ value: [] }))
+        const fetchList = DV.fetchAll ? DV.fetchAll : (p => DV.fetch(p).then(r => r.value || []));
+        const [apps, sitemaps, components] = await Promise.all([
+          fetchList('/appmodules?$select=appmoduleid,name,uniquename,description,url,clienttype,publishedon,statecode&$orderby=name asc'),
+          fetchList('/sitemaps?$select=sitemapid,sitemapname,sitemapnameunique,sitemapxml'),
+          fetchList('/appmodulecomponents?$select=_appmoduleidunique_value,componenttype,objectid').catch(() => [])
         ]);
-        S.apps = aRes.value || [];
-        S.sitemaps = smRes.value || [];
-        S.components = compRes.value || [];
+        S.apps = apps;
+        S.sitemaps = sitemaps;
+        S.components = components;
         $('tel-count').textContent = `${S.apps.length} apps • ${S.sitemaps.length} sitemaps`;
         renderList();
       } catch (err) {
@@ -170,10 +171,20 @@
       }
     }
 
-    DV.onReady(async () => {
-      $('btn-load').addEventListener('click', loadAll);
-      $('inp-search').addEventListener('input', renderList);
+    async function onContextReady() {
+      if (!S._wired) {
+        S._wired = true;
+        $('btn-load').addEventListener('click', loadAll);
+        $('inp-search').addEventListener('input', renderList);
+      }
       await loadAll();
+    }
+
+    const HOST_ORIGIN = window.location.origin;
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') onContextReady();
     });
   </script>
 </body>

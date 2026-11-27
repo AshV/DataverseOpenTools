@@ -2242,9 +2242,12 @@
       });
     }
 
-    DV.onReady(async context => {
+    async function onContextReady(context) {
       S.context = context;
-      wireEvents();
+      if (!S._wired) {
+        S._wired = true;
+        wireEvents();
+      }
       setBadge('Ready', '0 items');
       if (!context?.environmentUrl) {
         $('list-tip').textContent = 'Connect to Dataverse or try 🧪 Sample';
@@ -2252,6 +2255,13 @@
       }
       // Preload user directory non-blockingly so "Pick User" & Sharing pickers work right away
       ensureDirectory().catch(() => {});
+    }
+
+    const HOST_ORIGIN = window.location.origin;
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') onContextReady(e.data.payload);
     });
   })();
   </script>

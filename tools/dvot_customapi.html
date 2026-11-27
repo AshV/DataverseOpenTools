@@ -56,7 +56,7 @@
   <script>
     'use strict';
 
-    const S = { apis: [], reqParams: [], respProps: [], pluginTypes: new Map(), entitySets: new Map(), selected: null };
+    const S = { context: null, apis: [], reqParams: [], respProps: [], pluginTypes: new Map(), entitySets: new Map(), selected: null };
     const $ = id => document.getElementById(id);
     const norm = id => String(id || '').replace(/[{}]/g, '').toLowerCase();
 
@@ -69,21 +69,22 @@
     async function loadAll() {
       $('btn-load').disabled = true;
       try {
-        const [caRes, rpRes, rsRes, wfRes, ptRes, edRes] = await Promise.all([
-          DV.fetch('/customapis?$select=customapiid,uniquename,name,displayname,description,bindingtype,boundentitylogicalname,isfunction,isenabled,executeprivilegename,_plugintypeid_value&$orderby=uniquename asc'),
-          DV.fetch('/customapirequestparameters?$select=customapirequestparameterid,uniquename,name,displayname,type,isoptional,logicalentityname,_customapiid_value'),
-          DV.fetch('/customapiresponseproperties?$select=customapiresponsepropertyid,uniquename,name,displayname,type,logicalentityname,_customapiid_value'),
-          DV.fetch('/workflows?$filter=category eq 3 and statecode eq 1&$select=workflowid,name,uniquename,primaryentity&$orderby=name asc').catch(() => ({ value: [] })),
-          DV.fetch('/plugintypes?$select=plugintypeid,typename,assemblyname').catch(() => ({ value: [] })),
-          DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName').catch(() => ({ value: [] }))
+        const fetchList = DV.fetchAll ? DV.fetchAll : (p => DV.fetch(p).then(r => r.value || []));
+        const [caList, rpList, rsList, wfList, ptList, edMap] = await Promise.all([
+          fetchList('/customapis?$select=customapiid,uniquename,name,displayname,description,bindingtype,boundentitylogicalname,isfunction,isenabled,executeprivilegename,_plugintypeid_value&$orderby=uniquename asc'),
+          fetchList('/customapirequestparameters?$select=customapirequestparameterid,uniquename,name,displayname,type,isoptional,logicalentityname,_customapiid_value'),
+          fetchList('/customapiresponseproperties?$select=customapiresponsepropertyid,uniquename,name,displayname,type,logicalentityname,_customapiid_value'),
+          fetchList('/workflows?$filter=category eq 3 and statecode eq 1&$select=workflowid,name,uniquename,primaryentity&$orderby=name asc').catch(() => []),
+          fetchList('/plugintypes?$select=plugintypeid,typename,assemblyname').catch(() => []),
+          DV.getEntityMap ? DV.getEntityMap().catch(() => new Map()) : DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName').then(r => new Map((r.value || []).map(e => [e.LogicalName?.toLowerCase(), { entitySetName: e.EntitySetName }]))).catch(() => new Map())
         ]);
 
-        S.pluginTypes = new Map((ptRes.value || []).map(p => [norm(p.plugintypeid), p]));
-        S.entitySets = new Map((edRes.value || []).map(e => [e.LogicalName?.toLowerCase(), e.EntitySetName]));
-        S.reqParams = rpRes.value || [];
-        S.respProps = rsRes.value || [];
+        S.pluginTypes = new Map(ptList.map(p => [norm(p.plugintypeid), p]));
+        S.entitySets = new Map([...edMap.entries()].map(([k, v]) => [k, v.entitySetName || v]));
+        S.reqParams = rpList;
+        S.respProps = rsList;
 
-        const customList = (caRes.value || []).map(c => ({
+        const customList = caList.map(c => ({
           kind: 'customapi',
           id: norm(c.customapiid),
           uniquename: c.uniquename,
@@ -95,7 +96,7 @@
           pluginType: S.pluginTypes.get(norm(c._plugintypeid_value))?.typename || ''
         }));
 
-        const actionList = (wfRes.value || []).map(w => ({
+        const actionList = wfList.map(w => ({
           kind: 'action',
           id: norm(w.workflowid),
           uniquename: w.uniquename || w.name,
@@ -240,16 +241,28 @@
       $('btn-copy-snippet').addEventListener('click', () => {
         try {
           const path = buildPath();
-          DV.copyText(`await fetch("/api/data/v9.2${path}", {\n  method: "${api.isFunction ? 'GET' : 'POST'}",\n  headers: { "Content-Type": "application/json", "OData-MaxVersion": "4.0", "OData-Version": "4.0" },\n  body: ${JSON.stringify($('txt-payload').value)}\n});`, 'Copied fetch snippet');
+          const ver = S.context?.apiVersion || '9.2';
+          DV.copyText(`await fetch("/api/data/v${ver}${path}", {\n  method: "${api.isFunction ? 'GET' : 'POST'}",\n  headers: { "Content-Type": "application/json", "OData-MaxVersion": "4.0", "OData-Version": "4.0" },\n  body: ${JSON.stringify($('txt-payload').value)}\n});`, 'Copied fetch snippet');
         } catch (err) { DV.notify(err.message, 'warning'); }
       });
     }
 
-    DV.onReady(async () => {
-      $('btn-load').addEventListener('click', loadAll);
-      $('inp-search').addEventListener('input', renderList);
-      $('sel-kind').addEventListener('change', renderList);
+    async function onContextReady(ctx) {
+      S.context = ctx;
+      if (!S._wired) {
+        S._wired = true;
+        $('btn-load').addEventListener('click', loadAll);
+        $('inp-search').addEventListener('input', renderList);
+        $('sel-kind').addEventListener('change', renderList);
+      }
       await loadAll();
+    }
+
+    const HOST_ORIGIN = window.location.origin;
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') onContextReady(e.data.payload);
     });
   </script>
 </body>

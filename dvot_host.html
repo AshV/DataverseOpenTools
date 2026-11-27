@@ -840,6 +840,12 @@
         --err-bg: #fde7e9; --err-color: #d13438; --status-error: #d13438;
         --code-bg: #f3f2f1; --modal-overlay: rgba(0,0,0,0.45);
         --shadow-sm: 0 1.6px 3.6px rgba(0,0,0,0.13); --shadow-md: 0 6.4px 14.4px rgba(0,0,0,0.15);
+        --surface: var(--bg-card); --surface-2: var(--bg-alt); --bg-header: var(--bg-alt); --bg-main: var(--bg);
+        --bg-hover: var(--primary-subtle); --bg-subtle: var(--border-subtle); --row-hover: var(--primary-subtle);
+        --accent: var(--primary); --brand: var(--primary); --danger: var(--err-color); --radius: 6px;
+        --dv-surface: var(--bg-card); --dv-surface-2: var(--bg-alt); --dv-border: var(--border);
+        --dv-text: var(--text); --dv-muted: var(--text-sec); --dv-primary: var(--primary);
+        --dv-danger: var(--err-color); --dv-mono: 'Cascadia Code', 'Consolas', monospace; --dv-radius: 6px;
       }
       body.dark, [data-theme="dark"] {
         --bg: #1e1e1e; --bg-alt: #252526; --bg-card: #2d2d2d;
@@ -851,6 +857,12 @@
         --err-bg: #431c20; --err-color: #f1707b; --status-error: #f1707b;
         --code-bg: #181818; --modal-overlay: rgba(0,0,0,0.7);
         --shadow-sm: 0 2px 4px rgba(0,0,0,0.4); --shadow-md: 0 8px 18px rgba(0,0,0,0.6);
+        --surface: var(--bg-card); --surface-2: var(--bg-alt); --bg-header: var(--bg-alt); --bg-main: var(--bg);
+        --bg-hover: var(--primary-subtle); --bg-subtle: var(--border-subtle); --row-hover: var(--primary-subtle);
+        --accent: var(--primary); --brand: var(--primary); --danger: var(--err-color); --radius: 6px;
+        --dv-surface: var(--bg-card); --dv-surface-2: var(--bg-alt); --dv-border: var(--border);
+        --dv-text: var(--text); --dv-muted: var(--text-sec); --dv-primary: var(--primary);
+        --dv-danger: var(--err-color); --dv-mono: 'Cascadia Code', 'Consolas', monospace; --dv-radius: 6px;
       }
       body.dv-app, body.dv-app * { box-sizing: border-box; }
       html, body.dv-app { height: 100%; margin: 0; padding: 0; overflow: hidden; }
@@ -886,7 +898,13 @@
       .dv-btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
       .dv-btn-primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
       .dv-btn-sm { padding: 2px 8px; font-size: 11px; }
-      body.dv-app input[type="text"], body.dv-app input[type="number"], body.dv-app select, body.dv-app textarea {
+      .dv-btn-danger { color: var(--err-color); border-color: var(--err-color); }
+      .dv-btn-danger:hover:not(:disabled) { background: var(--err-bg); border-color: var(--err-color); }
+      .dv-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; background: var(--bg-alt); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+      .dv-header h1 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .dv-subtitle { font-size: 11px; color: var(--text-sec); margin-top: 2px; }
+      body.dv-app input[type="text"], body.dv-app input[type="number"], body.dv-app select, body.dv-app textarea,
+      body.dv-app .dv-input, body.dv-app .dv-select, body.dv-app .dv-textarea {
         padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px;
         background: var(--bg); color: var(--text); font-size: 12px; font-family: inherit;
       }
@@ -933,10 +951,10 @@
       }
       .dv-table tr:hover td, body.dv-app table tr:hover td { background: var(--primary-subtle); }
       .dv-badge { padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; display: inline-block; }
-      .dv-b-ok   { background: var(--ok-bg); color: var(--ok-color); }
-      .dv-b-warn { background: var(--warn-bg); color: var(--warn-color); }
-      .dv-b-err  { background: var(--err-bg); color: var(--err-color); }
-      .dv-b-info { background: var(--primary-subtle); color: var(--primary); }
+      .dv-b-ok, .dv-badge-success { background: var(--ok-bg); color: var(--ok-color); }
+      .dv-b-warn, .dv-badge-warning { background: var(--warn-bg); color: var(--warn-color); }
+      .dv-b-err, .dv-badge-danger { background: var(--err-bg); color: var(--err-color); }
+      .dv-b-info, .dv-badge-info { background: var(--primary-subtle); color: var(--primary); }
       .dv-b-muted { background: var(--border-subtle); color: var(--text-sec); }
       .dv-kv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
       .dv-kv-card { padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-alt); }
@@ -953,12 +971,13 @@
         margin: 12px 14px; padding: 10px 12px; border-radius: 4px;
         background: var(--err-bg); border: 1px solid var(--err-color); color: var(--err-color); font-size: 12px; white-space: pre-wrap;
       }
-      .dv-overlay { display: none; position: fixed; inset: 0; background: var(--modal-overlay); z-index: 100; align-items: center; justify-content: center; }
+      .dv-overlay, .dv-modal-backdrop { display: none; position: fixed; inset: 0; background: var(--modal-overlay); z-index: 100; align-items: center; justify-content: center; }
       .dv-overlay.open { display: flex; }
       .dv-modal {
         background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
         width: 520px; max-width: 94vw; padding: 18px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow-md);
       }
+      .dv-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); }
     `;
 
     /* ─── Environment / Runtime Detection ────────────────────── */
@@ -1639,6 +1658,15 @@
         const dvApi = {
           version: HOST_VERSION,
           esc,
+          getContext() { return S.ctx; },
+          onReady(cb) {
+            if (typeof cb !== 'function') return;
+            if (frame.dataset.ready === '1' && S.ctx) {
+              Promise.resolve().then(() => cb(S.ctx));
+            } else {
+              (frame._dvReadyCbs ||= []).push(cb);
+            }
+          },
           csvSafe(v) {
             let s = v === null || v === undefined ? '' : String(v);
             if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
@@ -1731,6 +1759,97 @@
             if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status} ${res.statusText}`);
             return json;
           },
+          async fetchAll(path, opts = {}, maxPages = 20) {
+            const all = [];
+            let next = path;
+            let count = 0;
+            while (next && count < maxPages) {
+              count++;
+              const data = await dvApi.fetch(next, opts);
+              if (Array.isArray(data?.value)) all.push(...data.value);
+              next = data?.['@odata.nextLink'] || null;
+            }
+            return all;
+          },
+          async fetchBatch(relPath, callerHeaders = {}) {
+            const ctx = S.ctx || { environmentUrl: location.origin, apiVersion: S.cfg.apiVersion };
+            const batchId = 'batch_' + Math.random().toString(36).slice(2, 10);
+            const cleanRel = relPath.startsWith('/') ? relPath : '/' + relPath;
+            const fullInnerUrl = `${ctx.environmentUrl}/api/data/v${ctx.apiVersion}${cleanRel}`;
+            const batchBody = [
+              `--${batchId}`, 'Content-Type: application/http', 'Content-Transfer-Encoding: binary', '',
+              `GET ${fullInnerUrl} HTTP/1.1`, 'Accept: application/json', 'Prefer: odata.include-annotations="*"', '', `--${batchId}--`
+            ].join('\r\n');
+            const data = await dvApi.fetch('/$batch', {
+              method: 'POST',
+              headers: { 'Content-Type': `multipart/mixed;boundary=${batchId}`, ...callerHeaders },
+              body: batchBody
+            });
+            if (data?.error) throw new Error(data.error.message || 'Batch request failed');
+            if (typeof data?.raw === 'string') {
+              const s = data.raw.indexOf('{'), e = data.raw.lastIndexOf('}');
+              if (s !== -1 && e > s) {
+                const parsed = JSON.parse(data.raw.slice(s, e + 1));
+                if (parsed?.error) throw new Error(parsed.error.message || 'Batch inner query error');
+                return parsed;
+              }
+            }
+            return data;
+          },
+          async getEntityMap(ttlMs = 15 * 60000) {
+            if (S._entityMapMem && (Date.now() - S._entityMapTs < ttlMs)) return S._entityMapMem;
+            const cached = ls.get('shared_entity_map');
+            if (cached?.entries && (Date.now() - cached.ts < ttlMs)) {
+              S._entityMapMem = new Map(cached.entries);
+              S._entityMapTs = cached.ts;
+              return S._entityMapMem;
+            }
+            if (!S._entityMapPromise) {
+              S._entityMapPromise = dvApi.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName,DisplayName,PrimaryIdAttribute,PrimaryNameAttribute')
+                .then(data => {
+                  const m = new Map();
+                  for (const e of (data.value || [])) {
+                    if (e.LogicalName && e.EntitySetName) {
+                      m.set(e.LogicalName.toLowerCase(), {
+                        logicalName: e.LogicalName,
+                        entitySetName: e.EntitySetName,
+                        displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+                        primaryId: e.PrimaryIdAttribute || `${e.LogicalName}id`,
+                        primaryName: e.PrimaryNameAttribute || 'name'
+                      });
+                    }
+                  }
+                  S._entityMapMem = m;
+                  S._entityMapTs = Date.now();
+                  ls.set('shared_entity_map', { ts: S._entityMapTs, entries: [...m.entries()] });
+                  return m;
+                })
+                .finally(() => { S._entityMapPromise = null; });
+            }
+            return S._entityMapPromise;
+          },
+          async resolveEntitySet(logicalName) {
+            const key = String(logicalName || '').toLowerCase();
+            if (!key) return '';
+            const map = await dvApi.getEntityMap().catch(() => new Map());
+            if (map.has(key)) return map.get(key).entitySetName;
+            try {
+              const d = await dvApi.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(key)}')?$select=EntitySetName`);
+              if (d?.EntitySetName) return d.EntitySetName;
+            } catch {}
+            return key.endsWith('s') ? key + 'es' : key.endsWith('y') ? key.slice(0, -1) + 'ies' : key + 's';
+          },
+          formatXml(xmlStr) {
+            const doc = new DOMParser().parseFromString(String(xmlStr || '').trim(), 'text/xml');
+            if (doc.querySelector('parsererror')) throw new Error('Invalid XML syntax');
+            let out = '', indent = '';
+            new XMLSerializer().serializeToString(doc).split(/>\s*</).forEach(node => {
+              if (/^\/\w/.test(node)) indent = indent.slice(2);
+              out += `${indent}<${node}>\r\n`;
+              if (/^<?\w[^>]*[^\/]$/.test(node) && !node.startsWith('?')) indent += '  ';
+            });
+            return out.slice(1, out.length - 3);
+          },
           ui: {
             empty(msg) { return `<div class="dv-empty">${msg}</div>`; },
             error(msg) { return `<div class="dv-err-banner">❌ ${esc(msg)}</div>`; },
@@ -1806,7 +1925,12 @@
       clearTimeout(Number(frame.dataset.timeout));
       const launchData = tab ? S.launchPayloads[tab.toolId] : null;
       if (tab && launchData) delete S.launchPayloads[tab.toolId];
-      postToTool(frame, 'CONTEXT_INIT', { ...S.ctx, sharedCss: SHARED_TOOL_CSS, launchData: launchData || null });
+      const fullCtx = { ...S.ctx, sharedCss: SHARED_TOOL_CSS, launchData: launchData || null };
+      if (Array.isArray(frame._dvReadyCbs)) {
+        const cbs = frame._dvReadyCbs.splice(0);
+        for (const cb of cbs) { try { Promise.resolve(cb(fullCtx)); } catch (e) { console.error(e); } }
+      }
+      postToTool(frame, 'CONTEXT_INIT', fullCtx);
       if (launchData) postToTool(frame, 'TOOL_LAUNCH', launchData);
     }
 
@@ -1957,6 +2081,31 @@
     }
 
     /* ─── Security Gateway & In-Frame Fetch Interceptor ──────── */
+    async function evaluateSecurityGateway({ tabId, reqId, method, displayPath, url, headers = {}, body = null }) {
+      const tab = S.tabs.find(t => t.tabId === tabId);
+      const toolName = tab?.name || 'Unknown Tool';
+      const toolIcon = tab?.icon || '🔧';
+      const methUpper = String(method || 'GET').toUpperCase();
+
+      if (S.alwaysAllowedTabs.has(tabId)) return true;
+      const needsApproval = S.cfg.securityPolicy === 'STRICT' ||
+        (S.cfg.securityPolicy === 'SAFE' && methUpper !== 'GET' && methUpper !== 'HEAD');
+      if (!needsApproval) return true;
+
+      const approved = await requestUserApproval({
+        reqId, tabId, toolName, toolIcon, method: methUpper, path: displayPath, headers, body
+      });
+      if (!approved) {
+        recordNetworkLog({
+          id: reqId, tabId, toolName, toolIcon, method: methUpper,
+          path: displayPath, url, status: 403,
+          statusText: 'Rejected by Security Gateway', latency: 0,
+          headers: {}, body, policy: S.cfg.securityPolicy, timestamp: new Date()
+        });
+      }
+      return approved;
+    }
+
     function interceptFrameFetch(frame, tabId) {
       try {
         const win = frame.contentWindow;
@@ -1976,17 +2125,6 @@
             const toolName = tab?.name || 'Tool';
             const toolIcon = tab?.icon || '🔧';
 
-            const isAlwaysAllowed = S.alwaysAllowedTabs.has(tabId);
-            let needsApproval = false;
-
-            if (!isAlwaysAllowed) {
-              if (S.cfg.securityPolicy === 'STRICT') {
-                needsApproval = true;
-              } else if (S.cfg.securityPolicy === 'SAFE' && methUpper !== 'GET' && methUpper !== 'HEAD') {
-                needsApproval = true;
-              }
-            }
-
             let displayPath = urlStr;
             const pathMatch = urlStr.match(/\/api\/data\/v[^\/]+(\/.*)$/);
             if (pathMatch && pathMatch[1]) {
@@ -1998,54 +2136,26 @@
               } catch {}
             }
 
-            if (needsApproval) {
-              const reqId = 'INT_' + Math.random().toString(36).slice(2, 9);
-              let bodyPayload = init?.body || (typeof input === 'object' && input?.body) || null;
-              if (typeof bodyPayload === 'string') {
-                try { bodyPayload = JSON.parse(bodyPayload); } catch {}
-              }
-
-              const approved = await requestUserApproval({
-                reqId,
-                tabId,
-                toolName,
-                toolIcon,
-                method: methUpper,
-                path: displayPath,
-                headers: init?.headers || {},
-                body: bodyPayload
+            let bodyPayload = init?.body || (typeof input === 'object' && input?.body) || null;
+            if (typeof bodyPayload === 'string') {
+              try { bodyPayload = JSON.parse(bodyPayload); } catch {}
+            }
+            const reqId = 'INT_' + Math.random().toString(36).slice(2, 9);
+            const approved = await evaluateSecurityGateway({
+              tabId, reqId, method: methUpper, displayPath, url: urlStr, headers: init?.headers || {}, body: bodyPayload
+            });
+            if (!approved) {
+              const ResponseClass = win.Response || Response;
+              return new ResponseClass(JSON.stringify({
+                error: {
+                  code: '0x80040220',
+                  message: 'Dataverse API call was rejected by developer approval policy (Zero Trust)'
+                }
+              }), {
+                status: 403,
+                statusText: 'Forbidden (Approval Rejected)',
+                headers: { 'Content-Type': 'application/json' }
               });
-
-              if (!approved) {
-                recordNetworkLog({
-                  id: reqId,
-                  tabId,
-                  toolName,
-                  toolIcon,
-                  method: methUpper,
-                  path: displayPath,
-                  url: urlStr,
-                  status: 403,
-                  statusText: 'Rejected by Security Gateway',
-                  latency: 0,
-                  headers: {},
-                  body: bodyPayload,
-                  policy: S.cfg.securityPolicy,
-                  timestamp: new Date()
-                });
-
-                const ResponseClass = win.Response || Response;
-                return new ResponseClass(JSON.stringify({
-                  error: {
-                    code: '0x80040220',
-                    message: 'Dataverse API call was rejected by developer approval policy (Zero Trust)'
-                  }
-                }), {
-                  status: 403,
-                  statusText: 'Forbidden (Approval Rejected)',
-                  headers: { 'Content-Type': 'application/json' }
-                });
-              }
             }
 
             let fetchArgs = arguments;
@@ -2182,57 +2292,18 @@
       const toolIcon = tab?.icon || '🔧';
       const methUpper = (method || 'GET').toUpperCase();
 
-      // Check if approval required
-      const isAlwaysAllowed = S.alwaysAllowedTabs.has(tabId);
-      let needsApproval = false;
-
-      if (!isAlwaysAllowed) {
-        if (S.cfg.securityPolicy === 'STRICT') {
-          needsApproval = true;
-        } else if (S.cfg.securityPolicy === 'SAFE' && methUpper !== 'GET' && methUpper !== 'HEAD') {
-          needsApproval = true;
-        }
-      }
-
-      if (needsApproval) {
-        const approved = await requestUserApproval({
+      const approved = await evaluateSecurityGateway({
+        tabId, reqId, method: methUpper, displayPath: path, url: dvUrl(path), headers, body
+      });
+      if (!approved) {
+        postToTool(frame, 'API_RESPONSE', {
           reqId,
-          tabId,
-          toolName,
-          toolIcon,
-          method: methUpper,
-          path,
-          headers,
-          body
+          ok: false,
+          status: 403,
+          statusText: 'Forbidden (Approval Rejected)',
+          error: 'Dataverse API call was rejected by developer approval policy'
         });
-
-        if (!approved) {
-          recordNetworkLog({
-            id: reqId,
-            tabId,
-            toolName,
-            toolIcon,
-            method: methUpper,
-            path,
-            url: dvUrl(path),
-            status: 403,
-            statusText: 'Rejected by Security Gateway',
-            latency: 0,
-            headers: {},
-            body,
-            policy: S.cfg.securityPolicy,
-            timestamp: new Date()
-          });
-
-          postToTool(frame, 'API_RESPONSE', {
-            reqId,
-            ok: false,
-            status: 403,
-            statusText: 'Forbidden (Approval Rejected)',
-            error: 'Dataverse API call was rejected by developer approval policy'
-          });
-          return;
-        }
+        return;
       }
 
       // Execute request

@@ -218,12 +218,13 @@
       const meta = S.entityMap.get(ent.toLowerCase());
       const mode = $('op-mode').value;
       const keyAttrs = ($('key-select').value || '').split(',').filter(Boolean);
+      const workers = dryRun ? 1 : 4;
 
       S.failedRows = [];
-      let ok = 0, fail = 0;
-      const logLines = [];
+      let ok = 0, fail = 0, idx = 0;
+      const logLines = new Array(S.rows.length);
 
-      for (let i = 0; i < S.rows.length; i++) {
+      const processRow = async i => {
         const row = S.rows[i];
         try {
           const payload = buildRecordPayload(row);
@@ -249,13 +250,20 @@
             await DV.fetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           }
           ok++;
-          logLines.push(`<tr><td>${i + 1}</td><td>${dryRun ? '✓ Valid' : '✅ Imported'}</td><td><code>${method} ${DV.esc(path)}</code></td></tr>`);
+          logLines[i] = `<tr><td>${i + 1}</td><td>${dryRun ? '✓ Valid' : '✅ Imported'}</td><td><code>${method} ${DV.esc(path)}</code></td></tr>`;
         } catch (err) {
           fail++;
           S.failedRows.push({ ...row, _error: err.message });
-          logLines.push(`<tr><td>${i + 1}</td><td style="color:var(--danger);">✕ Failed</td><td>${DV.esc(err.message)}</td></tr>`);
+          logLines[i] = `<tr><td>${i + 1}</td><td style="color:var(--danger);">✕ Failed</td><td>${DV.esc(err.message)}</td></tr>`;
         }
-      }
+      };
+
+      await Promise.all(Array.from({ length: Math.min(workers, Math.max(1, S.rows.length)) }, async () => {
+        while (idx < S.rows.length) {
+          const curIdx = idx++;
+          await processRow(curIdx);
+        }
+      }));
 
       $('exec-summary').innerHTML = `<strong>${dryRun ? 'Dry-Run Validation' : 'Import'} complete:</strong> ${ok} succeeded, ${fail} failed.`;
       $('exec-log').innerHTML = `<table class="dv-table"><thead><tr><th>Row</th><th>Status</th><th>Details</th></tr></thead><tbody>${logLines.join('')}</tbody></table>`;
@@ -263,33 +271,43 @@
       DV.notify(`${dryRun ? 'Validation' : 'Import'}: ${ok} OK, ${fail} failed.`, fail ? 'warning' : 'success');
     }
 
-    DV.onReady(async () => {
-      $('entity-select').addEventListener('change', loadEntitySchema);
-      $('op-mode').addEventListener('change', () => {
-        $('key-select').style.display = $('op-mode').value === 'upsert-key' ? 'inline-block' : 'none';
-      });
-      $('file-input').addEventListener('change', async e => {
-        const f = e.target.files?.[0]; if (!f) return;
-        const txt = await f.text();
-        $('raw-paste').value = txt;
-        try { parseSourceText(txt); } catch (err) { DV.notify(err.message, 'error'); }
-      });
-      $('btn-parse-paste').addEventListener('click', () => {
-        try { parseSourceText($('raw-paste').value); } catch (err) { DV.notify(err.message, 'error'); }
-      });
-      $('btn-sample').addEventListener('click', () => {
-        const csv = `name,accountnumber,telephone1,revenue\nNorthwind Labs,NW-101,555-0101,450000\nAlpine Traders,AL-202,555-0199,980000`;
-        $('raw-paste').value = csv;
-        parseSourceText(csv);
-      });
-      $('btn-validate').addEventListener('click', () => runImport(true));
-      $('btn-import').addEventListener('click', () => runImport(false));
-      $('btn-export-errors').addEventListener('click', () => {
-        if (!S.failedRows.length) return;
-        const cols = [...S.headers, '_error'];
-        DV.exportCsv(`import_errors_${new Date().toISOString().slice(0, 10)}.csv`, cols, S.failedRows.map(r => cols.map(c => r[c] ?? '')));
-      });
+    async function onContextReady() {
+      if (!S._wired) {
+        S._wired = true;
+        $('entity-select').addEventListener('change', loadEntitySchema);
+        $('op-mode').addEventListener('change', () => {
+          $('key-select').style.display = $('op-mode').value === 'upsert-key' ? 'inline-block' : 'none';
+        });
+        $('file-input').addEventListener('change', async e => {
+          const f = e.target.files?.[0]; if (!f) return;
+          const txt = await f.text();
+          $('raw-paste').value = txt;
+          try { parseSourceText(txt); } catch (err) { DV.notify(err.message, 'error'); }
+        });
+        $('btn-parse-paste').addEventListener('click', () => {
+          try { parseSourceText($('raw-paste').value); } catch (err) { DV.notify(err.message, 'error'); }
+        });
+        $('btn-sample').addEventListener('click', () => {
+          const csv = `name,accountnumber,telephone1,revenue\nNorthwind Labs,NW-101,555-0101,450000\nAlpine Traders,AL-202,555-0199,980000`;
+          $('raw-paste').value = csv;
+          parseSourceText(csv);
+        });
+        $('btn-validate').addEventListener('click', () => runImport(true));
+        $('btn-import').addEventListener('click', () => runImport(false));
+        $('btn-export-errors').addEventListener('click', () => {
+          if (!S.failedRows.length) return;
+          const cols = [...S.headers, '_error'];
+          DV.exportCsv(`import_errors_${new Date().toISOString().slice(0, 10)}.csv`, cols, S.failedRows.map(r => cols.map(c => r[c] ?? '')));
+        });
+      }
       await loadEntities();
+    }
+
+    const HOST_ORIGIN = window.location.origin;
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') onContextReady();
     });
   </script>
 </body>

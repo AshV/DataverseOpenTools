@@ -162,18 +162,23 @@
     }
 
     async function loadEntities() {
-      const data = await DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName,DisplayName,PrimaryIdAttribute,PrimaryNameAttribute');
-      S.entities = (data.value || [])
-        .filter(e => e.LogicalName && e.EntitySetName)
-        .map(e => ({
-          logicalName: e.LogicalName,
-          entitySetName: e.EntitySetName,
-          displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
-          primaryId: e.PrimaryIdAttribute || `${e.LogicalName}id`,
-          primaryName: e.PrimaryNameAttribute || 'name'
-        }))
-        .sort((a, b) => a.logicalName.localeCompare(b.logicalName));
-      S.entityMap = new Map(S.entities.map(e => [e.logicalName.toLowerCase(), e]));
+      if (DV.getEntityMap) {
+        S.entityMap = await DV.getEntityMap();
+        S.entities = Array.from(S.entityMap.values()).sort((a, b) => a.logicalName.localeCompare(b.logicalName));
+      } else {
+        const data = await DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName,DisplayName,PrimaryIdAttribute,PrimaryNameAttribute');
+        S.entities = (data.value || [])
+          .filter(e => e.LogicalName && e.EntitySetName)
+          .map(e => ({
+            logicalName: e.LogicalName,
+            entitySetName: e.EntitySetName,
+            displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+            primaryId: e.PrimaryIdAttribute || `${e.LogicalName}id`,
+            primaryName: e.PrimaryNameAttribute || 'name'
+          }))
+          .sort((a, b) => a.logicalName.localeCompare(b.logicalName));
+        S.entityMap = new Map(S.entities.map(e => [e.logicalName.toLowerCase(), e]));
+      }
 
       $('entity-select').innerHTML = S.entities.map(e =>
         `<option value="${DV.esc(e.logicalName)}">${DV.esc(e.logicalName)} (${DV.esc(e.displayName)})</option>`
@@ -507,45 +512,63 @@
       }
     }
 
-    DV.onReady(async () => {
-      $('entity-select').addEventListener('change', onEntityChanged);
-      $('inp-top').addEventListener('input', buildFetchXml);
-      $('chk-distinct').addEventListener('change', buildFetchXml);
-      $('chk-aggregate').addEventListener('change', () => { syncAggSpecs(); buildFetchXml(); });
-      $('col-filter').addEventListener('input', () => renderColumns());
-      $('btn-col-clear').addEventListener('click', () => { S.selectedCols.clear(); renderColumns(); syncAggSpecs(); buildFetchXml(); });
-      $('filter-logic').addEventListener('change', buildFetchXml);
+    async function onContextReady(ctx) {
+      context = ctx;
+      if (!S._wired) {
+        S._wired = true;
+        $('entity-select').addEventListener('change', onEntityChanged);
+        $('inp-top').addEventListener('input', buildFetchXml);
+        $('chk-distinct').addEventListener('change', buildFetchXml);
+        $('chk-aggregate').addEventListener('change', () => { syncAggSpecs(); buildFetchXml(); });
+        $('col-filter').addEventListener('input', () => renderColumns());
+        $('btn-col-clear').addEventListener('click', () => { S.selectedCols.clear(); renderColumns(); syncAggSpecs(); buildFetchXml(); });
+        $('filter-logic').addEventListener('change', buildFetchXml);
 
-      $('btn-add-filter').addEventListener('click', () => {
-        const attrs = S.attrsByEntity.get($('entity-select').value.toLowerCase()) || [];
-        S.filters.push({ attr: attrs[0]?.name || 'statecode', op: 'eq', val: '0' });
-        renderFilters(); buildFetchXml();
-      });
-      $('btn-add-link').addEventListener('click', () => {
-        const rels = S.relsByEntity.get($('entity-select').value.toLowerCase()) || [];
-        const r = rels[0];
-        if (!r) { DV.notify('No relationships discovered on this table.', 'warning'); return; }
-        S.links.push({ name: r.target, from: r.from, to: r.to, linkType: 'inner', alias: `l${S.links.length + 1}`, attrs: 'name' });
-        renderLinks(); buildFetchXml();
-      });
-      $('btn-add-order').addEventListener('click', () => {
-        const attrs = S.attrsByEntity.get($('entity-select').value.toLowerCase()) || [];
-        S.orders.push({ attr: attrs[0]?.name || 'createdon', desc: true });
-        renderOrders(); buildFetchXml();
-      });
+        $('btn-add-filter').addEventListener('click', () => {
+          const attrs = S.attrsByEntity.get($('entity-select').value.toLowerCase()) || [];
+          S.filters.push({ attr: attrs[0]?.name || 'statecode', op: 'eq', val: '0' });
+          renderFilters(); buildFetchXml();
+        });
+        $('btn-add-link').addEventListener('click', () => {
+          const rels = S.relsByEntity.get($('entity-select').value.toLowerCase()) || [];
+          const r = rels[0];
+          if (!r) { DV.notify('No relationships discovered on this table.', 'warning'); return; }
+          S.links.push({ name: r.target, from: r.from, to: r.to, linkType: 'inner', alias: `l${S.links.length + 1}`, attrs: 'name' });
+          renderLinks(); buildFetchXml();
+        });
+        $('btn-add-order').addEventListener('click', () => {
+          const attrs = S.attrsByEntity.get($('entity-select').value.toLowerCase()) || [];
+          S.orders.push({ attr: attrs[0]?.name || 'createdon', desc: true });
+          renderOrders(); buildFetchXml();
+        });
 
-      $('btn-parse-xml').addEventListener('click', parseXmlToBuilder);
-      $('btn-copy-xml').addEventListener('click', () => DV.copyText($('xml-output').value, 'FetchXML copied'));
-      $('btn-to-runner').addEventListener('click', () => DV.openTool('fetchxml-playground', { fetchXml: $('xml-output').value }));
-      $('btn-to-sql').addEventListener('click', () => DV.openTool('sql-playground', { sql: toBasicSql() }));
-      $('btn-run-preview').addEventListener('click', runPreview);
-      $('btn-export-csv').addEventListener('click', () => {
-        if (!S.lastRows.length) return;
-        const cols = [...new Set(S.lastRows.flatMap(r => Object.keys(r).filter(k => !k.startsWith('@') && !k.includes('@OData.'))))];
-        DV.exportCsv(`fetchxml_preview_${new Date().toISOString().slice(0, 10)}.csv`, cols, S.lastRows.map(r => cols.map(c => r[`${c}@OData.Community.Display.V1.FormattedValue`] ?? r[c])));
-      });
-
+        $('btn-parse-xml').addEventListener('click', parseXmlToBuilder);
+        $('btn-copy-xml').addEventListener('click', () => DV.copyText($('xml-output').value, 'FetchXML copied'));
+        $('btn-to-runner').addEventListener('click', () => DV.openTool('fetchxml-playground', { fetchXml: $('xml-output').value }));
+        $('btn-to-sql').addEventListener('click', () => DV.openTool('sql-playground', { sql: toBasicSql() }));
+        $('btn-run-preview').addEventListener('click', runPreview);
+        $('btn-export-csv').addEventListener('click', () => {
+          if (!S.lastRows.length) return;
+          const cols = [...new Set(S.lastRows.flatMap(r => Object.keys(r).filter(k => !k.startsWith('@') && !k.includes('@OData.'))))];
+          DV.exportCsv(`fetchxml_preview_${new Date().toISOString().slice(0, 10)}.csv`, cols, S.lastRows.map(r => cols.map(c => r[`${c}@OData.Community.Display.V1.FormattedValue`] ?? r[c])));
+        });
+      }
       await loadEntities();
+      if (ctx?.launchData?.fetchXml) {
+        $('xml-output').value = ctx.launchData.fetchXml;
+        await parseXmlToBuilder();
+      }
+    }
+
+    const HOST_ORIGIN = window.location.origin;
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') onContextReady(e.data.payload);
+      if (e.data.type === 'TOOL_LAUNCH' && e.data.payload?.fetchXml) {
+        $('xml-output').value = e.data.payload.fetchXml;
+        parseXmlToBuilder();
+      }
     });
   </script>
 </body>

@@ -62,12 +62,13 @@
     async function loadAll() {
       $('btn-load').disabled = true;
       try {
-        const [pRes, fpRes] = await Promise.all([
-          DV.fetch('/fieldsecurityprofiles?$select=fieldsecurityprofileid,name,description,ismanaged&$orderby=name asc'),
-          DV.fetch('/fieldpermissions?$select=fieldpermissionid,entityname,attributelogicalname,canread,cancreate,canupdate,_fieldsecurityprofileid_value')
+        const fetchList = DV.fetchAll ? DV.fetchAll : (p => DV.fetch(p).then(r => r.value || []));
+        const [profiles, permissions] = await Promise.all([
+          fetchList('/fieldsecurityprofiles?$select=fieldsecurityprofileid,name,description,ismanaged&$orderby=name asc'),
+          fetchList('/fieldpermissions?$select=fieldpermissionid,entityname,attributelogicalname,canread,cancreate,canupdate,_fieldsecurityprofileid_value')
         ]);
-        S.profiles = pRes.value || [];
-        S.permissions = fpRes.value || [];
+        S.profiles = profiles;
+        S.permissions = permissions;
         S.permMap = new Map();
         const fieldSet = new Set();
         const entitySet = new Set();
@@ -199,14 +200,19 @@
 
     async function scanSecuredColumns() {
       $('btn-scan-secured').disabled = true;
-      $('side-pane').innerHTML = '<div class="dv-empty">Scanning customizable tables for <code>IsSecured eq true</code>…</div>';
+      $('side-pane').innerHTML = '<div class="dv-empty">Scanning customizable tables (5 parallel workers) for <code>IsSecured eq true</code>…</div>';
       try {
-        const ents = (await DV.fetch('/EntityDefinitions?$select=LogicalName&$filter=IsCustomizable/Value eq true')).value || [];
+        const ents = ((await DV.fetch('/EntityDefinitions?$select=LogicalName&$filter=IsCustomizable/Value eq true')).value || []).slice(0, 60);
         const found = [];
-        for (const e of ents.slice(0, 60)) {
-          const attrs = await DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(e.LogicalName)}')/Attributes?$select=LogicalName&$filter=IsSecured eq true`).catch(() => ({ value: [] }));
-          for (const a of (attrs.value || [])) found.push(`${e.LogicalName}.${a.LogicalName}`);
-        }
+        let idx = 0;
+        const worker = async () => {
+          while (idx < ents.length) {
+            const e = ents[idx++];
+            const attrs = await DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(e.LogicalName)}')/Attributes?$select=LogicalName&$filter=IsSecured eq true`).catch(() => ({ value: [] }));
+            for (const a of (attrs.value || [])) found.push(`${e.LogicalName}.${a.LogicalName}`);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(5, ents.length) }, worker));
         const merged = new Set([...S.fields, ...found.map(x => x.toLowerCase())]);
         S.fields = Array.from(merged).sort();
         renderMatrix();
@@ -216,20 +222,30 @@
       }
     }
 
-    DV.onReady(async () => {
-      $('btn-load').addEventListener('click', loadAll);
-      $('inp-search').addEventListener('input', renderMatrix);
-      $('sel-entity').addEventListener('change', renderMatrix);
-      $('btn-scan-secured').addEventListener('click', scanSecuredColumns);
-      $('btn-export-csv').addEventListener('click', () => {
-        const headers = ['Table.Column', ...S.profiles.map(p => p.name)];
-        const rows = S.fields.map(fk => [fk, ...S.profiles.map(p => {
-          const fp = S.permMap.get(`${norm(p.fieldsecurityprofileid)}::${fk}`);
-          return fp ? `${Number(fp.canread) === 4 ? 'R' : '-'}${Number(fp.cancreate) === 4 ? 'C' : '-'}${Number(fp.canupdate) === 4 ? 'U' : '-'}` : '---';
-        })]);
-        DV.exportCsv(`field_security_matrix_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
-      });
+    async function onContextReady() {
+      if (!S._wired) {
+        S._wired = true;
+        $('btn-load').addEventListener('click', loadAll);
+        $('inp-search').addEventListener('input', renderMatrix);
+        $('sel-entity').addEventListener('change', renderMatrix);
+        $('btn-scan-secured').addEventListener('click', scanSecuredColumns);
+        $('btn-export-csv').addEventListener('click', () => {
+          const headers = ['Table.Column', ...S.profiles.map(p => p.name)];
+          const rows = S.fields.map(fk => [fk, ...S.profiles.map(p => {
+            const fp = S.permMap.get(`${norm(p.fieldsecurityprofileid)}::${fk}`);
+            return fp ? `${Number(fp.canread) === 4 ? 'R' : '-'}${Number(fp.cancreate) === 4 ? 'C' : '-'}${Number(fp.canupdate) === 4 ? 'U' : '-'}` : '---';
+          })]);
+          DV.exportCsv(`field_security_matrix_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+        });
+      }
       await loadAll();
+    }
+
+    const HOST_ORIGIN = window.location.origin;
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') onContextReady();
     });
   </script>
 </body>

@@ -8,7 +8,7 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
     "description": "Inspect Model-Driven Apps (appmodules), assigned Security Roles, app components, and parsed SiteMap XML navigation trees (Area → Group → SubArea & privileges).",
-    "sizeBytes": 9830
+    "sizeBytes": 10320
   },
   {
     "wrName": "dvot_envvars.html",
@@ -30,7 +30,7 @@
     "version": "1.0.0",
     "minHostVersion": "1.0.0",
     "description": "Discover, run FetchXML + LayoutXML, edit XML, manage sharing (GrantAccess/RevokeAccess), reassign, clone to users, or promote personal views, charts, and dashboards to System Views across all enabled users.",
-    "sizeBytes": 103530
+    "sizeBytes": 103969
   },
   {
     "wrName": "dvot_usersettings.html",
@@ -63,7 +63,7 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
     "description": "Load a CSV or JSON file, map columns to Dataverse attributes (with Lookup @odata.bind wrapping, boolean/number parsing, and Alternate Key upserts), dry-run validate, and execute throttled creates or updates.",
-    "sizeBytes": 14969
+    "sizeBytes": 15734
   },
   {
     "wrName": "dvot_duprules.html",
@@ -118,7 +118,7 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
     "description": "Search Dataverse audit logs, run RetrieveRecordChangeHistory on any record, inspect old-vs-new field value diffs via RetrieveAuditDetails, and check which tables have IsAuditEnabled turned on.",
-    "sizeBytes": 14882
+    "sizeBytes": 15335
   },
   {
     "wrName": "dvot_envtimeline.html",
@@ -184,7 +184,7 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
     "description": "Browse Custom APIs (with Request Parameters, Response Properties & linked Plugin Types) and Classic Actions, auto-build inputs, execute GET/POST requests, and copy snippets.",
-    "sizeBytes": 13741
+    "sizeBytes": 14456
   },
   {
     "wrName": "dvot_plugins.html",
@@ -349,7 +349,7 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
     "description": "Execute read-only T-SQL SELECT queries via Dataverse Web API (?sql=), auto-resolve FROM tables, expand SELECT * from metadata, follow @odata.nextLink paging, generate snippets, and export CSV/JSON.",
-    "sizeBytes": 27417
+    "sizeBytes": 27994
   },
   {
     "wrName": "dvot_fetchxmlbuilder.html",
@@ -360,7 +360,7 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
     "description": "Build Dataverse FetchXML visually (tables, columns, link-entity joins, AND/OR filters, ordering, aggregates) or reverse-parse FetchXML, preview rows, and send to FetchXML Runner or SQL Query.",
-    "sizeBytes": 31108
+    "sizeBytes": 32175
   },
   {
     "wrName": "dvot_accesschecker.html",
@@ -393,7 +393,7 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
     "description": "Compare Field Level Security permissions (Read / Create / Update) across Column Security Profiles, discover secured columns (IsSecured eq true), edit permissions, and inspect assigned users & teams.",
-    "sizeBytes": 12223
+    "sizeBytes": 12989
   },
   {
     "wrName": "dvot_rolematrix.html",
@@ -415,7 +415,7 @@
     "version": "1.0.0",
     "minHostVersion": "2025.11.1",
     "description": "Browse Dataverse Solutions, inspect Solution Components, run RetrieveMissingDependencies, audit Solution History / ImportJobs, and trigger ExportSolution ZIP downloads.",
-    "sizeBytes": 12964
+    "sizeBytes": 13606
   },
   {
     "wrName": "dvot_solutionlayers.html",

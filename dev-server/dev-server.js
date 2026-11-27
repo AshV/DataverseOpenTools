@@ -303,7 +303,45 @@ function buildToolsManifest(prefix = 'dvot_') {
   if (fs.existsSync(TOOLS_DIR)) {
     fs.writeFileSync(path.join(TOOLS_DIR, 'manifest.json'), JSON.stringify(items, null, 2) + '\n', 'utf8');
   }
+  syncIndexHtml(items);
   return items;
+}
+
+function syncIndexHtml(manifestItems) {
+  const indexPath = path.join(ROOT_DIR, 'index.html');
+  if (!fs.existsSync(indexPath)) return;
+  let html = fs.readFileSync(indexPath, 'utf8');
+  const count = manifestItems.length;
+
+  const hostPath = path.join(ROOT_DIR, 'dvot_host.html');
+  if (fs.existsSync(hostPath)) {
+    const hostBytes = fs.statSync(hostPath).size;
+    html = html.replace(/const HOST_SIZE_BYTES = \d+;/, `const HOST_SIZE_BYTES = ${hostBytes};`);
+  }
+
+  html = html
+    .replace(/\b\d+ self-contained HTML developer tools/g, `${count} self-contained HTML developer tools`)
+    .replace(/Explore \d+ Tools/g, `Explore ${count} Tools`)
+    .replace(/<span><strong>\d+<\/strong> Built-in Tools<\/span>/g, `<span><strong>${count}</strong> Built-in Tools</span>`)
+    .replace(/Included Tools \(<span id="tools-count">\d+<\/span>\)/g, `Included Tools (<span id="tools-count">${count}</span>)`)
+    .replace(/download all \d+ tools together/g, `download all ${count} tools together`)
+    .replace(/Select All \(<span id="all-count">\d+<\/span>\)/g, `Select All (<span id="all-count">${count}</span>)`);
+
+  // Sync byte sizes inside TOOLS array for every known tool file
+  for (const item of manifestItems) {
+    const fileRel = `tools/${item.wrName}`;
+    const escapedFile = fileRel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(\\{\\s*id:\\s*'[^']+',\\s*file:\\s*'${escapedFile}'[^}]*?sizeBytes:\\s*)\\d+`, 'g');
+    html = html.replace(re, `$1${item.sizeBytes}`);
+  }
+
+  // Sync byte sizes inside DEV_SERVER_FILES array
+  html = html.replace(/(\{\s*path:\s*'([^']+)'[^}]*?sizeBytes:\s*)\d+/g, (full, prefixPart, relPath) => {
+    const fp = path.join(ROOT_DIR, relPath);
+    return fs.existsSync(fp) ? `${prefixPart}${fs.statSync(fp).size}` : full;
+  });
+
+  fs.writeFileSync(indexPath, html, 'utf8');
 }
 
 function escapeHtmlText(s) {

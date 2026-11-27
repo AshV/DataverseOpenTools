@@ -92,7 +92,7 @@
   </div>
 
   <div class="dv-scroll" id="results-body">
-    <div class="dv-empty">Enter a read-only Dataverse SQL <code>SELECT</code> query above and press <strong>Execute (Ctrl+Enter)</strong>.<br><span style="font-size:11px;color:var(--text-muted);">Executes natively via <code>GET /api/data/v9.2/&lt;entitySet&gt;?sql=...</code></span></div>
+    <div class="dv-empty">Enter a read-only Dataverse SQL <code>SELECT</code> query above and press <strong>Execute (Ctrl+Enter)</strong>.<br><span style="font-size:11px;color:var(--text-muted);" id="sql-endpoint-hint">Executes natively via Dataverse Web API <code>?sql=...</code></span></div>
   </div>
 
   <footer class="dv-footer">
@@ -147,6 +147,8 @@
       store = DV.store('sql-playground');
       document.getElementById('tel-store').textContent = `Storage: ${store.type}`;
       document.getElementById('btn-run').disabled = false;
+      const hintEl = document.getElementById('sql-endpoint-hint');
+      if (hintEl) hintEl.innerHTML = `Executes natively via <code>GET /api/data/v${DV.esc(context?.apiVersion || '9.2')}/&lt;entitySet&gt;?sql=...</code>`;
 
       history = store.get('history', []) || [];
       renderHistoryDropdown();
@@ -158,6 +160,14 @@
     }
 
     async function loadEntityMap() {
+      if (DV.getEntityMap) {
+        try {
+          entityMap = await DV.getEntityMap();
+          populateEntitySetDropdown();
+          document.getElementById('entity-map-status').textContent = `${entityMap.size} tables mapped (shared cache)`;
+          return;
+        } catch {}
+      }
       const cached = store.get('entityMapCache');
       if (cached && Date.now() - cached.ts < 15 * 60000) {
         entityMap = new Map(cached.entries);
@@ -327,6 +337,7 @@
     }
 
     async function executeViaBatch(relPath) {
+      if (DV.fetchBatch) return DV.fetchBatch(relPath);
       const batchId = 'batch_' + Math.random().toString(36).slice(2, 10);
       const fullInnerUrl = `${context.environmentUrl}/api/data/v${context.apiVersion}${relPath}`;
       const batchBody = [

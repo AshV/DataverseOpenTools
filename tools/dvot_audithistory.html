@@ -246,25 +246,35 @@
       });
     }
 
-    DV.onReady(async () => {
+    async function onContextReady() {
       await loadEntities();
-      $('mode-tabs').querySelectorAll('.dv-seg-btn').forEach(btn => btn.addEventListener('click', () => {
-        S.mode = btn.dataset.mode;
-        $('mode-tabs').querySelectorAll('.dv-seg-btn').forEach(b => b.classList.toggle('active', b === btn));
-        $('inp-record-id').style.display = S.mode === 'record' ? 'inline-block' : 'none';
-        $('sel-op').style.display = S.mode === 'recent' ? 'inline-block' : 'none';
-        loadData();
-      }));
-      $('btn-load').addEventListener('click', loadData);
-      $('inp-search').addEventListener('input', () => S.mode === 'config' ? renderAuditConfig() : renderAuditList());
-      $('btn-export-csv').addEventListener('click', () => {
-        if (S.mode === 'config') {
-          DV.exportCsv('audit_table_config.csv', ['LogicalName', 'DisplayName', 'AuditEnabled'], S.auditConfig.map(r => [r.LogicalName, r.DisplayName?.UserLocalizedLabel?.Label || '', Boolean(r.IsAuditEnabled?.Value)]));
-        } else {
-          DV.exportCsv('audit_logs.csv', ['AuditId', 'CreatedOn', 'Table', 'Action', 'User', 'RecordId'], S.audits.map(a => [a.auditid, a.createdon, a.objecttypecode, a['action@OData.Community.Display.V1.FormattedValue'] || a.action, a['_userid_value@OData.Community.Display.V1.FormattedValue'] || a._userid_value, a._objectid_value]));
-        }
-      });
+      if (!S._wired) {
+        S._wired = true;
+        $('mode-tabs').querySelectorAll('.dv-seg-btn').forEach(btn => btn.addEventListener('click', () => {
+          S.mode = btn.dataset.mode;
+          $('mode-tabs').querySelectorAll('.dv-seg-btn').forEach(b => b.classList.toggle('active', b === btn));
+          $('inp-record-id').style.display = S.mode === 'record' ? 'inline-block' : 'none';
+          $('sel-op').style.display = S.mode === 'recent' ? 'inline-block' : 'none';
+          loadData();
+        }));
+        $('btn-load').addEventListener('click', loadData);
+        $('inp-search').addEventListener('input', () => S.mode === 'config' ? renderAuditConfig() : renderAuditList());
+        $('btn-export-csv').addEventListener('click', () => {
+          if (S.mode === 'config') {
+            DV.exportCsv('audit_table_config.csv', ['LogicalName', 'DisplayName', 'AuditEnabled'], S.auditConfig.map(r => [r.LogicalName, r.DisplayName?.UserLocalizedLabel?.Label || '', Boolean(r.IsAuditEnabled?.Value)]));
+          } else {
+            DV.exportCsv('audit_logs.csv', ['AuditId', 'CreatedOn', 'Table', 'Action', 'User', 'RecordId'], S.audits.map(a => [a.auditid, a.createdon, a.objecttypecode, a['action@OData.Community.Display.V1.FormattedValue'] || a.action, a['_userid_value@OData.Community.Display.V1.FormattedValue'] || a._userid_value, a._objectid_value]));
+          }
+        });
+      }
       await loadRecentAudits();
+    }
+
+    const HOST_ORIGIN = window.location.origin;
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') onContextReady();
     });
   </script>
 </body>

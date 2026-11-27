@@ -135,8 +135,9 @@
 
       try {
         if (S.tab === 'components') {
-          const res = await DV.fetch(`/solutioncomponents?$filter=_solutionid_value eq ${sol.solutionid}&$select=solutioncomponentid,componenttype,objectid,rootcomponentbehavior&$top=500`);
-          const comps = res.value || [];
+          const comps = await (DV.fetchAll
+            ? DV.fetchAll(`/solutioncomponents?$filter=_solutionid_value eq ${sol.solutionid}&$select=solutioncomponentid,componenttype,objectid,rootcomponentbehavior`, {}, 20)
+            : DV.fetch(`/solutioncomponents?$filter=_solutionid_value eq ${sol.solutionid}&$select=solutioncomponentid,componenttype,objectid,rootcomponentbehavior&$top=500`).then(r => r.value || []));
           if (!comps.length) { body.innerHTML = DV.ui.empty('No components in this solution.'); return; }
           const counts = new Map();
           for (const c of comps) counts.set(c.componenttype, (counts.get(c.componenttype) || 0) + 1);
@@ -213,23 +214,33 @@
       }
     }
 
-    DV.onReady(async () => {
-      $('btn-load').addEventListener('click', loadSolutions);
-      $('inp-search').addEventListener('input', renderSolutions);
-      $('sel-managed').addEventListener('change', renderSolutions);
-      $('tab-btns').querySelectorAll('.dv-seg-btn').forEach(b => b.addEventListener('click', () => {
-        S.tab = b.dataset.tab;
-        $('tab-btns').querySelectorAll('.dv-seg-btn').forEach(x => x.classList.toggle('active', x === b));
-        renderTab();
-      }));
-      $('btn-load-history').addEventListener('click', () => {
-        S.tab = 'history';
-        $('tab-btns').querySelectorAll('.dv-seg-btn').forEach(x => x.classList.toggle('active', x.dataset.tab === 'history'));
-        loadHistory('');
-      });
-      $('btn-export-unmanaged').addEventListener('click', () => exportSolutionZip(false));
-      $('btn-export-managed').addEventListener('click', () => exportSolutionZip(true));
+    async function onContextReady() {
+      if (!S._wired) {
+        S._wired = true;
+        $('btn-load').addEventListener('click', loadSolutions);
+        $('inp-search').addEventListener('input', renderSolutions);
+        $('sel-managed').addEventListener('change', renderSolutions);
+        $('tab-btns').querySelectorAll('.dv-seg-btn').forEach(b => b.addEventListener('click', () => {
+          S.tab = b.dataset.tab;
+          $('tab-btns').querySelectorAll('.dv-seg-btn').forEach(x => x.classList.toggle('active', x === b));
+          renderTab();
+        }));
+        $('btn-load-history').addEventListener('click', () => {
+          S.tab = 'history';
+          $('tab-btns').querySelectorAll('.dv-seg-btn').forEach(x => x.classList.toggle('active', x.dataset.tab === 'history'));
+          loadHistory('');
+        });
+        $('btn-export-unmanaged').addEventListener('click', () => exportSolutionZip(false));
+        $('btn-export-managed').addEventListener('click', () => exportSolutionZip(true));
+      }
       await loadSolutions();
+    }
+
+    const HOST_ORIGIN = window.location.origin;
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      if (e.data.type === 'CONTEXT_INIT') onContextReady();
     });
   </script>
 </body>
