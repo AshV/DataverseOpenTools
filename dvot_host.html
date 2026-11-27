@@ -552,7 +552,7 @@
     <span class="s-sep">│</span>
     <span id="st-network" style="cursor:pointer;" title="Click to open Central Network Console">📡 0 API calls</span>
     <span class="s-sep">│</span>
-    <span id="st-policy" style="cursor:pointer;" title="Current Security Gateway Policy">🛡️ Audit</span>
+    <span id="st-policy" style="cursor:pointer;" title="Current Security Gateway Policy">🛡️ Safe Mode</span>
   </footer>
 
   <!-- ══════════════ NETWORK ACTIVITY CONSOLE DRAWER ══════════════ -->
@@ -673,8 +673,8 @@
       <div class="form-row">
         <label>API Security Gateway Policy</label>
         <select id="cfg-security">
+          <option value="SAFE" selected>🟡 Safe Mode (Default — Prompt to approve POST/PATCH/DELETE)</option>
           <option value="AUDIT">🟢 Audit Only (Permissive — Auto-execute all calls)</option>
-          <option value="SAFE">🟡 Safe Mode (Recommended — Prompt to approve POST/PATCH/DELETE)</option>
           <option value="STRICT">🔴 Zero Trust (Strict — Prompt to approve every API call)</option>
         </select>
         <div class="form-hint">Protects sensitive environments. Safe Mode pauses mutating operations for manual review before execution.</div>
@@ -989,7 +989,7 @@
 
     /* ─── State ──────────────────────────────────────────────── */
     const S = {
-      cfg: { prefix: 'dvot_', apiVersion: '9.2', tabLimit: 5, theme: 'light', securityPolicy: 'AUDIT', proxyUrl: '' },
+      cfg: { prefix: 'dvot_', apiVersion: '9.2', tabLimit: 5, theme: 'light', securityPolicy: 'SAFE', proxyUrl: '' },
       runtimeMode: HOST_RUNTIME,
       isExternalMode: IS_EXTERNAL_MODE,
       proxyTargetHost: '',
@@ -1225,7 +1225,7 @@
 
       // Show policy
       const polLabels = { AUDIT: '🛡️ Audit', SAFE: '🛡️ Safe Mode', STRICT: '🛡️ Zero Trust' };
-      document.getElementById('st-policy').textContent = polLabels[S.cfg.securityPolicy] || '🛡️ Audit';
+      document.getElementById('st-policy').textContent = polLabels[S.cfg.securityPolicy] || '🛡️ Safe Mode';
       document.getElementById('st-policy').title       = `Security Policy: ${S.cfg.securityPolicy} (click to change in settings)`;
     }
 
@@ -2737,7 +2737,7 @@
       document.getElementById('cfg-api').value      = S.cfg.apiVersion;
       document.getElementById('cfg-tabs').value     = S.cfg.tabLimit;
       document.getElementById('cfg-theme').value    = S.cfg.theme;
-      document.getElementById('cfg-security').value = S.cfg.securityPolicy || 'AUDIT';
+      document.getElementById('cfg-security').value = S.cfg.securityPolicy || 'SAFE';
       const extRow = document.getElementById('ext-settings-row');
       const extSum = document.getElementById('ext-settings-summary');
       if (extRow) extRow.style.display = S.isExternalMode ? 'block' : 'none';
@@ -2755,7 +2755,7 @@
       const api    = document.getElementById('cfg-api').value;
       const tabs   = Math.min(10, Math.max(1, parseInt(document.getElementById('cfg-tabs').value) || 5));
       const theme  = document.getElementById('cfg-theme').value;
-      const sec    = document.getElementById('cfg-security').value || 'AUDIT';
+      const sec    = document.getElementById('cfg-security').value || 'SAFE';
 
       const changed = prefix !== S.cfg.prefix || api !== S.cfg.apiVersion;
       const policyChanged = sec !== S.cfg.securityPolicy;
