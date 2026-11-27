@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SQL Query</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "sql-playground",
+    "name":           "SQL Query",
+    "version":        "1.0.0",
+    "description":    "Execute read-only T-SQL SELECT queries via Dataverse Web API (?sql=), auto-resolve FROM tables, expand SELECT * from metadata, follow @odata.nextLink paging, generate snippets, and export CSV/JSON.",
+    "icon":           "🗄️",
+    "category":       "Query",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+
+  <style>
+    .sql-editor-pane {
+      display: flex; flex-direction: column; border-bottom: 2px solid var(--border);
+      min-height: 195px; max-height: 48%; flex-shrink: 0;
+    }
+    .sql-code-area {
+      flex: 1; width: 100%; border: none !important; border-radius: 0 !important;
+      resize: none; padding: 10px 14px !important; background: var(--code-bg) !important;
+      font-family: 'Cascadia Code', 'Consolas', monospace !important; line-height: 1.5;
+    }
+    .sql-cols-drawer {
+      display: none; max-height: 92px; overflow: auto; padding: 6px 14px;
+      border-top: 1px solid var(--border); background: var(--surface-2);
+      gap: 5px; flex-wrap: wrap; align-items: center;
+    }
+    .sql-cols-drawer.open { display: flex; }
+    .sql-col-chip {
+      font-family: monospace; font-size: 11px; padding: 2px 7px; border-radius: 4px;
+      border: 1px solid var(--border); background: var(--surface); cursor: pointer;
+    }
+    .sql-col-chip:hover { border-color: var(--brand); color: var(--brand); }
+    .sql-raw-sub { display: block; font-size: 10px; color: var(--text-muted); font-family: monospace; }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <select id="preset-select"><option value="">Load Preset…</option></select>
+    <select id="history-select"><option value="">History (0)</option></select>
+    <button class="dv-btn" id="btn-format">✨ Format SQL</button>
+    <button class="dv-btn" id="btn-save">💾 Save</button>
+    <button class="dv-btn" id="btn-cols" title="Load columns for the FROM table so you can click to insert">📋 Columns</button>
+    <button class="dv-btn" id="btn-open-odata" title="Open the generated /<entitySet>?sql=... request in OData Web API">🌐 Open in Web API</button>
+    <div class="dv-spacer"></div>
+    <span id="entity-map-status" style="font-size:11px;color:var(--text-muted);">Loading table map…</span>
+    <button class="dv-btn dv-btn-primary" id="btn-run" disabled>▶ Execute (Ctrl+Enter)</button>
+  </div>
+
+  <div class="sql-editor-pane" id="pane-sql">
+    <div class="dv-strip">
+      <strong>SQL Query Editor (<code>?sql=</code>)</strong>
+      <label style="display:flex;align-items:center;gap:4px;">
+        EntitySet:
+        <select id="entityset-override" style="max-width:190px;">
+          <option value="">Auto from FROM</option>
+        </select>
+      </label>
+      <div class="dv-spacer"></div>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;" title="Dataverse ?sql= does not allow SELECT *. When enabled, * is expanded from EntityDefinitions attributes before sending.">
+        <input type="checkbox" id="chk-expand-star" checked> Auto-expand <code>SELECT *</code>
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+        <input type="checkbox" id="chk-use-batch"> Force <code>$batch</code> POST
+      </label>
+    </div>
+    <textarea id="sql-input" class="sql-code-area" spellcheck="false"></textarea>
+    <div class="sql-cols-drawer" id="cols-drawer"></div>
+  </div>
+
+  <div class="dv-toolbar" style="padding:6px 14px;">
+    <div class="dv-seg-group">
+      <button class="dv-seg-btn active" data-view="table">Table</button>
+      <button class="dv-seg-btn" data-view="json">JSON</button>
+      <button class="dv-seg-btn" data-view="code">Code Snippets</button>
+    </div>
+    <span class="dv-badge dv-b-info" id="res-count-badge">0 rows</span>
+    <input type="text" id="res-filter" placeholder="Filter rows…" style="width:180px;">
+    <button class="dv-btn" id="btn-next-page" style="display:none;">Next Page →</button>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-copy-json" disabled>📋 Copy JSON</button>
+    <button class="dv-btn" id="btn-export-csv" disabled>📥 Export CSV</button>
+  </div>
+
+  <div class="dv-scroll" id="results-body">
+    <div class="dv-empty">Enter a read-only Dataverse SQL <code>SELECT</code> query above and press <strong>Execute (Ctrl+Enter)</strong>.<br><span style="font-size:11px;color:var(--text-muted);">Executes natively via <code>GET /api/data/v9.2/&lt;entitySet&gt;?sql=...</code></span></div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px;font-family:monospace;">—</span>
+    <div class="dv-spacer"></div>
+    <span id="tel-store">Storage: —</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let context = null, store = null;
+    let activeView = 'table';
+    let entityMap = new Map(), colsCache = new Map();
+    let lastRows = [], lastRawJson = null, nextPageInfo = null, history = [], lastExecuted = null;
+
+    const SQL_PRESETS = {
+      'Accounts (Top 25)': `SELECT TOP 25\n  name,\n  accountnumber,\n  telephone1,\n  revenue,\n  statecode,\n  ownerid,\n  createdon\nFROM account\nWHERE statecode = 0\nORDER BY createdon DESC`,
+      'Contacts + Account (JOIN)': `SELECT TOP 25\n  c.fullname,\n  c.emailaddress1,\n  c.jobtitle,\n  a.name AS account_name\nFROM contact AS c\nINNER JOIN account AS a ON c.parentcustomerid = a.accountid\nWHERE c.statecode = 0\nORDER BY c.createdon DESC`,
+      'Accounts by Industry (GROUP BY)': `SELECT\n  industrycode,\n  COUNT(accountid) AS account_count\nFROM account\nWHERE statecode = 0\nGROUP BY industrycode\nORDER BY account_count DESC`,
+      'Enabled Users': `SELECT TOP 25\n  systemuserid,\n  fullname,\n  internalemailaddress,\n  domainname\nFROM systemuser\nWHERE isdisabled = 0\nORDER BY fullname ASC`,
+      'Cloud Flows (Workflows)': `SELECT TOP 25\n  workflowid,\n  name,\n  statecode,\n  modifiedon\nFROM workflow\nWHERE category = 5 AND type = 1\nORDER BY modifiedon DESC`,
+      'System Jobs Summary': `SELECT\n  statuscode,\n  COUNT(asyncoperationid) AS job_count\nFROM asyncoperation\nGROUP BY statuscode`
+    };
+
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      const { type, payload } = e.data;
+      if (type === 'CONTEXT_INIT') { context = payload; onContextReady(); }
+      if (type === 'TOOL_LAUNCH' && payload?.sql) applyLaunchSql(payload.sql);
+    });
+
+    function applyLaunchSql(sql) {
+      document.getElementById('sql-input').value = sql;
+    }
+
+    function populatePresets() {
+      const sel = document.getElementById('preset-select');
+      sel.innerHTML = '<option value="">Load Preset…</option>';
+      for (const k of Object.keys(SQL_PRESETS)) {
+        const opt = document.createElement('option');
+        opt.value = k; opt.textContent = k;
+        sel.appendChild(opt);
+      }
+    }
+
+    async function onContextReady() {
+      store = DV.store('sql-playground');
+      document.getElementById('tel-store').textContent = `Storage: ${store.type}`;
+      document.getElementById('btn-run').disabled = false;
+
+      history = store.get('history', []) || [];
+      renderHistoryDropdown();
+      populatePresets();
+
+      document.getElementById('sql-input').value = store.get('lastSql') || SQL_PRESETS['Accounts (Top 25)'];
+      if (context.launchData?.sql) applyLaunchSql(context.launchData.sql);
+      await loadEntityMap();
+    }
+
+    async function loadEntityMap() {
+      const cached = store.get('entityMapCache');
+      if (cached && Date.now() - cached.ts < 15 * 60000) {
+        entityMap = new Map(cached.entries);
+        populateEntitySetDropdown();
+        document.getElementById('entity-map-status').textContent = `${entityMap.size} tables cached`;
+        return;
+      }
+      try {
+        const data = await DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName,DisplayName,PrimaryIdAttribute');
+        entityMap.clear();
+        for (const e of (data.value || [])) {
+          if (e.LogicalName && e.EntitySetName) {
+            entityMap.set(e.LogicalName.toLowerCase(), {
+              entitySetName: e.EntitySetName,
+              displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+              primaryId: e.PrimaryIdAttribute || ''
+            });
+          }
+        }
+        store.set('entityMapCache', { ts: Date.now(), entries: [...entityMap.entries()] });
+        populateEntitySetDropdown();
+        document.getElementById('entity-map-status').textContent = `${entityMap.size} tables mapped`;
+      } catch {
+        document.getElementById('entity-map-status').textContent = 'Table map unavailable (fallback active)';
+      }
+    }
+
+    function populateEntitySetDropdown() {
+      const sel = document.getElementById('entityset-override');
+      const prev = sel.value;
+      const entries = [...entityMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+      sel.innerHTML = '<option value="">Auto from FROM</option>' +
+        entries.map(([ln, m]) => `<option value="${DV.esc(m.entitySetName)}">${DV.esc(ln)} → ${DV.esc(m.entitySetName)}</option>`).join('');
+      if (prev) sel.value = prev;
+    }
+
+    function stripCommentsAndStrings(sql) {
+      return String(sql || '')
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/--[^\r\n]*/g, ' ')
+        .replace(/'(?:''|[^'])*'/g, "''");
+    }
+
+    function extractPrimaryTable(sql) {
+      const cleaned = stripCommentsAndStrings(sql);
+      // Support FROM [dbo].[account], FROM dbo.account, FROM [account] AS a, FROM account a
+      const m = cleaned.match(/\bFROM\s+(?:\[?[a-zA-Z0-9_]+\]?\s*\.\s*)?\[?([a-zA-Z_][a-zA-Z0-9_]*)\]?(?:\s+(?:AS\s+)?\[?([a-zA-Z_][a-zA-Z0-9_]*)\]?)?/i);
+      if (!m) return { logicalName: '', alias: '' };
+      const logicalName = m[1].toLowerCase();
+      const maybeAlias = (m[2] || '').toLowerCase();
+      const kw = new Set(['where', 'inner', 'left', 'right', 'full', 'cross', 'join', 'on', 'group', 'order', 'having', 'union']);
+      return {
+        logicalName,
+        alias: (maybeAlias && !kw.has(maybeAlias)) ? maybeAlias : ''
+      };
+    }
+
+    function normalizeSqlInput(rawSql) {
+      return String(rawSql || '').trim().replace(/;+\s*$/, '');
+    }
+
+    function validateReadOnlySql(sql) {
+      const stripped = stripCommentsAndStrings(sql).trim();
+      if (!stripped) throw new Error('SQL editor is empty.');
+      if (!/^SELECT\b/i.test(stripped)) {
+        throw new Error('Dataverse Web API (?sql=) supports read-only SELECT queries only.');
+      }
+    }
+
+    async function resolveEntitySet(logicalName) {
+      const override = document.getElementById('entityset-override').value;
+      if (override) return override;
+      if (!logicalName) throw new Error('Could not detect table name from FROM clause. Select an EntitySet or include FROM <table>.');
+      const key = logicalName.toLowerCase();
+      if (entityMap.has(key)) return entityMap.get(key).entitySetName;
+      try {
+        const d = await DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(key)}')?$select=EntitySetName`);
+        if (d.EntitySetName) {
+          entityMap.set(key, { entitySetName: d.EntitySetName, displayName: key, primaryId: '' });
+          return d.EntitySetName;
+        }
+      } catch {}
+      return key.endsWith('s') ? key + 'es' : key.endsWith('y') ? key.slice(0, -1) + 'ies' : key + 's';
+    }
+
+    async function fetchTableColumns(logicalName) {
+      const key = String(logicalName || '').toLowerCase();
+      if (!key) throw new Error('No table found in FROM clause.');
+      if (colsCache.has(key)) return colsCache.get(key);
+      const data = await DV.fetch(
+        `/EntityDefinitions(LogicalName='${encodeURIComponent(key)}')/Attributes?$select=LogicalName,AttributeType,IsValidForRead,AttributeOf`
+      );
+      const cols = (data.value || [])
+        .filter(a => a.IsValidForRead !== false && !a.AttributeOf && a.AttributeType !== 'Virtual' && a.AttributeType !== 'EntityName')
+        .map(a => ({ name: a.LogicalName, type: a.AttributeType }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      colsCache.set(key, cols);
+      return cols;
+    }
+
+    async function expandSelectStarIfNeeded(sql, tableInfo) {
+      if (!document.getElementById('chk-expand-star').checked) return sql;
+      // Match SELECT [DISTINCT] [TOP N] * or alias.* before FROM (only outside COUNT(*))
+      const headMatch = sql.match(/^([\s\S]*?\bSELECT\s+(?:DISTINCT\s+)?(?:TOP\s+\d+\s+)?)((?:[a-zA-Z_][a-zA-Z0-9_]*\s*\.\s*)?\*)(\s+FROM\b[\s\S]*)$/i);
+      if (!headMatch) return sql;
+      if (!tableInfo.logicalName) return sql;
+
+      const cols = await fetchTableColumns(tableInfo.logicalName);
+      if (!cols.length) return sql;
+      const starToken = headMatch[2].trim();
+      const prefix = starToken.includes('.') ? starToken.split('.')[0].trim() + '.' : '';
+      const chosen = cols.slice(0, 40).map(c => `${prefix}${c.name}`).join(', ');
+      if (cols.length > 40) {
+        DV.notify(`Expanded SELECT * to first 40 of ${cols.length} readable columns on ${tableInfo.logicalName}.`, 'info', 4000);
+      }
+      return `${headMatch[1]}${chosen}${headMatch[3]}`;
+    }
+
+    async function executeQuery(isNextPage = false) {
+      if (!context || !window.DV) return;
+      const btn = document.getElementById('btn-run');
+      btn.disabled = true; btn.textContent = '⏳ Running…';
+      try {
+        await executeSql(isNextPage);
+      } catch (err) {
+        document.getElementById('results-body').innerHTML = DV.ui.error(err.message);
+        document.getElementById('res-count-badge').textContent = 'Error';
+        DV.notify(err.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = '▶ Execute (Ctrl+Enter)';
+      }
+    }
+
+    async function executeSql(isNextPage) {
+      let relPath, label, finalSql, entitySetName;
+      const apiPrefix = `${context.environmentUrl}/api/data/v${context.apiVersion}`;
+
+      if (isNextPage && nextPageInfo?.nextLink) {
+        relPath = nextPageInfo.nextLink.startsWith(apiPrefix)
+          ? nextPageInfo.nextLink.slice(apiPrefix.length)
+          : nextPageInfo.nextLink;
+        label = lastExecuted?.label || 'sql';
+        finalSql = lastExecuted?.sql || '';
+        entitySetName = lastExecuted?.entitySetName || '';
+      } else {
+        const rawSql = normalizeSqlInput(document.getElementById('sql-input').value);
+        validateReadOnlySql(rawSql);
+        const tableInfo = extractPrimaryTable(rawSql);
+        finalSql = await expandSelectStarIfNeeded(rawSql, tableInfo);
+        entitySetName = await resolveEntitySet(tableInfo.logicalName);
+        label = tableInfo.logicalName || entitySetName;
+        relPath = `/${entitySetName}?sql=${encodeURIComponent(finalSql)}`;
+
+        store.set('lastSql', document.getElementById('sql-input').value);
+        addHistory(label, document.getElementById('sql-input').value);
+      }
+
+      document.getElementById('tel-msg').textContent = `${entitySetName || ''} ?sql= (${finalSql.length} chars)`;
+      lastExecuted = { label, sql: finalSql, entitySetName, relPath };
+
+      const json = (document.getElementById('chk-use-batch').checked || relPath.length > 2000)
+        ? await executeViaBatch(relPath)
+        : await DV.fetch(relPath, { headers: { 'Prefer': 'odata.include-annotations="*"' } });
+
+      nextPageInfo = json?.['@odata.nextLink'] ? { nextLink: json['@odata.nextLink'] } : null;
+      handleResultData(json, label);
+    }
+
+    async function executeViaBatch(relPath) {
+      const batchId = 'batch_' + Math.random().toString(36).slice(2, 10);
+      const fullInnerUrl = `${context.environmentUrl}/api/data/v${context.apiVersion}${relPath}`;
+      const batchBody = [
+        `--${batchId}`, 'Content-Type: application/http', 'Content-Transfer-Encoding: binary', '',
+        `GET ${fullInnerUrl} HTTP/1.1`, 'Accept: application/json', 'Prefer: odata.include-annotations="*"', '', `--${batchId}--`
+      ].join('\r\n');
+      const data = await DV.fetch('/$batch', {
+        method: 'POST',
+        headers: { 'Content-Type': `multipart/mixed;boundary=${batchId}` },
+        body: batchBody
+      });
+      if (data.error) throw new Error(data.error.message || 'Batch error');
+      const raw = data.raw || '';
+      const s = raw.indexOf('{'), e = raw.lastIndexOf('}');
+      if (s === -1 || e === -1) return data;
+      const parsed = JSON.parse(raw.slice(s, e + 1));
+      if (parsed.error) throw new Error(parsed.error.message || 'Batch inner query error');
+      return parsed;
+    }
+
+    function handleResultData(json, label) {
+      lastRawJson = json || {};
+      lastRows = Array.isArray(lastRawJson.value) ? lastRawJson.value : (Object.keys(lastRawJson).length ? [lastRawJson] : []);
+      document.getElementById('btn-next-page').style.display = nextPageInfo ? 'inline-flex' : 'none';
+      document.getElementById('btn-copy-json').disabled = !lastRawJson;
+      document.getElementById('btn-export-csv').disabled = !lastRows.length;
+      DV.setTitle(`SQL — ${lastRows.length} rows (${label})`);
+      renderActiveView();
+    }
+
+    function renderActiveView() {
+      const container = document.getElementById('results-body');
+      const filter = document.getElementById('res-filter').value.trim().toLowerCase();
+      if (activeView === 'code') { renderCodeSnippets(container); return; }
+      if (!lastRawJson) { container.innerHTML = DV.ui.empty('No results yet. Execute a SQL SELECT query to inspect data.'); return; }
+      if (activeView === 'json') {
+        document.getElementById('res-count-badge').textContent = `${lastRows.length} rows`;
+        container.innerHTML = `<pre class="dv-code" style="border:none;border-radius:0;padding:12px 14px;">${DV.esc(JSON.stringify(lastRawJson, null, 2))}</pre>`;
+        return;
+      }
+
+      const filteredRows = !filter ? lastRows : lastRows.filter(r => JSON.stringify(r).toLowerCase().includes(filter));
+      document.getElementById('res-count-badge').textContent = `${filteredRows.length} rows${nextPageInfo ? ' (more)' : ''}`;
+      if (!filteredRows.length) { container.innerHTML = DV.ui.empty('Query succeeded with 0 matching rows.'); return; }
+
+      const cols = [...new Set(filteredRows.flatMap(r => Object.keys(r).filter(k => !k.startsWith('@odata.') && !k.includes('@OData.Community.') && !k.includes('@Microsoft.Dynamics.CRM.'))))];
+      if (!cols.length) {
+        container.innerHTML = `<pre class="dv-code" style="border:none;padding:12px 14px;">${DV.esc(JSON.stringify(lastRawJson, null, 2))}</pre>`;
+        return;
+      }
+
+      let html = '<table class="dv-table"><thead><tr><th>#</th>' + cols.map(c => `<th>${DV.esc(c)}</th>`).join('') + '</tr></thead><tbody>';
+      filteredRows.forEach((row, idx) => {
+        html += `<tr><td style="color:var(--text-muted);">${idx + 1}</td>`;
+        for (const c of cols) {
+          const raw = row[c], fmt = row[`${c}@OData.Community.Display.V1.FormattedValue`];
+          const rawStr = raw === null || raw === undefined ? '' : typeof raw === 'object' ? JSON.stringify(raw) : String(raw);
+          html += (fmt !== undefined && String(fmt) !== rawStr)
+            ? `<td title="${DV.esc(fmt)} (${DV.esc(rawStr)})">${DV.esc(fmt)}<span class="sql-raw-sub">${DV.esc(rawStr)}</span></td>`
+            : `<td title="${DV.esc(rawStr)}">${raw === null || raw === undefined ? '<span style="color:var(--text-muted)">null</span>' : DV.esc(rawStr)}</td>`;
+        }
+        html += '</tr>';
+      });
+      container.innerHTML = html + '</tbody></table>';
+    }
+
+    function renderCodeSnippets(container) {
+      const baseUrl = `${context.environmentUrl}/api/data/v${context.apiVersion}`;
+      const sql = normalizeSqlInput(document.getElementById('sql-input').value);
+      const tbl = extractPrimaryTable(sql);
+      const entitySet = document.getElementById('entityset-override').value || entityMap.get(tbl.logicalName)?.entitySetName || ((tbl.logicalName || 'account') + 's');
+      const tdsHost = context.environmentUrl.replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+      const snippet = `// 1. JavaScript Fetch API (Dataverse Web API ?sql=)\nconst sql = ${JSON.stringify(sql)};\nconst res = await fetch(\`${baseUrl}/${entitySet}?sql=\${encodeURIComponent(sql)}\`, {\n  headers: {\n    "OData-MaxVersion": "4.0",\n    "OData-Version": "4.0",\n    "Accept": "application/json",\n    "Prefer": "odata.include-annotations=\\"*\\""\n  }\n});\nconst data = await res.json();\n\n// 2. Xrm.WebApi (Form / Web Resource JS)\nconst result = await Xrm.WebApi.retrieveMultipleRecords("${tbl.logicalName || 'account'}", "?sql=" + encodeURIComponent(sql));\n\n// 3. C# (Microsoft.Data.SqlClient via TDS Endpoint)\n// ConnectionString: "Server=${tdsHost},5558; Authentication=Active Directory Default; Database=${tdsHost.split('.')[0]}"\nvar sqlText = ${JSON.stringify(sql)};\nusing var cmd = new SqlCommand(sqlText, sqlConn);`;
+      container.innerHTML = `<pre class="dv-code" style="border:none;padding:12px 14px;">${DV.esc(snippet)}</pre>`;
+    }
+
+    function formatSql(sqlText) {
+      const s = String(sqlText || '').trim().replace(/\s+/g, ' ');
+      return s
+        .replace(/\b(SELECT\s+(?:DISTINCT\s+)?(?:TOP\s+\d+\s+)?)/gi, '$1\n  ')
+        .replace(/,\s*(?=(?:[^']*'[^']*')*[^']*$)/g, ',\n  ')
+        .replace(/\s+\b(FROM|INNER JOIN|LEFT JOIN|RIGHT JOIN|FULL JOIN|WHERE|GROUP BY|HAVING|ORDER BY)\b/gi, '\n$1')
+        .replace(/\s+\b(AND|OR)\b(?=(?:[^']*'[^']*')*[^']*$)/gi, '\n  $1');
+    }
+
+    function insertAtCursor(text) {
+      const el = document.getElementById('sql-input');
+      const start = el.selectionStart ?? el.value.length;
+      const end = el.selectionEnd ?? el.value.length;
+      el.value = el.value.slice(0, start) + text + el.value.slice(end);
+      el.focus();
+      el.selectionStart = el.selectionEnd = start + text.length;
+    }
+
+    async function toggleColumnsDrawer() {
+      const drawer = document.getElementById('cols-drawer');
+      if (drawer.classList.contains('open')) {
+        drawer.classList.remove('open');
+        return;
+      }
+      const { logicalName } = extractPrimaryTable(document.getElementById('sql-input').value);
+      if (!logicalName) {
+        DV.notify('Write a FROM <table> clause first so columns can be loaded.', 'warning');
+        return;
+      }
+      drawer.classList.add('open');
+      drawer.innerHTML = `<span style="font-size:11px;color:var(--text-muted);">Loading columns for ${DV.esc(logicalName)}…</span>`;
+      try {
+        const cols = await fetchTableColumns(logicalName);
+        drawer.innerHTML = `<span style="font-size:11px;font-weight:700;">${DV.esc(logicalName)} (${cols.length}):</span>` +
+          cols.map(c => `<button type="button" class="sql-col-chip" data-col="${DV.esc(c.name)}" title="${DV.esc(c.type)} — click to insert">${DV.esc(c.name)}</button>`).join('');
+        drawer.querySelectorAll('.sql-col-chip').forEach(ch => {
+          ch.addEventListener('click', () => insertAtCursor(ch.dataset.col));
+        });
+      } catch (err) {
+        drawer.innerHTML = `<span style="font-size:11px;color:var(--danger);">${DV.esc(err.message)}</span>`;
+      }
+    }
+
+    function addHistory(label, data) {
+      history = history.filter(h => h.data !== data);
+      history.unshift({ mode: 'sql', label, data, ts: new Date().toLocaleTimeString() });
+      if (history.length > 20) history.pop();
+      store.set('history', history);
+      renderHistoryDropdown();
+    }
+
+    function renderHistoryDropdown() {
+      const sel = document.getElementById('history-select');
+      sel.innerHTML = `<option value="">History (${history.length})</option>` +
+        history.map((h, i) => `<option value="${i}">${DV.esc(h.label)} (${DV.esc(h.ts)})</option>`).join('');
+    }
+
+    document.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', () => {
+      activeView = btn.dataset.view;
+      document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b === btn));
+      renderActiveView();
+    }));
+
+    document.getElementById('preset-select').addEventListener('change', e => {
+      const k = e.target.value; if (!k) return;
+      document.getElementById('sql-input').value = SQL_PRESETS[k];
+      e.target.value = '';
+    });
+
+    document.getElementById('history-select').addEventListener('change', e => {
+      if (e.target.value === '') return;
+      const item = history[Number(e.target.value)]; if (!item) return;
+      document.getElementById('sql-input').value = item.data;
+      e.target.value = '';
+    });
+
+    document.getElementById('btn-format').addEventListener('click', () => {
+      const el = document.getElementById('sql-input');
+      el.value = formatSql(el.value);
+    });
+
+    document.getElementById('btn-cols').addEventListener('click', toggleColumnsDrawer);
+
+    document.getElementById('btn-open-odata').addEventListener('click', async () => {
+      try {
+        const rawSql = normalizeSqlInput(document.getElementById('sql-input').value);
+        validateReadOnlySql(rawSql);
+        const tableInfo = extractPrimaryTable(rawSql);
+        const sql = await expandSelectStarIfNeeded(rawSql, tableInfo);
+        const entitySet = await resolveEntitySet(tableInfo.logicalName);
+        DV.openTool('webapi-playground', { method: 'GET', odataPath: `/${entitySet}?sql=${encodeURIComponent(sql)}` });
+      } catch (err) {
+        DV.notify(err.message, 'warning');
+      }
+    });
+
+    document.getElementById('btn-save').addEventListener('click', () => {
+      store.set('lastSql', document.getElementById('sql-input').value);
+      DV.notify('SQL query saved to local tool storage', 'success');
+    });
+
+    document.getElementById('btn-run').addEventListener('click', () => executeQuery(false));
+    document.getElementById('btn-next-page').addEventListener('click', () => executeQuery(true));
+    document.getElementById('res-filter').addEventListener('input', renderActiveView);
+    document.getElementById('btn-copy-json').addEventListener('click', () => lastRawJson && DV.copyText(JSON.stringify(lastRawJson, null, 2), 'JSON copied to clipboard'));
+    document.getElementById('btn-export-csv').addEventListener('click', () => {
+      if (!lastRows.length) return;
+      const cols = [...new Set(lastRows.flatMap(r => Object.keys(r).filter(k => !k.startsWith('@odata.') && !k.includes('@OData.'))))];
+      DV.exportCsv(`dataverse_sql_${new Date().toISOString().slice(0, 10)}.csv`, cols, lastRows.map(r => cols.map(c => r[`${c}@OData.Community.Display.V1.FormattedValue`] ?? r[c])));
+    });
+    document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); executeQuery(false); } });
+  </script>
+</body>
+</html>

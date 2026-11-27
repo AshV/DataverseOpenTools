@@ -373,15 +373,15 @@
           <div class="pill">⚡ Open, Single-File Dataverse Developer Workbench</div>
           <h1>Zero-dependency tools for Microsoft Dataverse &amp; Power Platform.</h1>
           <p class="hero-sub">
-            31 self-contained HTML developer tools inside one unified tabbed workbench. Run natively inside Dynamics 365 as Web Resources, or connect from this page via a local proxy (PowerShell, C# .NET, or Node.js) — with zero build steps and zero tokens stored in the browser.
+            32 self-contained HTML developer tools inside one unified tabbed workbench. Run natively inside Dynamics 365 as Web Resources, or connect from this page via a local proxy (PowerShell, C# .NET, or Node.js) — with zero build steps and zero tokens stored in the browser.
           </p>
           <div class="hero-cta">
             <a href="dvot_host.html" class="btn btn-primary btn-lg">Launch DV Open Tools Host →</a>
-            <a href="#tools" class="btn btn-lg">Explore 31 Tools</a>
+            <a href="#tools" class="btn btn-lg">Explore 32 Tools</a>
             <a href="#local-proxy" class="btn btn-lg">Local Proxy Setup</a>
           </div>
           <div class="hero-stats">
-            <span><strong>31</strong> Built-in Tools</span>
+            <span><strong>32</strong> Built-in Tools</span>
             <span><strong>0</strong> Build Steps / Dependencies</span>
             <span><strong>3</strong> Security Gateway Modes</span>
             <span><strong>100%</strong> Relative GitHub Pages Paths</span>
@@ -477,8 +477,8 @@
       <div class="container">
         <div class="section-head">
           <div>
-            <h2>Included Tools (<span id="tools-count">31</span>)</h2>
-            <p>Download any single tool HTML, select tools to pack into a single bundle Web Resource, or download all 31 tools together alongside independent <code>dvot_host.html</code>.</p>
+            <h2>Included Tools (<span id="tools-count">32</span>)</h2>
+            <p>Download any single tool HTML, select tools to pack into a single bundle Web Resource, or download all 32 tools together alongside independent <code>dvot_host.html</code>.</p>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <a id="download-host-btn" href="dvot_host.html" download="dvot_host.html" class="btn">⬇️ Download Host (<span id="host-size-lbl">142.1 KB</span>)</a>
@@ -498,7 +498,7 @@
           <div class="bundle-row">
             <div class="bundle-left">
               <strong>📦 Bundle Builder</strong>
-              <button type="button" id="btn-sel-all" class="btn btn-sm">Select All (<span id="all-count">31</span>)</button>
+              <button type="button" id="btn-sel-all" class="btn btn-sm">Select All (<span id="all-count">32</span>)</button>
               <button type="button" id="btn-sel-filtered" class="btn btn-sm">Select Filtered</button>
               <button type="button" id="btn-sel-none" class="btn btn-sm">Clear</button>
               <span id="bundle-size-pill" class="size-pill">0 selected · 0 KB</span>
@@ -538,6 +538,7 @@
     const TOOLS = [
       { id: 'fetchxml-playground', file: 'tools/dvot_fetchxml.html', name: 'FetchXML Runner', icon: '🔍', category: 'Query', version: '1.2.0', sizeBytes: 20541, description: 'Execute FetchXML queries (with paging-cookie pagination, aggregates, $batch fallback, XML formatting, JS/Xrm snippets, and CSV/JSON export).' },
       { id: 'webapi-playground', file: 'tools/dvot_webapi.html', name: 'OData Web API', icon: '🌐', category: 'Query', version: '1.0.0', sizeBytes: 18664, description: 'Execute GET, POST, PATCH, PUT, and DELETE Dataverse OData Web API requests with custom headers, JSON body editor, @odata.nextLink paging, JS/C# code snippets, and CSV/JSON export.' },
+      { id: 'sql-playground', file: 'tools/dvot_sql.html', name: 'SQL Query', icon: '🗄️', category: 'Query', version: '1.0.0', sizeBytes: 27417, description: 'Execute read-only T-SQL SELECT queries via Dataverse Web API (?sql=), auto-resolve FROM tables, expand SELECT * from metadata, follow @odata.nextLink paging, generate snippets, and export CSV/JSON.' },
       { id: 'schema-browser', file: 'tools/dvot_schemabrowser.html', name: 'Schema Browser', icon: '📖', category: 'Metadata', version: '1.1.0', sizeBytes: 21232, description: 'Explore Dataverse EntityDefinitions, columns, OptionSet integer mappings, relationships, keys, and Global Option Sets.' },
       { id: 'erd-visualizer', file: 'tools/dvot_erd.html', name: 'ERD Visualizer', icon: '📐', category: 'Metadata', version: '1.0.0', sizeBytes: 11026, description: 'Select Dataverse tables to render an interactive pure-SVG Entity-Relationship diagram (1:N, N:1, N:N), export SVG, or copy Mermaid erDiagram.' },
       { id: 'plugin-traces', file: 'tools/dvot_plugintraces.html', name: 'Plugin Trace Logs', icon: '📜', category: 'Diagnostics', version: '1.1.0', sizeBytes: 13886, description: 'Stream and filter Dataverse plugintracelog entries, trace full correlation cascades by depth, inspect stack traces, and spot slow plugins.' },

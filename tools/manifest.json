@@ -297,6 +297,17 @@
     "sizeBytes": 18664
   },
   {
+    "wrName": "dvot_sql.html",
+    "id": "sql-playground",
+    "name": "SQL Query",
+    "icon": "🗄️",
+    "category": "Query",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Execute read-only T-SQL SELECT queries via Dataverse Web API (?sql=), auto-resolve FROM tables, expand SELECT * from metadata, follow @odata.nextLink paging, generate snippets, and export CSV/JSON.",
+    "sizeBytes": 27417
+  },
+  {
     "wrName": "dvot_accesschecker.html",
     "id": "access-checker",
     "name": "Access Diagnostics",
