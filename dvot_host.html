@@ -171,7 +171,7 @@
       white-space: nowrap; overflow: hidden; position: relative;
     }
     .tool-item {
-      display: flex; align-items: center; gap: 9px;
+      display: flex; align-items: center; gap: 7px;
       padding: 7px 10px 7px 12px;
       cursor: pointer; color: var(--sidebar-text);
       border-left: 2px solid transparent;
@@ -182,19 +182,20 @@
     .tool-item.open { color: rgba(255,255,255,0.9); }
     .tool-item.active { background: var(--sidebar-active); color: #fff; border-left-color: var(--accent); }
     .tool-icon { font-size: 14px; flex-shrink: 0; }
-    .tool-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+    .tool-name { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
     .tool-warn { font-size: 11px; color: #ffa500; flex-shrink: 0; }
     .tool-count {
       font-size: 10px; font-weight: 600; padding: 0 5px; border-radius: 9px;
       background: rgba(96,180,255,0.2); color: #60b4ff; flex-shrink: 0; line-height: 15px;
     }
     .tool-newtab, .tool-pin {
-      opacity: 0; background: none; border: none; color: rgba(255,255,255,0.45);
-      cursor: pointer; font-size: 12px; padding: 1px 4px; border-radius: 3px; flex-shrink: 0;
+      display: none; align-items: center; justify-content: center;
+      background: none; border: none; color: rgba(255,255,255,0.55);
+      cursor: pointer; font-size: 12px; line-height: 1; padding: 2px 4px; border-radius: 3px; flex-shrink: 0;
     }
-    .tool-newtab { font-size: 14px; font-weight: 600; line-height: 1; }
+    .tool-newtab { font-size: 14px; font-weight: 600; }
     .tool-item:hover .tool-newtab, .tool-item:focus-within .tool-newtab,
-    .tool-item:hover .tool-pin, .tool-pin.pinned { opacity: 1; }
+    .tool-item:hover .tool-pin, .tool-item:focus-within .tool-pin { display: inline-flex; }
     .tool-pin.pinned { color: #fbbf24; }
     .tool-newtab:hover, .tool-pin:hover { background: rgba(255,255,255,0.12); color: #fff; }
 
