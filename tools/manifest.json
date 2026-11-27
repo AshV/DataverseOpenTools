@@ -143,6 +143,17 @@
     "sizeBytes": 10148
   },
   {
+    "wrName": "dvot_wrmanager.html",
+    "id": "wr-manager",
+    "name": "Web Resource Manager",
+    "icon": "🗂️",
+    "category": "Extensibility",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Browse Dataverse Web Resources in a virtual folder tree, edit code inline or upload local files, preview images/SVGs, compare diffs, add to solutions, publish via PublishXml, and delete.",
+    "sizeBytes": 51055
+  },
+  {
     "wrName": "dvot_wrsearch.html",
     "id": "wr-code-search",
     "name": "Web Resource Search",
