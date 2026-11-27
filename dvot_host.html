@@ -160,13 +160,19 @@
     .tool-icon { font-size: 14px; flex-shrink: 0; }
     .tool-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
     .tool-warn { font-size: 11px; color: #ffa500; flex-shrink: 0; }
-    .tool-pin {
+    .tool-count {
+      font-size: 10px; font-weight: 600; padding: 0 5px; border-radius: 9px;
+      background: rgba(96,180,255,0.2); color: #60b4ff; flex-shrink: 0; line-height: 15px;
+    }
+    .tool-newtab, .tool-pin {
       opacity: 0; background: none; border: none; color: rgba(255,255,255,0.45);
       cursor: pointer; font-size: 12px; padding: 1px 4px; border-radius: 3px; flex-shrink: 0;
     }
+    .tool-newtab { font-size: 14px; font-weight: 600; line-height: 1; }
+    .tool-item:hover .tool-newtab, .tool-item:focus-within .tool-newtab,
     .tool-item:hover .tool-pin, .tool-pin.pinned { opacity: 1; }
     .tool-pin.pinned { color: #fbbf24; }
-    .tool-pin:hover { background: rgba(255,255,255,0.12); color: #fff; }
+    .tool-newtab:hover, .tool-pin:hover { background: rgba(255,255,255,0.12); color: #fff; }
 
     .sb-search-wrap {
       padding: 4px 10px 6px; position: relative; flex-shrink: 0;
@@ -240,16 +246,17 @@
     .tab.active { background: var(--tab-active-bg); color: var(--text-primary); border-top: 2px solid var(--accent); }
     .tab-icon { font-size: 13px; flex-shrink: 0; }
     .tab-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
-    .tab-close, .tab-reload {
+    .tab-close, .tab-reload, .tab-dup {
       flex-shrink: 0; width: 18px; height: 18px;
       border-radius: 3px; border: none; background: none;
       cursor: pointer; color: var(--text-secondary);
       font-size: 14px; display: flex; align-items: center; justify-content: center;
       line-height: 1; padding: 0;
     }
-    .tab-reload { font-size: 12px; opacity: 0; transition: opacity .1s; }
-    .tab:hover .tab-reload, .tab.active .tab-reload { opacity: .85; }
-    .tab-close:hover, .tab-reload:hover { background: rgba(0,0,0,0.12); color: var(--text-primary); opacity: 1; }
+    .tab-reload, .tab-dup { font-size: 12px; opacity: 0; transition: opacity .1s; }
+    .tab:hover .tab-reload, .tab.active .tab-reload,
+    .tab:hover .tab-dup, .tab.active .tab-dup { opacity: .85; }
+    .tab-close:hover, .tab-reload:hover, .tab-dup:hover { background: rgba(0,0,0,0.12); color: var(--text-primary); opacity: 1; }
 
     /* Command Palette & Drag-Drop */
     .cmd-modal {
@@ -993,6 +1000,7 @@
     const HOST_RUNTIME = detectHostRuntime();
     const IS_EXTERNAL_MODE = HOST_RUNTIME !== 'powerplatform';
     const SAFE_POST_ORIGIN = (location.origin && location.origin !== 'null') ? location.origin : '*';
+    const BASE_PAGE_TITLE = 'DV Open Tools';
 
     function normalizeProxyUrl(raw) {
       let s = (raw || '').trim();
@@ -1015,8 +1023,9 @@
       proxyTargetUrl: '',
       externalHtmlCache: new Map(),
       bundleHtmlCache: new Map(),
+      fileHtmlCache: new Map(),
       localBundledTools: [],
-      tabs: [],         // [{tabId, toolId, name, icon, type:'wr'|'file', wrName?}]
+      tabs: [],         // [{tabId, toolId, name, baseName?, icon, type:'wr'|'file', wrName?}]
       activeTabId: null,
       tools: [],        // discovered [{id, name, icon, category, description, version, wrName}]
       ctx: null,        // context broadcast to tools
@@ -1468,46 +1477,80 @@
       for (const [cat, list] of Object.entries(groups)) {
         h += `<div class="cat-label">${esc(cat)}</div>`;
         for (const t of list) {
-          const isActive = S.activeTabId && S.tabs.find(x => x.toolId === t.id && x.tabId === S.activeTabId);
-          const isOpen   = S.tabs.some(x => x.toolId === t.id);
+          const openTabs = S.tabs.filter(x => x.toolId === t.id);
+          const isActive = S.activeTabId && openTabs.some(x => x.tabId === S.activeTabId);
+          const isOpen   = openTabs.length > 0;
           const isPinned = S.pinnedTools.has(t.id);
           const warn     = t.minHostVer && semverGt(t.minHostVer, HOST_VERSION)
             ? `<span class="tool-warn" title="Requires host v${esc(t.minHostVer)}">⚠</span>` : '';
+          const countBadge = openTabs.length > 1
+            ? `<span class="tool-count" title="${openTabs.length} tabs open">${openTabs.length}</span>` : '';
           h += `<div class="tool-item${isActive ? ' active' : isOpen ? ' open' : ''}"
             data-id="${esc(t.id)}" role="button" tabindex="0"
             title="${esc(t.description || t.name)}">
             <span class="tool-icon">${t.icon}</span>
-            <span class="tool-name">${esc(t.name)}</span>${warn}
+            <span class="tool-name">${esc(t.name)}</span>${warn}${countBadge}
+            <button class="tool-newtab" data-newtab="${esc(t.id)}" title="Open in new tab (Ctrl/Middle-click)">+</button>
             <button class="tool-pin${isPinned ? ' pinned' : ''}" data-pin="${esc(t.id)}" title="${isPinned ? 'Unpin tool' : 'Pin tool'}">${isPinned ? '★' : '☆'}</button>
           </div>`;
         }
       }
       el.innerHTML = h;
+      el.querySelectorAll('.tool-newtab').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          openTool(btn.dataset.newtab, null, { newTab: true });
+        });
+      });
       el.querySelectorAll('.tool-pin').forEach(btn => {
         btn.addEventListener('click', e => togglePin(btn.dataset.pin, e));
       });
       el.querySelectorAll('.tool-item').forEach(node => {
-        node.addEventListener('click',   () => openTool(node.dataset.id));
-        node.addEventListener('keydown', e => { if (e.key === 'Enter') openTool(node.dataset.id); });
+        node.addEventListener('click', e => {
+          if (e.target.closest('.tool-pin, .tool-newtab')) return;
+          openTool(node.dataset.id, null, { newTab: e.ctrlKey || e.metaKey || e.shiftKey });
+        });
+        node.addEventListener('auxclick', e => {
+          if (e.button === 1) {
+            e.preventDefault();
+            openTool(node.dataset.id, null, { newTab: true });
+          }
+        });
+        node.addEventListener('keydown', e => {
+          if (e.key === 'Enter' && !e.target.closest('.tool-pin, .tool-newtab')) {
+            openTool(node.dataset.id, null, { newTab: e.ctrlKey || e.metaKey || e.shiftKey });
+          }
+        });
       });
     }
 
     /* ─── Tab management ─────────────────────────────────────── */
-    async function openTool(toolId, launchData = null) {
-      if (launchData) S.launchPayloads[toolId] = launchData;
-      const existing = S.tabs.find(t => t.toolId === toolId);
-      if (existing) {
-        activate(existing.tabId);
+    function nextTabName(baseName, toolId, excludeTabId = null) {
+      const same = S.tabs.filter(t => t.toolId === toolId && t.tabId !== excludeTabId);
+      if (!same.length) return baseName;
+      let n = 2;
+      while (same.some(t => t.name === `${baseName} #${n}`)) n++;
+      return `${baseName} #${n}`;
+    }
+
+    async function openTool(toolId, launchData = null, opts = {}) {
+      const matching = S.tabs.filter(t => t.toolId === toolId);
+      if (matching.length && !opts?.newTab) {
+        const curIdx = matching.findIndex(t => t.tabId === S.activeTabId);
+        const target = curIdx >= 0 ? matching[(curIdx + 1) % matching.length] : matching[0];
+        activate(target.tabId);
         if (launchData) {
-          const frame = document.querySelector(`.tool-frame[data-tab-id="${existing.tabId}"]`);
+          const frame = document.querySelector(`.tool-frame[data-tab-id="${target.tabId}"]`);
           if (frame) postToTool(frame, 'TOOL_LAUNCH', launchData);
         }
-        return;
+        return target.tabId;
       }
-      if (S.tabs.length >= S.cfg.tabLimit) { toast(`Max ${S.cfg.tabLimit} tabs open — close one first.`, 'warning'); return; }
+      if (S.tabs.length >= S.cfg.tabLimit) { toast(`Max ${S.cfg.tabLimit} tabs open — close one first.`, 'warning'); return null; }
       const tool  = S.tools.find(t => t.id === toolId);
-      if (!tool) { toast(`Tool "${toolId}" not found in environment.`, 'warning'); return; }
+      if (!tool) { toast(`Tool "${toolId}" not found in environment.`, 'warning'); return null; }
       const tabId = uid();
+      const tabName = nextTabName(tool.name, toolId);
+      if (launchData) S.launchPayloads[tabId] = launchData;
       const apiBase = getApiBaseUrl();
       const isBundled = !!(tool.bundleCacheKey || tool.bundleWrName);
       const useBlobFrame = isBundled || (S.isExternalMode && ((apiBase && apiBase !== location.origin) || tool.source === 'static_folder' || !apiBase));
@@ -1531,32 +1574,59 @@
             }
             if (!html) throw new Error('Tool HTML returned empty or 404');
           } catch (e) {
+            delete S.launchPayloads[tabId];
             toast(`Failed to load "${tool.name}": ${e.message}`, 'error');
-            return;
+            return null;
           }
         }
-        S.tabs.push({ tabId, toolId, name: tool.name, icon: tool.icon, type: isBundled ? 'file' : 'wr', wrName: tool.wrName });
+        S.tabs.push({ tabId, toolId, name: tabName, baseName: tool.name, icon: tool.icon, type: isBundled ? 'file' : 'wr', wrName: tool.wrName });
         createFrame(tabId, { type: 'file', html });
       } else {
-        S.tabs.push({ tabId, toolId, name: tool.name, icon: tool.icon, type: 'wr', wrName: tool.wrName });
+        S.tabs.push({ tabId, toolId, name: tabName, baseName: tool.name, icon: tool.icon, type: 'wr', wrName: tool.wrName });
         createFrame(tabId, { type: 'wr', src: `/WebResources/${tool.wrName}` });
       }
       renderTabs(); activate(tabId); persistTabs();
+      return tabId;
     }
 
     function openFileTool(html, meta) {
-      if (S.tabs.length >= S.cfg.tabLimit) { toast(`Max ${S.cfg.tabLimit} tabs open — close one first.`, 'warning'); return; }
+      if (S.tabs.length >= S.cfg.tabLimit) { toast(`Max ${S.cfg.tabLimit} tabs open — close one first.`, 'warning'); return null; }
       const tabId  = uid();
       const toolId = meta?.id || `file_${tabId}`;
-      S.tabs.push({ tabId, toolId, name: meta?.name || 'Local File', icon: meta?.icon || '📂', type: 'file' });
+      const baseName = meta?.name || 'Local File';
+      const tabName = nextTabName(baseName, toolId);
+      S.fileHtmlCache.set(tabId, html);
+      S.tabs.push({ tabId, toolId, name: tabName, baseName, icon: meta?.icon || '📂', type: 'file' });
       createFrame(tabId, { type: 'file', html });
       renderTabs(); activate(tabId);
+      return tabId;
+    }
+
+    async function duplicateTab(tabId) {
+      const tab = S.tabs.find(t => t.tabId === tabId);
+      if (!tab) return null;
+      if (S.tools.some(t => t.id === tab.toolId)) {
+        return openTool(tab.toolId, null, { newTab: true });
+      }
+      if (S.fileHtmlCache.has(tabId)) {
+        return openFileTool(S.fileHtmlCache.get(tabId), { id: tab.toolId, name: tab.baseName || tab.name, icon: tab.icon });
+      }
+      toast('Cannot open another tab for this tool source.', 'warning');
+      return null;
     }
 
     function reloadTab(tabId) {
       const frame = document.querySelector(`.tool-frame[data-tab-id="${tabId}"]`);
       if (!frame) return;
       frame.dataset.ready = '0';
+      const tab = S.tabs.find(t => t.tabId === tabId);
+      const tool = tab ? S.tools.find(t => t.id === tab.toolId) : null;
+      const base = tool?.name || tab?.baseName;
+      if (tab && base) {
+        const same = S.tabs.filter(t => t.toolId === tab.toolId);
+        const idx = same.findIndex(t => t.tabId === tabId);
+        updateTabTitle(tabId, idx <= 0 ? base : nextTabName(base, tab.toolId, tabId));
+      }
       try {
         if (frame.contentWindow) {
           frame.contentWindow._dvot_intercepted = false;
@@ -1575,7 +1645,7 @@
       const frame = document.querySelector(`.tool-frame[data-tab-id="${tabId}"]`);
       if (frame) postToTool(frame, 'TOOL_FOCUS', {});
       document.getElementById('empty-state').style.display = S.tabs.length ? 'none' : 'flex';
-      renderTabs(); renderSidebar();
+      renderTabs(); renderSidebar(); syncDocumentTitle();
       ls.set('activeTab', tabId);
     }
 
@@ -1595,6 +1665,8 @@
       S.pendingApprovals = remaining;
       S.alwaysAllowedTabs.delete(tabId);
       delete S.tabLastResponse[tabId];
+      delete S.launchPayloads[tabId];
+      S.fileHtmlCache.delete(tabId);
       showNextApproval();
 
       const frame = document.querySelector(`.tool-frame[data-tab-id="${tabId}"]`);
@@ -1604,7 +1676,7 @@
       if (S.activeTabId === tabId) {
         const next = S.tabs[Math.min(idx, S.tabs.length - 1)];
         if (next) activate(next.tabId);
-        else { S.activeTabId = null; document.getElementById('empty-state').style.display = 'flex'; }
+        else { S.activeTabId = null; document.getElementById('empty-state').style.display = 'flex'; syncDocumentTitle(); }
       }
       renderTabs(); renderSidebar(); persistTabs();
     }
@@ -1619,21 +1691,23 @@
         el.dataset.tabId = tab.tabId;
         el.innerHTML = `<span class="tab-icon">${tab.icon}</span>
           <span class="tab-name" title="${esc(tab.name)}">${esc(tab.name)}</span>
+          <button class="tab-dup" data-tid="${tab.tabId}" title="Open another tab">⧉</button>
           <button class="tab-reload" data-tid="${tab.tabId}" title="Reload Tool">↻</button>
           <button class="tab-close" data-tid="${tab.tabId}" title="Close  Ctrl+W">×</button>`;
         el.addEventListener('click', e => {
-          if (!e.target.classList.contains('tab-close') && !e.target.classList.contains('tab-reload')) activate(tab.tabId);
+          if (!e.target.closest('.tab-close, .tab-reload, .tab-dup')) activate(tab.tabId);
         });
         el.addEventListener('auxclick', e => { if (e.button === 1) { e.preventDefault(); closeTab(tab.tabId); } });
         bar.insertBefore(el, addBtn);
       }
+      bar.querySelectorAll('.tab-dup').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); duplicateTab(b.dataset.tid); }));
       bar.querySelectorAll('.tab-reload').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); reloadTab(b.dataset.tid); }));
       bar.querySelectorAll('.tab-close').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); closeTab(b.dataset.tid); }));
       updateNetworkFilterDropdown();
     }
 
     function persistTabs() {
-      ls.set('tabs', S.tabs.filter(t => t.type === 'wr').map(({ tabId, toolId, name, icon, type, wrName }) => ({ tabId, toolId, name, icon, type, wrName })));
+      ls.set('tabs', S.tabs.filter(t => t.type === 'wr').map(({ tabId, toolId, name, baseName, icon, type, wrName }) => ({ tabId, toolId, name, baseName, icon, type, wrName })));
     }
 
     /* ─── Shared Tool Runtime & CSS Injection ────────────────── */
@@ -1702,8 +1776,8 @@
           setTitle(title) {
             updateTabTitle(tabId, title);
           },
-          openTool(targetToolId, launchData = null) {
-            openTool(targetToolId, launchData);
+          openTool(targetToolId, launchData = null, opts = {}) {
+            openTool(targetToolId, launchData, opts);
           },
           store(ns = toolId) {
             const prefix = `tool::${ns}::`;
@@ -1923,8 +1997,8 @@
       injectToolRuntime(frame, tabId);
       frame.dataset.ready = '1';
       clearTimeout(Number(frame.dataset.timeout));
-      const launchData = tab ? S.launchPayloads[tab.toolId] : null;
-      if (tab && launchData) delete S.launchPayloads[tab.toolId];
+      const launchData = tab ? S.launchPayloads[tab.tabId] : null;
+      if (tab && launchData) delete S.launchPayloads[tab.tabId];
       const fullCtx = { ...S.ctx, sharedCss: SHARED_TOOL_CSS, launchData: launchData || null };
       if (Array.isArray(frame._dvReadyCbs)) {
         const cbs = frame._dvReadyCbs.splice(0);
@@ -1968,7 +2042,7 @@
           if (tabId && payload?.title) updateTabTitle(tabId, payload.title);
           break;
         case 'OPEN_TOOL':
-          if (payload?.toolId) openTool(payload.toolId, payload.data || payload.launchData || null);
+          if (payload?.toolId) openTool(payload.toolId, payload.data || payload.launchData || null, { newTab: !!payload.newTab });
           break;
         case 'API_REQUEST':
           if (frame && tabId && payload) handleToolApiRequest(frame, tabId, payload);
@@ -2598,11 +2672,17 @@
       toast(`Exported ${S.networkLogs.length} audit records to CSV.`, 'success');
     }
 
+    function syncDocumentTitle() {
+      const activeTab = S.activeTabId ? S.tabs.find(t => t.tabId === S.activeTabId) : null;
+      document.title = activeTab?.name ? `${activeTab.name} — ${BASE_PAGE_TITLE}` : BASE_PAGE_TITLE;
+    }
+
     function updateTabTitle(tabId, title) {
       const tab = S.tabs.find(t => t.tabId === tabId);
       if (tab) tab.name = title;
       const el = document.querySelector(`.tab[data-tab-id="${tabId}"] .tab-name`);
       if (el) { el.textContent = title; el.title = title; }
+      if (tabId === S.activeTabId) syncDocumentTitle();
     }
 
     function updateTabMeta(tabId, m) {
@@ -3021,6 +3101,7 @@
       const all = [
         ...S.tabs.map(t => ({ icon: t.icon, label: `Switch to ${t.name}`, sub: 'Open Tab', run: () => activate(t.tabId) })),
         ...S.tools.map(t => ({ icon: t.icon, label: t.name, sub: t.category, run: () => openTool(t.id) })),
+        ...S.tools.map(t => ({ icon: t.icon, label: `New Tab: ${t.name}`, sub: `${t.category} · New Tab`, run: () => openTool(t.id, null, { newTab: true }) })),
         ...(S.isExternalMode ? [{ icon: '🔌', label: 'Configure Local Proxy URL', sub: 'External Mode', run: openProxyModal }] : []),
         { icon: '🌙', label: 'Toggle Light / Dark Theme', sub: 'Command', run: () => document.getElementById('theme-btn').click() },
         { icon: '📡', label: 'Toggle Network Activity Console', sub: 'Command', run: () => document.getElementById('network-drawer').classList.toggle('open') },

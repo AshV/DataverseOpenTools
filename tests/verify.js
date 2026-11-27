@@ -159,4 +159,83 @@ const recentTools = [
     }
   }
   console.log(`PASS: All ${recentTools.length} recent tools complete TOOL_READY -> CONTEXT_INIT handshake`);
+
+  // 7. Host multi-tab & browser document.title sync checks
+  const hostScript = hostHtml.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/)[1].replace(/\n\s*init\(\);\s*$/, '\n');
+  const hostEls = new Map();
+  const hostFrames = [];
+  class HostEl extends FakeEl {
+    constructor(id = '') { super(id); this.children = []; }
+    appendChild(c) { this.children.push(c); hostFrames.push(c); }
+    insertBefore(c) { this.children.push(c); }
+    remove() { const i = hostFrames.indexOf(this); if (i >= 0) hostFrames.splice(i, 1); }
+  }
+  const hostDoc = {
+    title: 'DV Open Tools',
+    documentElement: { dataset: {} },
+    getElementById: id => (hostEls.has(id) ? hostEls.get(id) : (hostEls.set(id, new HostEl(id)), hostEls.get(id))),
+    createElement: () => new HostEl(),
+    querySelectorAll: sel => (sel === '.tool-frame' ? hostFrames : []),
+    querySelector: sel => {
+      const m = sel.match(/data-tab-id="([^"]+)"/);
+      return m ? hostFrames.find(f => f.dataset.tabId === m[1]) || null : null;
+    },
+    addEventListener() {}
+  };
+  const hostCtx = vm.createContext({
+    console, Math, Date, Map, Set, Promise, URLSearchParams, Blob,
+    URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
+    setTimeout: () => 1, clearTimeout() {},
+    location: { origin: 'https://org.crm.dynamics.com', protocol: 'https:', hostname: 'org.crm.dynamics.com', search: '' },
+    document: hostDoc,
+    navigator: { clipboard: { writeText: async () => {} } },
+    addEventListener() {},
+    assert
+  });
+  hostCtx.window = hostCtx;
+  vm.runInContext(hostScript, hostCtx);
+  await vm.runInContext(`(async () => {
+    S.tools = [{ id: 'sql-query', name: 'SQL Query', icon: '🗄️', category: 'Query', wrName: 'dvot_sql.html' }];
+    const t1 = await openTool('sql-query');
+    assert.strictEqual(S.tabs.length, 1);
+    assert.strictEqual(document.title, 'SQL Query — DV Open Tools');
+
+    const t1Again = await openTool('sql-query');
+    assert.strictEqual(t1Again, t1);
+    assert.strictEqual(S.tabs.length, 1);
+
+    const t2 = await openTool('sql-query', { table: 'account' }, { newTab: true });
+    assert.notStrictEqual(t2, t1);
+    assert.strictEqual(S.tabs.length, 2);
+    assert.strictEqual(S.tabs[1].name, 'SQL Query #2');
+    assert.strictEqual(document.title, 'SQL Query #2 — DV Open Tools');
+    assert.deepStrictEqual(S.launchPayloads[t2], { table: 'account' });
+
+    const t3 = await duplicateTab(t1);
+    assert.strictEqual(S.tabs.length, 3);
+    assert.strictEqual(S.tabs[2].name, 'SQL Query #3');
+    assert.strictEqual(document.title, 'SQL Query #3 — DV Open Tools');
+
+    updateTabTitle(t3, 'SQL — 5 rows');
+    assert.strictEqual(document.title, 'SQL — 5 rows — DV Open Tools');
+    updateTabTitle(t1, 'SQL — 99 rows');
+    assert.strictEqual(document.title, 'SQL — 5 rows — DV Open Tools');
+
+    activate(t1);
+    assert.strictEqual(document.title, 'SQL — 99 rows — DV Open Tools');
+
+    reloadTab(t1);
+    assert.strictEqual(S.tabs.find(t => t.tabId === t1).name, 'SQL Query');
+    assert.strictEqual(document.title, 'SQL Query — DV Open Tools');
+
+    const f1 = openFileTool('<html></html>', { id: 'custom-local', name: 'Local Tool', icon: '📂' });
+    const f2 = await duplicateTab(f1);
+    assert.strictEqual(S.tabs.find(t => t.tabId === f2).name, 'Local Tool #2');
+    assert.strictEqual(document.title, 'Local Tool #2 — DV Open Tools');
+
+    for (const id of [t1, t2, t3, f1, f2]) closeTab(id);
+    assert.strictEqual(S.tabs.length, 0);
+    assert.strictEqual(document.title, 'DV Open Tools');
+  })()`, hostCtx);
+  console.log('PASS: Host multi-tab & browser document.title sync checks');
 })();
