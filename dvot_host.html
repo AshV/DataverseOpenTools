@@ -703,6 +703,39 @@
     </div>
   </div>
 
+  <!-- ══════════════ 401 AUTH / CONNECTION EXPIRED MODAL ══════════════ -->
+  <div class="overlay" id="auth-modal">
+    <div class="modal" style="width:520px;">
+      <h2>🔑 Connection Update Required (401 Unauthorized)</h2>
+      <div class="warn-box" id="auth-modal-msg" style="margin-bottom:12px;">
+        Your Dataverse session or local proxy Bearer token was rejected (HTTP 401). Pending API calls are paused to avoid repeated failed requests.
+      </div>
+      <div id="auth-proxy-box" style="display:none;margin-bottom:12px;">
+        <div class="form-row">
+          <label>Local Proxy URL</label>
+          <input type="url" id="auth-proxy-input" placeholder="http://127.0.0.1:8787">
+          <div class="form-hint" style="line-height:1.55;">
+            Update your token in <code>dev-server.config.json</code>, refresh CLI auth (<code>pac auth create</code> / <code>az login</code>), or switch Proxy URL, then click <strong>Test &amp; Retry Connection</strong>.
+          </div>
+        </div>
+      </div>
+      <div id="auth-pp-box" style="display:none;margin-bottom:12px;">
+        <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.6;">
+          Your Dynamics 365 browser session may have expired or signed out. Re-authenticate in another tab or reload this host page, then test the session.
+        </p>
+      </div>
+      <div id="auth-modal-err" style="display:none;color:#d13438;font-size:12px;margin-bottom:10px;font-weight:600;"></div>
+      <div class="modal-footer" style="justify-content:space-between;">
+        <button class="btn btn-secondary" id="auth-pause-btn">Pause API Calls</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary" id="auth-reload-btn" style="display:none;">🔄 Reload Host</button>
+          <button class="btn btn-secondary" id="auth-open-proxy-btn" style="display:none;">🔌 Proxy Settings</button>
+          <button class="btn btn-primary" id="auth-retry-btn">🔄 Test &amp; Retry Connection</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ══════════════ LOCAL PROXY URL MODAL ══════════════ -->
   <div class="overlay" id="proxy-modal">
     <div class="modal" style="width:520px;">
@@ -976,6 +1009,9 @@
       networkLogs: [],
       pendingApprovals: [],
       alwaysAllowedTabs: new Set(),
+      authExpired: false,
+      authPromptPromise: null,
+      authErrorMsg: '',
       pendingLaunchToolId: new URLSearchParams(location.search).get('tool') || '',
     };
 
@@ -1041,20 +1077,52 @@
       return `${base}/api/data/v${S.cfg.apiVersion}${path}`;
     }
     async function dv(path, opts = {}) {
+      const { bypassAuthGate = false, _authRetried = false, ...fetchInit } = opts;
+      if (!bypassAuthGate && S.authExpired) {
+        const reconnected = await openAuthReconnectModal(S.authErrorMsg);
+        if (!reconnected) {
+          const pausedErr = new Error('401 Unauthorized — Connection paused. Update your connection before making API calls.');
+          pausedErr.status = 401;
+          throw pausedErr;
+        }
+      }
+
       const r = await fetch(dvUrl(path), {
-        ...opts,
+        ...fetchInit,
         headers: { 'OData-MaxVersion': '4.0', 'OData-Version': '4.0',
-                   'Accept': 'application/json', 'Content-Type': 'application/json', ...opts.headers }
+                   'Accept': 'application/json', 'Content-Type': 'application/json', ...fetchInit.headers }
       });
+
+      if (r.status === 401) {
+        const errJson = await r.json().catch(() => ({}));
+        const msg = errJson?.error?.message || `${r.status} ${r.statusText || 'Unauthorized'}`;
+        if (!bypassAuthGate && !_authRetried) {
+          const reconnected = await handleUnauthorizedResponse(msg);
+          if (reconnected) {
+            return dv(path, { ...opts, _authRetried: true });
+          }
+        } else {
+          S.authExpired = true;
+          S.authErrorMsg = msg;
+          setStatus(false);
+        }
+        const err = new Error(msg);
+        err.status = 401;
+        throw err;
+      }
+
       if (!r.ok) {
         const errJson = await r.json().catch(() => ({}));
-        throw new Error(errJson?.error?.message || `${r.status} ${r.statusText}`);
+        const err = new Error(errJson?.error?.message || `${r.status} ${r.statusText}`);
+        err.status = r.status;
+        throw err;
       }
       return r.json();
     }
 
     /* ─── Context init ───────────────────────────────────────── */
-    async function buildContext() {
+    async function buildContext(opts = {}) {
+      const { bypassAuthGate = false } = opts;
       const base = getApiBaseUrl();
       if (S.isExternalMode) {
         if (!base) throw new Error('Local Proxy URL is not configured.');
@@ -1070,10 +1138,10 @@
         } catch {}
       }
 
-      const who = await dv('/WhoAmI');
+      const who = await dv('/WhoAmI', { bypassAuthGate });
       let name = '', email = '', environmentId = '';
       try {
-        const u = await dv(`/systemusers(${who.UserId})?$select=fullname,internalemailaddress`);
+        const u = await dv(`/systemusers(${who.UserId})?$select=fullname,internalemailaddress`, { bypassAuthGate });
         name  = u.fullname || '';
         email = u.internalemailaddress || '';
       } catch {}
@@ -1087,7 +1155,7 @@
 
       if (!environmentId) {
         try {
-          const orgData = await dv(`/RetrieveCurrentOrganization(AccessType=Microsoft.Dynamics.CRM.EndpointAccessType'Default')`);
+          const orgData = await dv(`/RetrieveCurrentOrganization(AccessType=Microsoft.Dynamics.CRM.EndpointAccessType'Default')`, { bypassAuthGate });
           environmentId = orgData?.Detail?.EnvironmentId || '';
         } catch {}
       }
@@ -1130,17 +1198,26 @@
       if (S.isExternalMode) {
         const pUrl = getApiBaseUrl();
         proxyBtn.style.display = 'inline-flex';
-        proxyBtn.textContent = ok && pUrl ? `🟢 Proxy: ${new URL(pUrl).host}` : '🔌 Proxy URL';
-        proxyBtn.style.background = ok ? 'rgba(16,124,16,0.3)' : 'rgba(255,165,0,0.22)';
-        proxyBtn.style.borderColor = ok ? 'rgba(87,179,94,0.6)' : 'rgba(255,165,0,0.5)';
-        if (emptyProxyBtn) emptyProxyBtn.style.display = ok ? 'none' : 'inline-flex';
+        if (S.authExpired) {
+          proxyBtn.textContent = '🔑 Update Auth (401)';
+          proxyBtn.style.background = 'rgba(209,52,56,0.35)';
+          proxyBtn.style.borderColor = 'rgba(255,107,107,0.75)';
+        } else {
+          proxyBtn.textContent = ok && pUrl ? `🟢 Proxy: ${new URL(pUrl).host}` : '🔌 Proxy URL';
+          proxyBtn.style.background = ok ? 'rgba(16,124,16,0.3)' : 'rgba(255,165,0,0.22)';
+          proxyBtn.style.borderColor = ok ? 'rgba(87,179,94,0.6)' : 'rgba(255,165,0,0.5)';
+        }
+        if (emptyProxyBtn) emptyProxyBtn.style.display = (ok && !S.authExpired) ? 'none' : 'inline-flex';
       }
 
-      document.getElementById('hdr-env').textContent   = ok ? host : (S.isExternalMode ? (S.tools.length ? 'Preview Mode (./tools)' : 'Proxy Not Connected') : 'Connection failed');
+      document.getElementById('hdr-env').textContent   = S.authExpired ? '🔑 Auth Required (401)' : (ok ? host : (S.isExternalMode ? (S.tools.length ? 'Preview Mode (./tools)' : 'Proxy Not Connected') : 'Connection failed'));
       document.getElementById('hdr-user').textContent  = S.ctx?.userName || '—';
       document.getElementById('st-api').textContent    = `API v${S.cfg.apiVersion}`;
       document.getElementById('st-env').textContent    = host;
-      document.getElementById('st-conn').textContent   = ok ? '🟢 Connected' : (S.isExternalMode && !getApiBaseUrl() ? (S.tools.length ? '🟡 Preview (No Proxy)' : '🟡 Needs Proxy URL') : '🔴 Error');
+      document.getElementById('st-conn').textContent   = S.authExpired
+        ? '🔑 Auth Expired (401)'
+        : (ok ? '🟢 Connected' : (S.isExternalMode && !getApiBaseUrl() ? (S.tools.length ? '🟡 Preview (No Proxy)' : '🟡 Needs Proxy URL') : '🔴 Error'));
+      document.getElementById('st-conn').title         = S.authExpired ? 'Session / Bearer token rejected (401) — click to update connection' : 'Connection Status';
       // Show storage backend in status bar
       const storeLabels = { localStorage: '💾 Persistent', sessionStorage: '💾 Session', memory: '⚠️ No Storage' };
       document.getElementById('st-store').textContent = storeLabels[ls.type] || '—';
@@ -1778,6 +1855,107 @@
       }
     });
 
+    /* ─── 401 Auth Circuit Breaker & Connection Reconnect Modal ─ */
+    let _resolveAuthPrompt = null;
+
+    function openAuthReconnectModal(errMsg = '') {
+      if (S.authPromptPromise) return S.authPromptPromise;
+      S.authPromptPromise = new Promise(resolve => {
+        _resolveAuthPrompt = resolve;
+      });
+
+      const msgEl = document.getElementById('auth-modal-msg');
+      if (msgEl) {
+        msgEl.textContent = errMsg
+          ? `Dataverse / proxy returned HTTP 401 (${errMsg}). Requests are paused until the connection is updated.`
+          : 'Your Dataverse session or Bearer token expired (HTTP 401). Requests are paused until the connection is updated.';
+      }
+      const errEl = document.getElementById('auth-modal-err');
+      if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+
+      const proxyBox = document.getElementById('auth-proxy-box');
+      const ppBox = document.getElementById('auth-pp-box');
+      const openProxyBtn = document.getElementById('auth-open-proxy-btn');
+      const reloadBtn = document.getElementById('auth-reload-btn');
+      const proxyInp = document.getElementById('auth-proxy-input');
+
+      if (S.isExternalMode) {
+        if (proxyBox) proxyBox.style.display = 'block';
+        if (ppBox) ppBox.style.display = 'none';
+        if (openProxyBtn) openProxyBtn.style.display = 'inline-flex';
+        if (reloadBtn) reloadBtn.style.display = 'none';
+        if (proxyInp) proxyInp.value = getApiBaseUrl() || 'http://127.0.0.1:8787';
+      } else {
+        if (proxyBox) proxyBox.style.display = 'none';
+        if (ppBox) ppBox.style.display = 'block';
+        if (openProxyBtn) openProxyBtn.style.display = 'none';
+        if (reloadBtn) reloadBtn.style.display = 'inline-flex';
+      }
+
+      document.getElementById('auth-modal')?.classList.add('open');
+      return S.authPromptPromise;
+    }
+
+    function finishAuthPrompt(reconnected) {
+      document.getElementById('auth-modal')?.classList.remove('open');
+      const resolve = _resolveAuthPrompt;
+      _resolveAuthPrompt = null;
+      S.authPromptPromise = null;
+      if (resolve) resolve(Boolean(reconnected));
+    }
+
+    async function handleUnauthorizedResponse(errMsg) {
+      S.authExpired = true;
+      S.authErrorMsg = errMsg || '401 Unauthorized';
+      setStatus(false);
+      return openAuthReconnectModal(S.authErrorMsg);
+    }
+
+    async function ensureAuthReady() {
+      if (!S.authExpired) return true;
+      return openAuthReconnectModal(S.authErrorMsg);
+    }
+
+    async function retryAuthConnection() {
+      const btn = document.getElementById('auth-retry-btn');
+      const errEl = document.getElementById('auth-modal-err');
+      if (S.isExternalMode) {
+        const rawUrl = document.getElementById('auth-proxy-input')?.value || '';
+        const normalized = normalizeProxyUrl(rawUrl);
+        if (!normalized) {
+          if (errEl) { errEl.textContent = 'Enter a valid http(s) Proxy URL.'; errEl.style.display = 'block'; }
+          return;
+        }
+        if (normalized !== S.cfg.proxyUrl) {
+          S.cfg.proxyUrl = normalized;
+          S.externalHtmlCache.clear();
+          S.bundleHtmlCache.clear();
+          ls.set('cfg', S.cfg);
+        }
+      }
+      if (btn) { btn.disabled = true; btn.textContent = 'Testing…'; }
+      if (errEl) errEl.style.display = 'none';
+      try {
+        S.ctx = await buildContext({ bypassAuthGate: true });
+        S.authExpired = false;
+        S.authErrorMsg = '';
+        setStatus(true);
+        toast('Connection restored.', 'success');
+        finishAuthPrompt(true);
+        if (!S.tools.length) await discoverTools(true);
+      } catch (err) {
+        S.authExpired = true;
+        S.authErrorMsg = err.message || '401 Unauthorized';
+        setStatus(false);
+        if (errEl) {
+          errEl.textContent = `Reconnect failed: ${err.message}`;
+          errEl.style.display = 'block';
+        }
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🔄 Test & Retry Connection'; }
+      }
+    }
+
     /* ─── Security Gateway & In-Frame Fetch Interceptor ──────── */
     function interceptFrameFetch(frame, tabId) {
       try {
@@ -1871,6 +2049,47 @@
             }
 
             let fetchArgs = arguments;
+            const buildProxiedArgs = () => {
+              let outArgs = fetchArgs;
+              const base = getApiBaseUrl();
+              if (S.isExternalMode && base && base !== location.origin) {
+                if (typeof input === 'string' && input.startsWith('/api/data/v')) {
+                  outArgs = [`${base}${input}`, init];
+                } else if (typeof input === 'object' && input && typeof input.url === 'string') {
+                  try {
+                    const u = new URL(input.url);
+                    if (u.pathname.startsWith('/api/data/v') && (u.origin === location.origin || u.origin === 'null')) {
+                      outArgs = [new (win.Request || Request)(`${base}${u.pathname}${u.search}`, input), init];
+                    }
+                  } catch {}
+                }
+              }
+              return outArgs;
+            };
+
+            const makeSyntheticAuthResp = (msg) => {
+              const ResponseClass = win.Response || Response;
+              return new ResponseClass(JSON.stringify({
+                error: { code: 'AUTH_REQUIRED', message: msg }
+              }), {
+                status: 401,
+                statusText: 'Unauthorized (Connection Paused)',
+                headers: { 'Content-Type': 'application/json' }
+              });
+            };
+
+            if (!(await ensureAuthReady())) {
+              const pauseMsg = '401 Unauthorized — Connection paused. Update your connection before retrying.';
+              recordNetworkLog({
+                id: uid(), tabId, toolName, toolIcon,
+                method: methUpper, path: displayPath, url: urlStr,
+                status: 401, statusText: 'Auth Required (Paused)',
+                latency: 0, headers: {}, body: init?.body || null,
+                policy: S.cfg.securityPolicy, timestamp: new Date()
+              });
+              return makeSyntheticAuthResp(pauseMsg);
+            }
+
             const apiBase = getApiBaseUrl();
             if (S.isExternalMode && !apiBase) {
               const errMsg = 'Local Proxy URL is not configured. Click "🔌 Proxy URL" in the header to connect to Dataverse.';
@@ -1887,22 +2106,22 @@
                 headers: { 'Content-Type': 'application/json' }
               });
             }
-            if (S.isExternalMode && apiBase && apiBase !== location.origin) {
-              if (typeof input === 'string' && input.startsWith('/api/data/v')) {
-                fetchArgs = [`${apiBase}${input}`, init];
-              } else if (typeof input === 'object' && input && typeof input.url === 'string') {
-                try {
-                  const u = new URL(input.url);
-                  if (u.pathname.startsWith('/api/data/v') && (u.origin === location.origin || u.origin === 'null')) {
-                    fetchArgs = [new (win.Request || Request)(`${apiBase}${u.pathname}${u.search}`, input), init];
-                  }
-                } catch {}
-              }
-            }
 
             const t0 = performance.now();
             try {
-              const res = await originalFetch.apply(win, fetchArgs);
+              let res = await originalFetch.apply(win, buildProxiedArgs());
+              if (res.status === 401) {
+                let errTxt = `${res.status} ${res.statusText || 'Unauthorized'}`;
+                try {
+                  const errClone = await res.clone().json();
+                  if (errClone?.error?.message) errTxt = errClone.error.message;
+                } catch {}
+                const reconnected = await handleUnauthorizedResponse(errTxt);
+                if (reconnected) {
+                  res = await originalFetch.apply(win, buildProxiedArgs());
+                }
+              }
+
               const latency = Math.round(performance.now() - t0);
               const capturedHeaders = {};
               if (res.headers && typeof res.headers.forEach === 'function') {
@@ -2017,6 +2236,14 @@
       }
 
       // Execute request
+      if (!(await ensureAuthReady())) {
+        const pauseMsg = '401 Unauthorized — Connection paused. Update your connection before retrying.';
+        postToTool(frame, 'API_RESPONSE', {
+          reqId, ok: false, status: 401, statusText: 'Auth Required (Paused)',
+          error: pauseMsg
+        });
+        return;
+      }
       if (S.isExternalMode && !getApiBaseUrl()) {
         postToTool(frame, 'API_RESPONSE', {
           reqId, ok: false, status: 503, statusText: 'Proxy URL Not Configured',
@@ -2025,7 +2252,7 @@
         return;
       }
       const t0 = performance.now();
-      const url = dvUrl(path);
+      let url = dvUrl(path);
 
       try {
         const fetchOpts = {
@@ -2042,7 +2269,19 @@
           fetchOpts.body = typeof body === 'string' ? body : JSON.stringify(body);
         }
 
-        const res = await fetch(url, fetchOpts);
+        let res = await fetch(url, fetchOpts);
+        if (res.status === 401) {
+          let errTxt = `${res.status} ${res.statusText || 'Unauthorized'}`;
+          try {
+            const errClone = await res.clone().json();
+            if (errClone?.error?.message) errTxt = errClone.error.message;
+          } catch {}
+          const reconnected = await handleUnauthorizedResponse(errTxt);
+          if (reconnected) {
+            url = dvUrl(path);
+            res = await fetch(url, fetchOpts);
+          }
+        }
         const latency = Math.round(performance.now() - t0);
 
         const capturedHeaders = {};
@@ -2415,7 +2654,9 @@
 
     async function reconnectViaProxy(forceRefresh = true) {
       try {
-        S.ctx = await buildContext();
+        S.ctx = await buildContext({ bypassAuthGate: true });
+        S.authExpired = false;
+        S.authErrorMsg = '';
         setStatus(true);
         await discoverTools(forceRefresh);
         toast(`Connected to proxy (${S.proxyTargetHost || getApiBaseUrl()}).`, 'success');
@@ -2426,6 +2667,10 @@
         }
       } catch (err) {
         console.error('[dvopentools] Proxy connection failed:', err);
+        if (err.status === 401) {
+          S.authExpired = true;
+          S.authErrorMsg = err.message;
+        }
         S.proxyTargetHost = '';
         S.ctx = {
           environmentUrl: getApiBaseUrl() || location.origin,
@@ -2439,6 +2684,7 @@
         S.tools = [];
         renderSidebar();
         toast(`Could not reach proxy at ${getApiBaseUrl()}: ${err.message}`, 'error', 7000);
+        if (err.status === 401) openAuthReconnectModal(err.message);
       }
     }
 
@@ -2452,6 +2698,8 @@
       }
       S.cfg.proxyUrl = normalized;
       S.proxyTargetHost = '';
+      S.authExpired = false;
+      S.authErrorMsg = '';
       S.externalHtmlCache.clear();
       S.bundleHtmlCache.clear();
       ls.set('cfg', S.cfg);
@@ -2463,6 +2711,8 @@
     function clearProxyUrl() {
       S.cfg.proxyUrl = '';
       S.proxyTargetHost = '';
+      S.authExpired = false;
+      S.authErrorMsg = '';
       S.externalHtmlCache.clear();
       S.bundleHtmlCache.clear();
       S.tools = [];
@@ -2556,9 +2806,25 @@
     document.getElementById('tab-add').addEventListener('click', triggerFilePicker);
     document.getElementById('empty-load-btn').addEventListener('click', triggerFilePicker);
 
-    document.getElementById('proxy-btn')?.addEventListener('click', openProxyModal);
+    document.getElementById('proxy-btn')?.addEventListener('click', () => {
+      if (S.authExpired) openAuthReconnectModal(S.authErrorMsg);
+      else openProxyModal();
+    });
     document.getElementById('empty-proxy-btn')?.addEventListener('click', openProxyModal);
-    document.getElementById('st-conn')?.addEventListener('click', () => { if (S.isExternalMode) openProxyModal(); });
+    document.getElementById('st-conn')?.addEventListener('click', () => {
+      if (S.authExpired) openAuthReconnectModal(S.authErrorMsg);
+      else if (S.isExternalMode) openProxyModal();
+    });
+    document.getElementById('auth-pause-btn')?.addEventListener('click', () => finishAuthPrompt(false));
+    document.getElementById('auth-retry-btn')?.addEventListener('click', retryAuthConnection);
+    document.getElementById('auth-proxy-input')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); retryAuthConnection(); }
+    });
+    document.getElementById('auth-reload-btn')?.addEventListener('click', () => location.reload());
+    document.getElementById('auth-open-proxy-btn')?.addEventListener('click', () => {
+      finishAuthPrompt(false);
+      openProxyModal();
+    });
     document.getElementById('cfg-open-proxy-btn')?.addEventListener('click', () => {
       document.getElementById('settings-modal').classList.remove('open');
       openProxyModal();
