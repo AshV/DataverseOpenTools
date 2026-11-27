@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visual FetchXML Builder</title>
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "fetchxml-builder",
+    "name":           "Visual FetchXML Builder",
+    "version":        "1.0.0",
+    "description":    "Build Dataverse FetchXML visually (tables, columns, link-entity joins, AND/OR filters, ordering, aggregates) or reverse-parse FetchXML, preview rows, and send to FetchXML Runner or SQL Query.",
+    "icon":           "🧱",
+    "category":       "Query",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+  <style>
+    .fxb-split { flex: 1; display: grid; grid-template-columns: minmax(360px, 48%) minmax(0, 1fr); min-height: 0; }
+    @media (max-width: 1020px) { .fxb-split { grid-template-columns: 1fr; overflow: auto; } }
+    .fxb-left { display: flex; flex-direction: column; border-right: 2px solid var(--border); min-height: 0; overflow: auto; padding: 12px 14px; gap: 12px; }
+    .fxb-right { display: flex; flex-direction: column; min-height: 0; }
+    .fxb-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .fxb-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 12px; }
+    .fxb-cols-grid { max-height: 155px; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 4px 8px; font-size: 11px; border: 1px solid var(--border); padding: 6px 8px; border-radius: 4px; background: var(--surface-2); }
+    .fxb-row-item { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; background: var(--surface-2); padding: 6px 8px; border-radius: 4px; border: 1px solid var(--border); font-size: 11px; }
+    .fxb-xml { flex: 1; width: 100%; border: none !important; border-radius: 0 !important; resize: none; padding: 10px 14px !important; background: var(--code-bg) !important; font-family: 'Cascadia Code', Consolas, monospace !important; line-height: 1.5; min-height: 190px; }
+    .fxb-preview { max-height: 44%; overflow: auto; border-top: 2px solid var(--border); }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <select id="entity-select" style="min-width:220px;"><option value="">Loading tables…</option></select>
+    <label style="display:flex;align-items:center;gap:4px;font-size:12px;">Top: <input type="number" id="inp-top" value="50" min="1" max="5000" style="width:72px;"></label>
+    <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="chk-distinct"> Distinct</label>
+    <label style="display:flex;align-items:center;gap:4px;font-size:12px;"><input type="checkbox" id="chk-aggregate"> Aggregate</label>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-parse-xml" title="Parse the XML editor back into visual builder sections">↙ Parse XML</button>
+    <button class="dv-btn" id="btn-to-sql">🗄️ Open in SQL</button>
+    <button class="dv-btn" id="btn-to-runner">🔍 Open in Runner</button>
+    <button class="dv-btn dv-btn-primary" id="btn-run-preview" disabled>▶ Preview</button>
+  </div>
+
+  <div class="fxb-split">
+    <div class="fxb-left">
+      <!-- Columns -->
+      <div class="fxb-card">
+        <div class="fxb-card-head">
+          <span>📋 Columns (<span id="lbl-col-count">0</span> selected)</span>
+          <div style="display:flex;gap:5px;align-items:center;">
+            <input type="text" id="col-filter" placeholder="Filter columns…" style="width:130px;">
+            <button class="dv-btn" id="btn-col-clear" type="button">Clear</button>
+          </div>
+        </div>
+        <div class="fxb-cols-grid" id="cols-grid"><span style="color:var(--text-muted);">Pick a table above to load attributes.</span></div>
+        <div id="agg-rows" style="display:none;flex-direction:column;gap:5px;"></div>
+      </div>
+
+      <!-- Filters -->
+      <div class="fxb-card">
+        <div class="fxb-card-head">
+          <span>🔎 Filters</span>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <select id="filter-logic" style="width:72px;"><option value="and">AND</option><option value="or">OR</option></select>
+            <button class="dv-btn" id="btn-add-filter" type="button">+ Condition</button>
+          </div>
+        </div>
+        <div id="filter-rows" style="display:flex;flex-direction:column;gap:5px;">
+          <span style="font-size:11px;color:var(--text-muted);">No filter conditions.</span>
+        </div>
+      </div>
+
+      <!-- Link-Entity Joins -->
+      <div class="fxb-card">
+        <div class="fxb-card-head">
+          <span>🔗 Joins (<code>link-entity</code>)</span>
+          <button class="dv-btn" id="btn-add-link" type="button">+ Join</button>
+        </div>
+        <div id="link-rows" style="display:flex;flex-direction:column;gap:5px;">
+          <span style="font-size:11px;color:var(--text-muted);">No linked tables.</span>
+        </div>
+      </div>
+
+      <!-- Sort Order -->
+      <div class="fxb-card">
+        <div class="fxb-card-head">
+          <span>↕️ Order By</span>
+          <button class="dv-btn" id="btn-add-order" type="button">+ Sort</button>
+        </div>
+        <div id="order-rows" style="display:flex;flex-direction:column;gap:5px;">
+          <span style="font-size:11px;color:var(--text-muted);">No sort columns.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="fxb-right">
+      <div class="dv-strip">
+        <strong>Generated FetchXML</strong>
+        <div class="dv-spacer"></div>
+        <button class="dv-btn" id="btn-copy-xml">📋 Copy XML</button>
+      </div>
+      <textarea id="xml-output" class="fxb-xml" spellcheck="false"></textarea>
+      <div class="fxb-preview" id="preview-wrap" style="display:none;">
+        <div class="dv-strip">
+          <strong>Preview Results</strong>
+          <span class="dv-badge dv-b-info" id="preview-badge">0 rows</span>
+          <div class="dv-spacer"></div>
+          <button class="dv-btn" id="btn-export-csv">📥 Export CSV</button>
+        </div>
+        <div id="preview-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg" style="font-family:monospace;font-size:11px;">Select a table to build FetchXML</span>
+    <div class="dv-spacer"></div>
+    <span id="tel-count">0 tables</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    let context = null;
+    const S = {
+      entities: [],
+      entityMap: new Map(),
+      attrsByEntity: new Map(),
+      relsByEntity: new Map(),
+      selectedCols: new Set(['name']),
+      aggSpecs: [],
+      filters: [],
+      links: [],
+      orders: [],
+      lastRows: []
+    };
+
+    const $ = id => document.getElementById(id);
+
+    const OPERATORS = [
+      { v: 'eq', label: 'Equals (=)', noVal: false },
+      { v: 'ne', label: 'Not Equals (!=)', noVal: false },
+      { v: 'like', label: 'Like (%...%)', noVal: false },
+      { v: 'begins-with', label: 'Begins With', noVal: false },
+      { v: 'not-null', label: 'Has Value', noVal: true },
+      { v: 'null', label: 'Is Null', noVal: true },
+      { v: 'gt', label: 'Greater Than (>)', noVal: false },
+      { v: 'ge', label: 'Greater or Eq (>=)', noVal: false },
+      { v: 'lt', label: 'Less Than (<)', noVal: false },
+      { v: 'le', label: 'Less or Eq (<=)', noVal: false },
+      { v: 'in', label: 'In (comma list)', noVal: false },
+      { v: 'last-x-days', label: 'Last X Days', noVal: false },
+      { v: 'today', label: 'Today', noVal: true },
+      { v: 'eq-userid', label: 'Current User', noVal: true }
+    ];
+
+    function escAttr(v) {
+      return String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    async function loadEntities() {
+      const data = await DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName,DisplayName,PrimaryIdAttribute,PrimaryNameAttribute');
+      S.entities = (data.value || [])
+        .filter(e => e.LogicalName && e.EntitySetName)
+        .map(e => ({
+          logicalName: e.LogicalName,
+          entitySetName: e.EntitySetName,
+          displayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+          primaryId: e.PrimaryIdAttribute || `${e.LogicalName}id`,
+          primaryName: e.PrimaryNameAttribute || 'name'
+        }))
+        .sort((a, b) => a.logicalName.localeCompare(b.logicalName));
+      S.entityMap = new Map(S.entities.map(e => [e.logicalName.toLowerCase(), e]));
+
+      $('entity-select').innerHTML = S.entities.map(e =>
+        `<option value="${DV.esc(e.logicalName)}">${DV.esc(e.logicalName)} (${DV.esc(e.displayName)})</option>`
+      ).join('');
+      if (S.entityMap.has('account')) $('entity-select').value = 'account';
+      $('tel-count').textContent = `${S.entities.length} tables`;
+      await onEntityChanged();
+    }
+
+    async function ensureEntitySchema(logicalName) {
+      const key = String(logicalName || '').toLowerCase();
+      if (!key) return { attrs: [], rels: [] };
+      if (!S.attrsByEntity.has(key)) {
+        const [aRes, rRes] = await Promise.all([
+          DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(key)}')/Attributes?$select=LogicalName,DisplayName,AttributeType,IsValidForRead,AttributeOf`),
+          DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(key)}')?$select=LogicalName&$expand=ManyToOneRelationships($select=SchemaName,ReferencingAttribute,ReferencedEntity,ReferencedAttribute),OneToManyRelationships($select=SchemaName,ReferencedAttribute,ReferencingEntity,ReferencingAttribute)`).catch(() => ({}))
+        ]);
+        const attrs = (aRes.value || [])
+          .filter(a => a.IsValidForRead !== false && !a.AttributeOf)
+          .map(a => ({ name: a.LogicalName, label: a.DisplayName?.UserLocalizedLabel?.Label || a.LogicalName, type: a.AttributeType }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        S.attrsByEntity.set(key, attrs);
+        const rels = [];
+        for (const r of (rRes.ManyToOneRelationships || [])) {
+          rels.push({ dir: 'N:1', target: r.ReferencedEntity, from: r.ReferencedAttribute, to: r.ReferencingAttribute, label: `${r.ReferencingAttribute} → ${r.ReferencedEntity} (${r.ReferencedAttribute})` });
+        }
+        for (const r of (rRes.OneToManyRelationships || [])) {
+          rels.push({ dir: '1:N', target: r.ReferencingEntity, from: r.ReferencingAttribute, to: r.ReferencedAttribute, label: `${r.ReferencingEntity}.${r.ReferencingAttribute} ← ${r.ReferencedAttribute}` });
+        }
+        S.relsByEntity.set(key, rels.sort((a, b) => a.target.localeCompare(b.target)));
+      }
+      return { attrs: S.attrsByEntity.get(key) || [], rels: S.relsByEntity.get(key) || [] };
+    }
+
+    async function onEntityChanged() {
+      const logicalName = $('entity-select').value;
+      if (!logicalName) return;
+      $('tel-msg').textContent = `Loading schema for ${logicalName}…`;
+      const meta = S.entityMap.get(logicalName.toLowerCase());
+      const { attrs } = await ensureEntitySchema(logicalName);
+      S.selectedCols = new Set([meta?.primaryId, meta?.primaryName].filter(Boolean));
+      S.filters = [];
+      S.links = [];
+      S.orders = [];
+      S.aggSpecs = [];
+      renderColumns(attrs);
+      renderFilters();
+      renderLinks();
+      renderOrders();
+      buildFetchXml();
+      $('btn-run-preview').disabled = false;
+      $('tel-msg').textContent = `${logicalName}: ${attrs.length} readable columns`;
+    }
+
+    function renderColumns(attrs = null) {
+      const logicalName = $('entity-select').value;
+      const all = attrs || S.attrsByEntity.get(logicalName.toLowerCase()) || [];
+      const q = $('col-filter').value.trim().toLowerCase();
+      const shown = q ? all.filter(a => a.name.toLowerCase().includes(q) || a.label.toLowerCase().includes(q)) : all;
+      $('lbl-col-count').textContent = String(S.selectedCols.size);
+      $('cols-grid').innerHTML = shown.map(a => `
+        <label style="display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${DV.esc(a.label)} (${DV.esc(a.type)})">
+          <input type="checkbox" class="fxb-col-chk" data-col="${DV.esc(a.name)}" ${S.selectedCols.has(a.name) ? 'checked' : ''}>
+          <span>${DV.esc(a.name)}</span>
+        </label>
+      `).join('') || '<span style="color:var(--text-muted);">No matching attributes.</span>';
+
+      $('cols-grid').querySelectorAll('.fxb-col-chk').forEach(chk => {
+        chk.addEventListener('change', () => {
+          if (chk.checked) S.selectedCols.add(chk.dataset.col);
+          else S.selectedCols.delete(chk.dataset.col);
+          $('lbl-col-count').textContent = String(S.selectedCols.size);
+          syncAggSpecs();
+          buildFetchXml();
+        });
+      });
+    }
+
+    function syncAggSpecs() {
+      const isAgg = $('chk-aggregate').checked;
+      const box = $('agg-rows');
+      box.style.display = isAgg ? 'flex' : 'none';
+      if (!isAgg) return;
+      const cols = Array.from(S.selectedCols);
+      S.aggSpecs = cols.map(col => S.aggSpecs.find(x => x.col === col) || { col, mode: 'groupby', alias: `${col}_agg` });
+      box.innerHTML = S.aggSpecs.map((sp, i) => `
+        <div class="fxb-row-item">
+          <code style="min-width:110px;">${DV.esc(sp.col)}</code>
+          <select class="fxb-agg-mode" data-i="${i}">
+            <option value="groupby" ${sp.mode === 'groupby' ? 'selected' : ''}>Group By</option>
+            <option value="count" ${sp.mode === 'count' ? 'selected' : ''}>Count</option>
+            <option value="countcolumn" ${sp.mode === 'countcolumn' ? 'selected' : ''}>Count Non-Null</option>
+            <option value="sum" ${sp.mode === 'sum' ? 'selected' : ''}>Sum</option>
+            <option value="avg" ${sp.mode === 'avg' ? 'selected' : ''}>Avg</option>
+            <option value="min" ${sp.mode === 'min' ? 'selected' : ''}>Min</option>
+            <option value="max" ${sp.mode === 'max' ? 'selected' : ''}>Max</option>
+          </select>
+          <input type="text" class="fxb-agg-alias" data-i="${i}" value="${DV.esc(sp.alias)}" placeholder="alias" style="width:110px;">
+        </div>
+      `).join('');
+      box.querySelectorAll('.fxb-agg-mode').forEach(el => el.addEventListener('change', () => { S.aggSpecs[el.dataset.i].mode = el.value; buildFetchXml(); }));
+      box.querySelectorAll('.fxb-agg-alias').forEach(el => el.addEventListener('input', () => { S.aggSpecs[el.dataset.i].alias = el.value; buildFetchXml(); }));
+    }
+
+    function renderFilters() {
+      const logicalName = $('entity-select').value;
+      const attrs = S.attrsByEntity.get(logicalName.toLowerCase()) || [];
+      const wrap = $('filter-rows');
+      if (!S.filters.length) { wrap.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No filter conditions.</span>'; return; }
+      wrap.innerHTML = S.filters.map((f, i) => {
+        const opSpec = OPERATORS.find(o => o.v === f.op) || OPERATORS[0];
+        return `<div class="fxb-row-item">
+          <select class="fxb-f-attr" data-i="${i}" style="max-width:140px;">${attrs.map(a => `<option value="${DV.esc(a.name)}" ${a.name === f.attr ? 'selected' : ''}>${DV.esc(a.name)}</option>`).join('')}</select>
+          <select class="fxb-f-op" data-i="${i}" style="max-width:130px;">${OPERATORS.map(o => `<option value="${o.v}" ${o.v === f.op ? 'selected' : ''}>${DV.esc(o.label)}</option>`).join('')}</select>
+          ${opSpec.noVal ? '' : `<input type="text" class="fxb-f-val" data-i="${i}" value="${DV.esc(f.val)}" placeholder="value" style="flex:1;min-width:90px;">`}
+          <button type="button" class="dv-btn fxb-f-del" data-i="${i}">✕</button>
+        </div>`;
+      }).join('');
+      wrap.querySelectorAll('.fxb-f-attr').forEach(el => el.addEventListener('change', () => { S.filters[el.dataset.i].attr = el.value; buildFetchXml(); }));
+      wrap.querySelectorAll('.fxb-f-op').forEach(el => el.addEventListener('change', () => { S.filters[el.dataset.i].op = el.value; renderFilters(); buildFetchXml(); }));
+      wrap.querySelectorAll('.fxb-f-val').forEach(el => el.addEventListener('input', () => { S.filters[el.dataset.i].val = el.value; buildFetchXml(); }));
+      wrap.querySelectorAll('.fxb-f-del').forEach(el => el.addEventListener('click', () => { S.filters.splice(Number(el.dataset.i), 1); renderFilters(); buildFetchXml(); }));
+    }
+
+    function renderLinks() {
+      const logicalName = $('entity-select').value;
+      const rels = S.relsByEntity.get(logicalName.toLowerCase()) || [];
+      const wrap = $('link-rows');
+      if (!S.links.length) { wrap.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No linked tables.</span>'; return; }
+      wrap.innerHTML = S.links.map((lk, i) => `
+        <div class="fxb-row-item">
+          <select class="fxb-l-rel" data-i="${i}" style="flex:1;min-width:180px;">
+            ${rels.map((r, ri) => `<option value="${ri}" ${r.target === lk.name && r.from === lk.from && r.to === lk.to ? 'selected' : ''}>[${r.dir}] ${DV.esc(r.label)}</option>`).join('')}
+          </select>
+          <select class="fxb-l-type" data-i="${i}" style="width:78px;">
+            <option value="inner" ${lk.linkType === 'inner' ? 'selected' : ''}>inner</option>
+            <option value="outer" ${lk.linkType === 'outer' ? 'selected' : ''}>outer</option>
+          </select>
+          <input type="text" class="fxb-l-alias" data-i="${i}" value="${DV.esc(lk.alias)}" placeholder="alias" style="width:72px;">
+          <input type="text" class="fxb-l-attrs" data-i="${i}" value="${DV.esc(lk.attrs)}" placeholder="attrs (comma)" style="width:130px;">
+          <button type="button" class="dv-btn fxb-l-del" data-i="${i}">✕</button>
+        </div>
+      `).join('');
+      wrap.querySelectorAll('.fxb-l-rel').forEach(el => el.addEventListener('change', () => {
+        const r = rels[Number(el.value)];
+        if (r) { Object.assign(S.links[el.dataset.i], { name: r.target, from: r.from, to: r.to }); buildFetchXml(); }
+      }));
+      wrap.querySelectorAll('.fxb-l-type').forEach(el => el.addEventListener('change', () => { S.links[el.dataset.i].linkType = el.value; buildFetchXml(); }));
+      wrap.querySelectorAll('.fxb-l-alias').forEach(el => el.addEventListener('input', () => { S.links[el.dataset.i].alias = el.value; buildFetchXml(); }));
+      wrap.querySelectorAll('.fxb-l-attrs').forEach(el => el.addEventListener('input', () => { S.links[el.dataset.i].attrs = el.value; buildFetchXml(); }));
+      wrap.querySelectorAll('.fxb-l-del').forEach(el => el.addEventListener('click', () => { S.links.splice(Number(el.dataset.i), 1); renderLinks(); buildFetchXml(); }));
+    }
+
+    function renderOrders() {
+      const logicalName = $('entity-select').value;
+      const attrs = S.attrsByEntity.get(logicalName.toLowerCase()) || [];
+      const wrap = $('order-rows');
+      if (!S.orders.length) { wrap.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">No sort columns.</span>'; return; }
+      wrap.innerHTML = S.orders.map((o, i) => `
+        <div class="fxb-row-item">
+          <select class="fxb-o-attr" data-i="${i}" style="flex:1;">${attrs.map(a => `<option value="${DV.esc(a.name)}" ${a.name === o.attr ? 'selected' : ''}>${DV.esc(a.name)}</option>`).join('')}</select>
+          <select class="fxb-o-dir" data-i="${i}" style="width:110px;">
+            <option value="false" ${!o.desc ? 'selected' : ''}>Ascending</option>
+            <option value="true" ${o.desc ? 'selected' : ''}>Descending</option>
+          </select>
+          <button type="button" class="dv-btn fxb-o-del" data-i="${i}">✕</button>
+        </div>
+      `).join('');
+      wrap.querySelectorAll('.fxb-o-attr').forEach(el => el.addEventListener('change', () => { S.orders[el.dataset.i].attr = el.value; buildFetchXml(); }));
+      wrap.querySelectorAll('.fxb-o-dir').forEach(el => el.addEventListener('change', () => { S.orders[el.dataset.i].desc = el.value === 'true'; buildFetchXml(); }));
+      wrap.querySelectorAll('.fxb-o-del').forEach(el => el.addEventListener('click', () => { S.orders.splice(Number(el.dataset.i), 1); renderOrders(); buildFetchXml(); }));
+    }
+
+    function buildFetchXml() {
+      const entity = $('entity-select').value;
+      if (!entity) return;
+      const top = parseInt($('inp-top').value, 10);
+      const isDistinct = $('chk-distinct').checked;
+      const isAgg = $('chk-aggregate').checked;
+
+      const fAttrs = [];
+      if (!isAgg && top > 0) fAttrs.push(`top="${top}"`);
+      if (isDistinct) fAttrs.push('distinct="true"');
+      if (isAgg) fAttrs.push('aggregate="true"');
+
+      const lines = [`<fetch${fAttrs.length ? ' ' + fAttrs.join(' ') : ''}>`, `  <entity name="${escAttr(entity)}">`];
+
+      if (isAgg) {
+        for (const sp of S.aggSpecs) {
+          if (sp.mode === 'groupby') lines.push(`    <attribute name="${escAttr(sp.col)}" alias="${escAttr(sp.alias)}" groupby="true" />`);
+          else lines.push(`    <attribute name="${escAttr(sp.col)}" alias="${escAttr(sp.alias)}" aggregate="${escAttr(sp.mode)}" />`);
+        }
+      } else {
+        for (const col of S.selectedCols) lines.push(`    <attribute name="${escAttr(col)}" />`);
+      }
+
+      if (S.filters.length) {
+        lines.push(`    <filter type="${$('filter-logic').value}">`);
+        for (const f of S.filters) {
+          const opSpec = OPERATORS.find(o => o.v === f.op) || OPERATORS[0];
+          if (opSpec.noVal) {
+            lines.push(`      <condition attribute="${escAttr(f.attr)}" operator="${escAttr(f.op)}" />`);
+          } else if (f.op === 'in') {
+            lines.push(`      <condition attribute="${escAttr(f.attr)}" operator="in">`);
+            for (const part of String(f.val || '').split(',').map(x => x.trim()).filter(Boolean)) {
+              lines.push(`        <value>${DV.esc(part)}</value>`);
+            }
+            lines.push('      </condition>');
+          } else {
+            lines.push(`      <condition attribute="${escAttr(f.attr)}" operator="${escAttr(f.op)}" value="${escAttr(f.val)}" />`);
+          }
+        }
+        lines.push('    </filter>');
+      }
+
+      for (const lk of S.links) {
+        lines.push(`    <link-entity name="${escAttr(lk.name)}" from="${escAttr(lk.from)}" to="${escAttr(lk.to)}" link-type="${escAttr(lk.linkType)}" alias="${escAttr(lk.alias)}">`);
+        for (const col of String(lk.attrs || '').split(',').map(x => x.trim()).filter(Boolean)) {
+          lines.push(`      <attribute name="${escAttr(col)}" />`);
+        }
+        lines.push('    </link-entity>');
+      }
+
+      if (!isAgg) {
+        for (const o of S.orders) {
+          lines.push(`    <order attribute="${escAttr(o.attr)}" descending="${o.desc ? 'true' : 'false'}" />`);
+        }
+      }
+
+      lines.push('  </entity>', '</fetch>');
+      $('xml-output').value = lines.join('\n');
+    }
+
+    async function parseXmlToBuilder() {
+      const xml = $('xml-output').value.trim();
+      const doc = new DOMParser().parseFromString(xml, 'text/xml');
+      if (doc.querySelector('parsererror')) { DV.notify('Invalid XML cannot be parsed.', 'error'); return; }
+      const fetchEl = doc.querySelector('fetch');
+      const entEl = doc.querySelector('fetch > entity');
+      const entName = entEl?.getAttribute('name');
+      if (!fetchEl || !entName) { DV.notify('Missing <fetch><entity name="...">.', 'warning'); return; }
+
+      if (S.entityMap.has(entName.toLowerCase())) $('entity-select').value = entName.toLowerCase();
+      await ensureEntitySchema(entName);
+
+      $('inp-top').value = fetchEl.getAttribute('top') || '50';
+      $('chk-distinct').checked = fetchEl.getAttribute('distinct') === 'true';
+      $('chk-aggregate').checked = fetchEl.getAttribute('aggregate') === 'true';
+
+      S.selectedCols = new Set();
+      S.aggSpecs = [];
+      entEl.querySelectorAll(':scope > attribute').forEach(a => {
+        const name = a.getAttribute('name');
+        if (!name) return;
+        S.selectedCols.add(name);
+        const agg = a.getAttribute('aggregate'), gb = a.getAttribute('groupby'), alias = a.getAttribute('alias') || `${name}_agg`;
+        if (agg || gb === 'true') S.aggSpecs.push({ col: name, mode: gb === 'true' ? 'groupby' : agg, alias });
+      });
+
+      const flt = entEl.querySelector(':scope > filter');
+      $('filter-logic').value = flt?.getAttribute('type') === 'or' ? 'or' : 'and';
+      S.filters = [];
+      flt?.querySelectorAll(':scope > condition').forEach(c => {
+        const op = c.getAttribute('operator') || 'eq';
+        const vals = Array.from(c.querySelectorAll(':scope > value')).map(v => v.textContent).join(', ');
+        S.filters.push({ attr: c.getAttribute('attribute') || '', op, val: c.getAttribute('value') ?? vals });
+      });
+
+      S.links = [];
+      entEl.querySelectorAll(':scope > link-entity').forEach(le => {
+        const attrs = Array.from(le.querySelectorAll(':scope > attribute')).map(a => a.getAttribute('name')).filter(Boolean).join(', ');
+        S.links.push({ name: le.getAttribute('name') || '', from: le.getAttribute('from') || '', to: le.getAttribute('to') || '', linkType: le.getAttribute('link-type') || 'inner', alias: le.getAttribute('alias') || 'l1', attrs });
+      });
+
+      S.orders = [];
+      entEl.querySelectorAll(':scope > order').forEach(o => {
+        S.orders.push({ attr: o.getAttribute('attribute') || '', desc: o.getAttribute('descending') === 'true' });
+      });
+
+      renderColumns();
+      syncAggSpecs();
+      renderFilters();
+      renderLinks();
+      renderOrders();
+      DV.notify('Parsed FetchXML into Visual Builder.', 'success');
+    }
+
+    function toBasicSql() {
+      const entity = $('entity-select').value || 'account';
+      const top = parseInt($('inp-top').value, 10);
+      const distinct = $('chk-distinct').checked ? 'DISTINCT ' : '';
+      const cols = Array.from(S.selectedCols);
+      const selectList = cols.length ? cols.join(', ') : '*';
+      let sql = `SELECT ${distinct}${top > 0 ? `TOP ${top} ` : ''}${selectList}\nFROM ${entity}`;
+      if (S.filters.length) {
+        const sep = $('filter-logic').value.toUpperCase() === 'OR' ? ' OR ' : ' AND ';
+        const parts = S.filters.map(f => {
+          if (f.op === 'null') return `${f.attr} IS NULL`;
+          if (f.op === 'not-null') return `${f.attr} IS NOT NULL`;
+          if (f.op === 'like') return `${f.attr} LIKE '${String(f.val).replace(/'/g, "''")}'`;
+          if (f.op === 'ne') return `${f.attr} <> '${String(f.val).replace(/'/g, "''")}'`;
+          return `${f.attr} = '${String(f.val).replace(/'/g, "''")}'`;
+        });
+        sql += `\nWHERE ${parts.join(sep)}`;
+      }
+      if (S.orders.length) sql += `\nORDER BY ${S.orders.map(o => `${o.attr} ${o.desc ? 'DESC' : 'ASC'}`).join(', ')}`;
+      return sql;
+    }
+
+    async function runPreview() {
+      const xml = $('xml-output').value.trim();
+      const entity = new DOMParser().parseFromString(xml, 'text/xml').querySelector('entity')?.getAttribute('name');
+      if (!entity) return;
+      const entitySet = S.entityMap.get(entity.toLowerCase())?.entitySetName || `${entity}s`;
+      $('btn-run-preview').disabled = true;
+      try {
+        const res = await DV.fetch(`/${entitySet}?fetchXml=${encodeURIComponent(xml)}`, { headers: { 'Prefer': 'odata.include-annotations="*"' } });
+        const rows = res.value || [];
+        S.lastRows = rows;
+        $('preview-wrap').style.display = 'block';
+        $('preview-badge').textContent = `${rows.length} rows`;
+        if (!rows.length) { $('preview-body').innerHTML = DV.ui.empty('0 rows returned.'); return; }
+        const cols = [...new Set(rows.flatMap(r => Object.keys(r).filter(k => !k.startsWith('@') && !k.includes('@OData.'))))];
+        $('preview-body').innerHTML = `<table class="dv-table"><thead><tr>${cols.map(c => `<th>${DV.esc(c)}</th>`).join('')}</tr></thead><tbody>` +
+          rows.map(r => `<tr>${cols.map(c => `<td>${DV.esc(r[`${c}@OData.Community.Display.V1.FormattedValue`] ?? r[c] ?? '')}</td>`).join('')}</tr>`).join('') +
+          '</tbody></table>';
+      } catch (err) {
+        DV.notify(err.message, 'error');
+      } finally {
+        $('btn-run-preview').disabled = false;
+      }
+    }
+
+    DV.onReady(async () => {
+      $('entity-select').addEventListener('change', onEntityChanged);
+      $('inp-top').addEventListener('input', buildFetchXml);
+      $('chk-distinct').addEventListener('change', buildFetchXml);
+      $('chk-aggregate').addEventListener('change', () => { syncAggSpecs(); buildFetchXml(); });
+      $('col-filter').addEventListener('input', () => renderColumns());
+      $('btn-col-clear').addEventListener('click', () => { S.selectedCols.clear(); renderColumns(); syncAggSpecs(); buildFetchXml(); });
+      $('filter-logic').addEventListener('change', buildFetchXml);
+
+      $('btn-add-filter').addEventListener('click', () => {
+        const attrs = S.attrsByEntity.get($('entity-select').value.toLowerCase()) || [];
+        S.filters.push({ attr: attrs[0]?.name || 'statecode', op: 'eq', val: '0' });
+        renderFilters(); buildFetchXml();
+      });
+      $('btn-add-link').addEventListener('click', () => {
+        const rels = S.relsByEntity.get($('entity-select').value.toLowerCase()) || [];
+        const r = rels[0];
+        if (!r) { DV.notify('No relationships discovered on this table.', 'warning'); return; }
+        S.links.push({ name: r.target, from: r.from, to: r.to, linkType: 'inner', alias: `l${S.links.length + 1}`, attrs: 'name' });
+        renderLinks(); buildFetchXml();
+      });
+      $('btn-add-order').addEventListener('click', () => {
+        const attrs = S.attrsByEntity.get($('entity-select').value.toLowerCase()) || [];
+        S.orders.push({ attr: attrs[0]?.name || 'createdon', desc: true });
+        renderOrders(); buildFetchXml();
+      });
+
+      $('btn-parse-xml').addEventListener('click', parseXmlToBuilder);
+      $('btn-copy-xml').addEventListener('click', () => DV.copyText($('xml-output').value, 'FetchXML copied'));
+      $('btn-to-runner').addEventListener('click', () => DV.openTool('fetchxml-playground', { fetchXml: $('xml-output').value }));
+      $('btn-to-sql').addEventListener('click', () => DV.openTool('sql-playground', { sql: toBasicSql() }));
+      $('btn-run-preview').addEventListener('click', runPreview);
+      $('btn-export-csv').addEventListener('click', () => {
+        if (!S.lastRows.length) return;
+        const cols = [...new Set(S.lastRows.flatMap(r => Object.keys(r).filter(k => !k.startsWith('@') && !k.includes('@OData.'))))];
+        DV.exportCsv(`fetchxml_preview_${new Date().toISOString().slice(0, 10)}.csv`, cols, S.lastRows.map(r => cols.map(c => r[`${c}@OData.Community.Display.V1.FormattedValue`] ?? r[c])));
+      });
+
+      await loadEntities();
+    });
+  </script>
+</body>
+</html>

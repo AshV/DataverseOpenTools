@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custom API &amp; Action Runner</title>
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "custom-api",
+    "name":           "Custom API & Action Runner",
+    "version":        "1.0.0",
+    "description":    "Browse Custom APIs (with Request Parameters, Response Properties & linked Plugin Types) and Classic Actions, auto-build inputs, execute GET/POST requests, and copy snippets.",
+    "icon":           "🧰",
+    "category":       "Extensibility",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+  <style>
+    .ca-split { flex: 1; display: grid; grid-template-columns: minmax(320px, 38%) minmax(0, 1fr); min-height: 0; }
+    @media (max-width: 980px) { .ca-split { grid-template-columns: 1fr; } }
+    .ca-left { overflow: auto; border-right: 2px solid var(--border); }
+    .ca-right { overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+    .ca-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .ca-param-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <input type="text" id="inp-search" placeholder="Search Custom API unique name, table, or action…" style="flex:1;min-width:200px;">
+    <select id="sel-kind" style="width:150px;">
+      <option value="all">All (APIs + Actions)</option>
+      <option value="customapi">Custom APIs only</option>
+      <option value="action">Classic Actions only</option>
+    </select>
+    <button class="dv-btn dv-btn-primary" id="btn-load">↻ Load</button>
+  </div>
+
+  <div class="ca-split">
+    <div class="ca-left" id="api-list">
+      <div class="dv-empty">Loading Custom APIs &amp; Classic Process Actions…</div>
+    </div>
+    <div class="ca-right" id="api-detail">
+      <div class="dv-empty">Select a Custom API or Action on the left to inspect parameters, build a test payload, and execute it.</div>
+    </div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg" style="font-size:11px;font-family:monospace;">—</span>
+    <div class="dv-spacer"></div>
+    <span id="tel-count">0 APIs</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const S = { apis: [], reqParams: [], respProps: [], pluginTypes: new Map(), entitySets: new Map(), selected: null };
+    const $ = id => document.getElementById(id);
+    const norm = id => String(id || '').replace(/[{}]/g, '').toLowerCase();
+
+    const PARAM_TYPES = {
+      0: 'Boolean', 1: 'DateTime', 2: 'Decimal', 3: 'Entity', 4: 'EntityCollection',
+      5: 'EntityReference', 6: 'Float', 7: 'Integer', 8: 'Money', 9: 'Picklist',
+      10: 'String', 11: 'StringArray', 12: 'Guid'
+    };
+
+    async function loadAll() {
+      $('btn-load').disabled = true;
+      try {
+        const [caRes, rpRes, rsRes, wfRes, ptRes, edRes] = await Promise.all([
+          DV.fetch('/customapis?$select=customapiid,uniquename,name,displayname,description,bindingtype,boundentitylogicalname,isfunction,isenabled,executeprivilegename,_plugintypeid_value&$orderby=uniquename asc'),
+          DV.fetch('/customapirequestparameters?$select=customapirequestparameterid,uniquename,name,displayname,type,isoptional,logicalentityname,_customapiid_value'),
+          DV.fetch('/customapiresponseproperties?$select=customapiresponsepropertyid,uniquename,name,displayname,type,logicalentityname,_customapiid_value'),
+          DV.fetch('/workflows?$filter=category eq 3 and statecode eq 1&$select=workflowid,name,uniquename,primaryentity&$orderby=name asc').catch(() => ({ value: [] })),
+          DV.fetch('/plugintypes?$select=plugintypeid,typename,assemblyname').catch(() => ({ value: [] })),
+          DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName').catch(() => ({ value: [] }))
+        ]);
+
+        S.pluginTypes = new Map((ptRes.value || []).map(p => [norm(p.plugintypeid), p]));
+        S.entitySets = new Map((edRes.value || []).map(e => [e.LogicalName?.toLowerCase(), e.EntitySetName]));
+        S.reqParams = rpRes.value || [];
+        S.respProps = rsRes.value || [];
+
+        const customList = (caRes.value || []).map(c => ({
+          kind: 'customapi',
+          id: norm(c.customapiid),
+          uniquename: c.uniquename,
+          name: c.displayname || c.name || c.uniquename,
+          description: c.description || '',
+          binding: Number(c.bindingtype || 0), // 0=Global, 1=Entity, 2=EntityCollection
+          boundEntity: c.boundentitylogicalname || '',
+          isFunction: Boolean(c.isfunction),
+          pluginType: S.pluginTypes.get(norm(c._plugintypeid_value))?.typename || ''
+        }));
+
+        const actionList = (wfRes.value || []).map(w => ({
+          kind: 'action',
+          id: norm(w.workflowid),
+          uniquename: w.uniquename || w.name,
+          name: w.name,
+          description: 'Classic Process Action (category = 3)',
+          binding: w.primaryentity && w.primaryentity !== 'none' ? 1 : 0,
+          boundEntity: w.primaryentity && w.primaryentity !== 'none' ? w.primaryentity : '',
+          isFunction: false,
+          pluginType: ''
+        }));
+
+        S.apis = [...customList, ...actionList];
+        $('tel-count').textContent = `${customList.length} Custom APIs • ${actionList.length} Actions`;
+        renderList();
+      } catch (err) {
+        $('api-list').innerHTML = DV.ui.error(err.message);
+        DV.notify(err.message, 'error');
+      } finally {
+        $('btn-load').disabled = false;
+      }
+    }
+
+    function renderList() {
+      const q = $('inp-search').value.trim().toLowerCase();
+      const kind = $('sel-kind').value;
+      const rows = S.apis.filter(a => {
+        if (kind !== 'all' && a.kind !== kind) return false;
+        return !q || `${a.uniquename} ${a.name} ${a.boundEntity}`.toLowerCase().includes(q);
+      });
+      if (!rows.length) { $('api-list').innerHTML = DV.ui.empty('No matching Custom APIs or Actions.'); return; }
+
+      $('api-list').innerHTML = `<table class="dv-table"><thead><tr><th>Unique Name</th><th>Kind</th><th>Binding</th></tr></thead><tbody>` +
+        rows.map((a, i) => `
+          <tr class="ca-row" data-idx="${i}" style="cursor:pointer;">
+            <td><strong>${DV.esc(a.uniquename)}</strong><div style="font-size:11px;color:var(--text-muted);">${DV.esc(a.name)}</div></td>
+            <td><span class="dv-badge ${a.isFunction ? 'dv-b-info' : ''}">${a.kind === 'action' ? 'Action' : (a.isFunction ? 'Function' : 'API')}</span></td>
+            <td><code>${a.binding === 0 ? 'Global' : `${DV.esc(a.boundEntity)} (${a.binding === 2 ? 'Set' : 'Row'})`}</code></td>
+          </tr>`).join('') + '</tbody></table>';
+
+      $('api-list').querySelectorAll('.ca-row').forEach(tr => {
+        tr.addEventListener('click', () => selectApi(rows[Number(tr.dataset.idx)]));
+      });
+    }
+
+    function defaultPlaceholder(typeNum, entityName) {
+      if (typeNum === 0) return 'false';
+      if (typeNum === 7 || typeNum === 9) return '0';
+      if (typeNum === 2 || typeNum === 6 || typeNum === 8) return '0.0';
+      if (typeNum === 5) return `{"@odata.id": "${S.entitySets.get(entityName?.toLowerCase()) || `${entityName}s`}(00000000-0000-0000-0000-000000000000)"}`;
+      return '';
+    }
+
+    function selectApi(api) {
+      S.selected = api;
+      const params = api.kind === 'customapi' ? S.reqParams.filter(p => norm(p._customapiid_value) === api.id) : [];
+      const resps = api.kind === 'customapi' ? S.respProps.filter(p => norm(p._customapiid_value) === api.id) : [];
+
+      $('api-detail').innerHTML = `
+        <div class="ca-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+            <div>
+              <strong>${DV.esc(api.uniquename)}</strong>
+              ${api.pluginType ? `<div style="font-size:11px;color:var(--text-muted);">Plugin: <code>${DV.esc(api.pluginType)}</code></div>` : ''}
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="dv-btn" id="btn-copy-snippet">📋 Copy JS</button>
+              <button class="dv-btn dv-btn-primary" id="btn-exec">▶ Execute ${api.isFunction ? 'GET' : 'POST'}</button>
+            </div>
+          </div>
+          ${api.binding === 1 ? `<div><label style="font-size:11px;font-weight:600;">Bound ${DV.esc(api.boundEntity)} Record GUID:</label><input type="text" id="inp-bound-id" placeholder="00000000-0000-0000-0000-000000000000" style="width:100%;font-family:monospace;"></div>` : ''}
+          ${params.length ? `<div class="ca-param-grid">${params.map((p, i) => `
+            <div>
+              <label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">${DV.esc(p.uniquename)} <span style="color:var(--text-muted);">(${PARAM_TYPES[p.type] || 'String'}${p.isoptional ? ', opt' : ' *'})</span></label>
+              <input type="text" class="ca-param-inp" data-name="${DV.esc(p.uniquename)}" data-type="${Number(p.type)}" placeholder="${DV.esc(defaultPlaceholder(Number(p.type), p.logicalentityname))}" style="width:100%;font-family:monospace;">
+            </div>
+          `).join('')}</div>` : '<div style="font-size:12px;color:var(--text-muted);">No Custom API request parameters defined (you may still edit raw JSON below for Classic Actions).</div>'}
+          <div>
+            <label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Raw Request JSON Payload</label>
+            <textarea id="txt-payload" rows="5" style="width:100%;font-family:monospace;"></textarea>
+          </div>
+        </div>
+        ${resps.length ? `<div class="ca-card"><strong>Response Properties</strong><div style="font-size:12px;">${resps.map(r => `<code>${DV.esc(r.uniquename)}</code> (${PARAM_TYPES[r.type] || 'Any'})`).join(' • ')}</div></div>` : ''}
+        <div class="ca-card">
+          <strong>Response</strong>
+          <pre id="pre-response" class="dv-code" style="min-height:140px;">Ready to execute…</pre>
+        </div>
+      `;
+
+      const syncPayload = () => {
+        const obj = {};
+        $('api-detail').querySelectorAll('.ca-param-inp').forEach(inp => {
+          const v = inp.value.trim();
+          if (!v) return;
+          const t = Number(inp.dataset.type);
+          if (t === 0) obj[inp.dataset.name] = v === 'true';
+          else if (t === 7 || t === 9) obj[inp.dataset.name] = parseInt(v, 10);
+          else if (t === 2 || t === 6 || t === 8) obj[inp.dataset.name] = Number(v);
+          else if (t === 3 || t === 4 || t === 5 || t === 11) { try { obj[inp.dataset.name] = JSON.parse(v); } catch { obj[inp.dataset.name] = v; } }
+          else obj[inp.dataset.name] = v;
+        });
+        $('txt-payload').value = JSON.stringify(obj, null, 2);
+      };
+      $('api-detail').querySelectorAll('.ca-param-inp').forEach(inp => inp.addEventListener('input', syncPayload));
+      syncPayload();
+
+      const buildPath = () => {
+        if (api.binding === 0) return `/${api.uniquename}`;
+        const setName = S.entitySets.get(api.boundEntity.toLowerCase()) || `${api.boundEntity}s`;
+        if (api.binding === 2) return `/${setName}/Microsoft.Dynamics.CRM.${api.uniquename}`;
+        const rid = $('inp-bound-id')?.value.trim().replace(/[{}]/g, '');
+        if (!rid) throw new Error(`Enter a bound ${api.boundEntity} Record GUID.`);
+        return `/${setName}(${rid})/Microsoft.Dynamics.CRM.${api.uniquename}`;
+      };
+
+      $('btn-exec').addEventListener('click', async () => {
+        try {
+          let path = buildPath();
+          const bodyText = $('txt-payload').value.trim();
+          let res;
+          if (api.isFunction) {
+            const parsed = bodyText ? JSON.parse(bodyText) : {};
+            const keys = Object.keys(parsed);
+            if (keys.length) {
+              const pList = keys.map((k, i) => `${k}=@p${i}`).join(',');
+              const qList = keys.map((k, i) => `@p${i}=${encodeURIComponent(typeof parsed[k] === 'string' ? `'${parsed[k]}'` : JSON.stringify(parsed[k]))}`).join('&');
+              path += `(${pList})?${qList}`;
+            } else {
+              path += '()';
+            }
+            res = await DV.fetch(path, { method: 'GET' });
+          } else {
+            res = await DV.fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: bodyText || '{}' });
+          }
+          $('pre-response').textContent = JSON.stringify(res, null, 2);
+          DV.notify(`${api.uniquename} succeeded.`, 'success');
+        } catch (err) {
+          $('pre-response').textContent = `ERROR: ${err.message}`;
+          DV.notify(err.message, 'error');
+        }
+      });
+
+      $('btn-copy-snippet').addEventListener('click', () => {
+        try {
+          const path = buildPath();
+          DV.copyText(`await fetch("/api/data/v9.2${path}", {\n  method: "${api.isFunction ? 'GET' : 'POST'}",\n  headers: { "Content-Type": "application/json", "OData-MaxVersion": "4.0", "OData-Version": "4.0" },\n  body: ${JSON.stringify($('txt-payload').value)}\n});`, 'Copied fetch snippet');
+        } catch (err) { DV.notify(err.message, 'warning'); }
+      });
+    }
+
+    DV.onReady(async () => {
+      $('btn-load').addEventListener('click', loadAll);
+      $('inp-search').addEventListener('input', renderList);
+      $('sel-kind').addEventListener('change', renderList);
+      await loadAll();
+    });
+  </script>
+</body>
+</html>

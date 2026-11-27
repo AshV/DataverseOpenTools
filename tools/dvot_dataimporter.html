@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSV / JSON Data Importer</title>
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "data-importer",
+    "name":           "CSV / JSON Data Importer",
+    "version":        "1.0.0",
+    "description":    "Load a CSV or JSON file, map columns to Dataverse attributes (with Lookup @odata.bind wrapping, boolean/number parsing, and Alternate Key upserts), dry-run validate, and execute throttled creates or updates.",
+    "icon":           "📤",
+    "category":       "Data",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+  <style>
+    .di-grid { flex: 1; display: grid; grid-template-columns: minmax(340px, 44%) minmax(0, 1fr); min-height: 0; }
+    @media (max-width: 1020px) { .di-grid { grid-template-columns: 1fr; } }
+    .di-left { overflow: auto; border-right: 2px solid var(--border); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+    .di-right { overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar" style="flex-wrap:wrap;">
+    <input type="file" id="file-input" accept=".csv,.json,.txt" style="max-width:220px;">
+    <select id="entity-select" style="min-width:210px;"><option value="">Loading tables…</option></select>
+    <select id="op-mode" style="width:170px;">
+      <option value="create">Create (POST)</option>
+      <option value="upsert-id">Upsert by ID (PATCH)</option>
+      <option value="upsert-key">Upsert by Alternate Key</option>
+    </select>
+    <select id="key-select" style="display:none;min-width:170px;"></select>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-sample">🧪 Sample CSV</button>
+    <button class="dv-btn" id="btn-validate" disabled>✓ Dry-Run Validate</button>
+    <button class="dv-btn dv-btn-primary" id="btn-import" disabled>▶ Import Rows</button>
+  </div>
+
+  <div class="di-grid">
+    <div class="di-left">
+      <div><strong>1. Source Preview &amp; Raw Paste</strong></div>
+      <textarea id="raw-paste" rows="5" placeholder="Or paste CSV / JSON array here…" style="width:100%;font-family:monospace;font-size:11px;"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <strong id="lbl-parsed">0 source rows</strong>
+        <button class="dv-btn" id="btn-parse-paste">Parse Text</button>
+      </div>
+      <div><strong>2. Column Mapping</strong></div>
+      <div id="map-wrap"><div class="dv-empty">Load or paste a CSV/JSON dataset and select a target table.</div></div>
+    </div>
+
+    <div class="di-right">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <strong>3. Execution Log &amp; Validation</strong>
+        <button class="dv-btn" id="btn-export-errors" disabled>📥 Download Failed Rows CSV</button>
+      </div>
+      <div id="exec-summary" style="font-size:12px;color:var(--text-muted);">No import executed yet.</div>
+      <div id="exec-log" style="flex:1;overflow:auto;"></div>
+    </div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg" style="font-size:11px;font-family:monospace;">—</span>
+    <div class="dv-spacer"></div>
+    <span id="tel-count">0 rows</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const S = { entities: [], entityMap: new Map(), attrs: [], keys: [], headers: [], rows: [], mappings: [], failedRows: [] };
+    const $ = id => document.getElementById(id);
+
+    function parseCsvText(text) {
+      const rows = [];
+      let row = [], cur = '', inQ = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (inQ) {
+          if (ch === '"' && text[i + 1] === '"') { cur += '"'; i++; }
+          else if (ch === '"') inQ = false;
+          else cur += ch;
+        } else {
+          if (ch === '"') inQ = true;
+          else if (ch === ',') { row.push(cur); cur = ''; }
+          else if (ch === '\r' || ch === '\n') {
+            if (ch === '\r' && text[i + 1] === '\n') i++;
+            row.push(cur); rows.push(row); row = []; cur = '';
+          } else cur += ch;
+        }
+      }
+      if (cur.length || row.length) { row.push(cur); rows.push(row); }
+      const nonEmpty = rows.filter(r => r.some(c => c.trim() !== ''));
+      if (!nonEmpty.length) return { headers: [], objects: [] };
+      const headers = nonEmpty[0].map(h => h.trim());
+      const objects = nonEmpty.slice(1).map(r => {
+        const obj = {};
+        headers.forEach((h, idx) => { obj[h] = (r[idx] ?? '').trim(); });
+        return obj;
+      });
+      return { headers, objects };
+    }
+
+    function parseSourceText(raw) {
+      const trimmed = String(raw || '').trim();
+      if (!trimmed) { S.headers = []; S.rows = []; renderMappings(); return; }
+      if (trimmed.startsWith('[')) {
+        const arr = JSON.parse(trimmed);
+        if (!Array.isArray(arr) || !arr.length) throw new Error('JSON must be a non-empty array of objects.');
+        S.headers = Array.from(new Set(arr.flatMap(o => Object.keys(o))));
+        S.rows = arr;
+      } else {
+        const parsed = parseCsvText(trimmed);
+        S.headers = parsed.headers;
+        S.rows = parsed.objects;
+      }
+      autoMapHeaders();
+      $('lbl-parsed').textContent = `${S.rows.length} source rows (${S.headers.length} columns)`;
+      $('tel-count').textContent = `${S.rows.length} rows ready`;
+      $('btn-validate').disabled = !S.rows.length;
+      $('btn-import').disabled = !S.rows.length;
+    }
+
+    function autoMapHeaders() {
+      const attrMap = new Map(S.attrs.map(a => [a.LogicalName.toLowerCase(), a]));
+      S.mappings = S.headers.map(h => {
+        const m = attrMap.get(h.toLowerCase());
+        return {
+          src: h,
+          target: m ? m.LogicalName : '',
+          lookupSet: m?.Targets?.[0] ? (S.entityMap.get(m.Targets[0].toLowerCase())?.EntitySetName || `${m.Targets[0]}s`) : ''
+        };
+      });
+      renderMappings();
+    }
+
+    async function loadEntities() {
+      const data = await DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName,PrimaryIdAttribute&$filter=IsCustomizable/Value eq true');
+      S.entities = (data.value || []).filter(e => e.LogicalName && e.EntitySetName).sort((a, b) => a.LogicalName.localeCompare(b.LogicalName));
+      S.entityMap = new Map(S.entities.map(e => [e.LogicalName.toLowerCase(), e]));
+      $('entity-select').innerHTML = S.entities.map(e => `<option value="${DV.esc(e.LogicalName)}">${DV.esc(e.LogicalName)} (${DV.esc(e.EntitySetName)})</option>`).join('');
+      if (S.entityMap.has('account')) $('entity-select').value = 'account';
+      await loadEntitySchema();
+    }
+
+    async function loadEntitySchema() {
+      const logicalName = $('entity-select').value;
+      if (!logicalName) return;
+      const [aRes, kRes] = await Promise.all([
+        DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(logicalName)}')/Attributes?$select=LogicalName,AttributeType,IsValidForCreate,IsValidForUpdate,Targets`),
+        DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(logicalName)}')/Keys?$select=LogicalName,KeyAttributes`).catch(() => ({ value: [] }))
+      ]);
+      S.attrs = (aRes.value || []).filter(a => a.IsValidForCreate || a.IsValidForUpdate).sort((a, b) => a.LogicalName.localeCompare(b.LogicalName));
+      S.keys = kRes.value || [];
+      $('key-select').innerHTML = S.keys.map(k => `<option value="${DV.esc((k.KeyAttributes || []).join(','))}">${DV.esc(k.LogicalName)} (${DV.esc((k.KeyAttributes || []).join(','))})</option>`).join('') || '<option value="">No Alternate Keys</option>';
+      autoMapHeaders();
+    }
+
+    function renderMappings() {
+      if (!S.headers.length) { $('map-wrap').innerHTML = '<div class="dv-empty">No source columns parsed yet.</div>'; return; }
+      const opts = '<option value="">-- Skip --</option>' + S.attrs.map(a => `<option value="${DV.esc(a.LogicalName)}">${DV.esc(a.LogicalName)} (${DV.esc(a.AttributeType)})</option>`).join('');
+      $('map-wrap').innerHTML = `<table class="dv-table"><thead><tr><th>Source Column</th><th>Target Attribute</th><th>Lookup Set (if GUID)</th></tr></thead><tbody>` +
+        S.mappings.map((m, i) => `<tr>
+          <td><code>${DV.esc(m.src)}</code></td>
+          <td><select class="di-map-sel" data-i="${i}" style="max-width:190px;">${opts}</select></td>
+          <td><input type="text" class="di-lookup-set" data-i="${i}" value="${DV.esc(m.lookupSet)}" placeholder="e.g. contacts" style="width:110px;"></td>
+        </tr>`).join('') + '</tbody></table>';
+
+      $('map-wrap').querySelectorAll('.di-map-sel').forEach((sel, i) => {
+        sel.value = S.mappings[i].target;
+        sel.addEventListener('change', () => {
+          S.mappings[i].target = sel.value;
+          const attr = S.attrs.find(a => a.LogicalName === sel.value);
+          if (attr?.Targets?.[0]) {
+            S.mappings[i].lookupSet = S.entityMap.get(attr.Targets[0].toLowerCase())?.EntitySetName || `${attr.Targets[0]}s`;
+            $('map-wrap').querySelectorAll('.di-lookup-set')[i].value = S.mappings[i].lookupSet;
+          }
+        });
+      });
+      $('map-wrap').querySelectorAll('.di-lookup-set').forEach((inp, i) => {
+        inp.addEventListener('input', () => { S.mappings[i].lookupSet = inp.value.trim(); });
+      });
+    }
+
+    function buildRecordPayload(row) {
+      const payload = {};
+      const attrByName = new Map(S.attrs.map(a => [a.LogicalName, a]));
+      for (const m of S.mappings) {
+        if (!m.target) continue;
+        let val = row[m.src];
+        if (val === undefined || val === null || val === '') continue;
+        const meta = attrByName.get(m.target);
+        const t = meta?.AttributeType;
+        if (t === 'Lookup' || t === 'Customer' || t === 'Owner') {
+          const cleanId = String(val).replace(/[{}]/g, '').trim();
+          const setName = m.lookupSet || (meta.Targets?.[0] ? `${meta.Targets[0]}s` : '');
+          if (!setName) throw new Error(`Missing target EntitySet for lookup ${m.target}`);
+          payload[`${m.target}@odata.bind`] = `/${setName}(${cleanId})`;
+        } else if (t === 'Integer' || t === 'Picklist' || t === 'State' || t === 'Status') {
+          payload[m.target] = parseInt(val, 10);
+        } else if (t === 'Decimal' || t === 'Double' || t === 'Money') {
+          payload[m.target] = Number(val);
+        } else if (t === 'Boolean') {
+          payload[m.target] = /^(true|1|yes)$/i.test(String(val));
+        } else {
+          payload[m.target] = val;
+        }
+      }
+      return payload;
+    }
+
+    async function runImport(dryRun = false) {
+      const ent = $('entity-select').value;
+      const meta = S.entityMap.get(ent.toLowerCase());
+      const mode = $('op-mode').value;
+      const keyAttrs = ($('key-select').value || '').split(',').filter(Boolean);
+
+      S.failedRows = [];
+      let ok = 0, fail = 0;
+      const logLines = [];
+
+      for (let i = 0; i < S.rows.length; i++) {
+        const row = S.rows[i];
+        try {
+          const payload = buildRecordPayload(row);
+          if (!Object.keys(payload).length) throw new Error('Empty payload (no mapped non-empty columns)');
+          let method = 'POST', path = `/${meta.EntitySetName}`;
+          if (mode === 'upsert-id') {
+            const rid = String(row[meta.PrimaryIdAttribute] || payload[meta.PrimaryIdAttribute] || '').replace(/[{}]/g, '');
+            if (!rid) throw new Error(`Missing primary key ${meta.PrimaryIdAttribute}`);
+            delete payload[meta.PrimaryIdAttribute];
+            method = 'PATCH';
+            path = `/${meta.EntitySetName}(${rid})`;
+          } else if (mode === 'upsert-key') {
+            if (!keyAttrs.length) throw new Error('Select an Alternate Key.');
+            const kParts = keyAttrs.map(k => {
+              const v = payload[k] ?? row[k];
+              if (v === undefined || v === '') throw new Error(`Missing Alternate Key value ${k}`);
+              return `${k}='${String(v).replace(/'/g, "''")}'`;
+            });
+            method = 'PATCH';
+            path = `/${meta.EntitySetName}(${kParts.join(',')})`;
+          }
+          if (!dryRun) {
+            await DV.fetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          }
+          ok++;
+          logLines.push(`<tr><td>${i + 1}</td><td>${dryRun ? '✓ Valid' : '✅ Imported'}</td><td><code>${method} ${DV.esc(path)}</code></td></tr>`);
+        } catch (err) {
+          fail++;
+          S.failedRows.push({ ...row, _error: err.message });
+          logLines.push(`<tr><td>${i + 1}</td><td style="color:var(--danger);">✕ Failed</td><td>${DV.esc(err.message)}</td></tr>`);
+        }
+      }
+
+      $('exec-summary').innerHTML = `<strong>${dryRun ? 'Dry-Run Validation' : 'Import'} complete:</strong> ${ok} succeeded, ${fail} failed.`;
+      $('exec-log').innerHTML = `<table class="dv-table"><thead><tr><th>Row</th><th>Status</th><th>Details</th></tr></thead><tbody>${logLines.join('')}</tbody></table>`;
+      $('btn-export-errors').disabled = !S.failedRows.length;
+      DV.notify(`${dryRun ? 'Validation' : 'Import'}: ${ok} OK, ${fail} failed.`, fail ? 'warning' : 'success');
+    }
+
+    DV.onReady(async () => {
+      $('entity-select').addEventListener('change', loadEntitySchema);
+      $('op-mode').addEventListener('change', () => {
+        $('key-select').style.display = $('op-mode').value === 'upsert-key' ? 'inline-block' : 'none';
+      });
+      $('file-input').addEventListener('change', async e => {
+        const f = e.target.files?.[0]; if (!f) return;
+        const txt = await f.text();
+        $('raw-paste').value = txt;
+        try { parseSourceText(txt); } catch (err) { DV.notify(err.message, 'error'); }
+      });
+      $('btn-parse-paste').addEventListener('click', () => {
+        try { parseSourceText($('raw-paste').value); } catch (err) { DV.notify(err.message, 'error'); }
+      });
+      $('btn-sample').addEventListener('click', () => {
+        const csv = `name,accountnumber,telephone1,revenue\nNorthwind Labs,NW-101,555-0101,450000\nAlpine Traders,AL-202,555-0199,980000`;
+        $('raw-paste').value = csv;
+        parseSourceText(csv);
+      });
+      $('btn-validate').addEventListener('click', () => runImport(true));
+      $('btn-import').addEventListener('click', () => runImport(false));
+      $('btn-export-errors').addEventListener('click', () => {
+        if (!S.failedRows.length) return;
+        const cols = [...S.headers, '_error'];
+        DV.exportCsv(`import_errors_${new Date().toISOString().slice(0, 10)}.csv`, cols, S.failedRows.map(r => cols.map(c => r[c] ?? '')));
+      });
+      await loadEntities();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audit History Explorer</title>
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "audit-history",
+    "name":           "Audit History Explorer",
+    "version":        "1.0.0",
+    "description":    "Search Dataverse audit logs, run RetrieveRecordChangeHistory on any record, inspect old-vs-new field value diffs via RetrieveAuditDetails, and check which tables have IsAuditEnabled turned on.",
+    "icon":           "🕵️",
+    "category":       "Diagnostics",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+  <style>
+    .ah-split { flex: 1; display: grid; grid-template-columns: minmax(380px, 50%) minmax(0, 1fr); min-height: 0; }
+    @media (max-width: 1020px) { .ah-split { grid-template-columns: 1fr; } }
+    .ah-left { overflow: auto; border-right: 2px solid var(--border); }
+    .ah-right { overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+    .ah-old { color: var(--danger); background: rgba(197, 15, 31, 0.08); padding: 2px 5px; border-radius: 3px; font-family: monospace; font-size: 11px; }
+    .ah-new { color: #107c10; background: rgba(16, 124, 16, 0.1); padding: 2px 5px; border-radius: 3px; font-family: monospace; font-size: 11px; }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar" style="flex-wrap:wrap;">
+    <div class="dv-seg-group" id="mode-tabs">
+      <button class="dv-seg-btn active" data-mode="recent">📜 Recent Audits</button>
+      <button class="dv-seg-btn" data-mode="record">🔎 Record History</button>
+      <button class="dv-seg-btn" data-mode="config">⚙️ Table Audit Config</button>
+    </div>
+
+    <select id="sel-entity" style="min-width:165px;"><option value="">All Tables</option></select>
+    <input type="text" id="inp-record-id" placeholder="Record GUID (for Record History)…" style="width:240px;display:none;font-family:monospace;">
+    <select id="sel-op" style="width:125px;">
+      <option value="">All Ops</option>
+      <option value="1">Create (1)</option>
+      <option value="2">Update (2)</option>
+      <option value="3">Delete (3)</option>
+      <option value="4">Access (4)</option>
+    </select>
+    <input type="text" id="inp-search" placeholder="Filter user, action, table, GUID…" style="flex:1;min-width:160px;">
+    <button class="dv-btn dv-btn-primary" id="btn-load">↻ Load</button>
+    <button class="dv-btn" id="btn-export-csv" disabled>📥 CSV</button>
+  </div>
+
+  <div class="ah-split" id="main-split">
+    <div class="ah-left" id="left-pane">
+      <div class="dv-empty">Click <strong>↻ Load</strong> to query Dataverse audits, record change history, or table audit settings.</div>
+    </div>
+    <div class="ah-right" id="right-pane">
+      <div class="dv-empty">Select an audit row on the left to invoke <code>RetrieveAuditDetails</code> and inspect old-vs-new field values.</div>
+    </div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg" style="font-family:monospace;font-size:11px;">—</span>
+    <div class="dv-spacer"></div>
+    <span id="tel-count">0 entries</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const S = {
+      mode: 'recent',
+      entityMap: new Map(),
+      audits: [],
+      auditConfig: [],
+      selectedDiffs: []
+    };
+    const $ = id => document.getElementById(id);
+
+    async function loadEntities() {
+      const data = await DV.fetch('/EntityDefinitions?$select=LogicalName,EntitySetName,DisplayName,IsAuditEnabled');
+      const list = (data.value || []).filter(e => e.LogicalName && e.EntitySetName).sort((a, b) => a.LogicalName.localeCompare(b.LogicalName));
+      S.auditConfig = list;
+      S.entityMap = new Map(list.map(e => [e.LogicalName.toLowerCase(), e]));
+      $('sel-entity').innerHTML = '<option value="">All Tables</option>' +
+        list.map(e => `<option value="${DV.esc(e.LogicalName)}">${DV.esc(e.LogicalName)}${e.IsAuditEnabled?.Value ? ' ✓' : ''}</option>`).join('');
+    }
+
+    async function loadData() {
+      $('btn-load').disabled = true;
+      try {
+        if (S.mode === 'recent') await loadRecentAudits();
+        else if (S.mode === 'record') await loadRecordHistory();
+        else renderAuditConfig();
+      } catch (err) {
+        $('left-pane').innerHTML = DV.ui.error(err.message);
+        DV.notify(err.message, 'error');
+      } finally {
+        $('btn-load').disabled = false;
+      }
+    }
+
+    async function loadRecentAudits() {
+      const ent = $('sel-entity').value;
+      const op = $('sel-op').value;
+      const filters = [];
+      if (ent) filters.push(`objecttypecode eq '${ent.replace(/'/g, "''")}'`);
+      if (op) filters.push(`operation eq ${Number(op)}`);
+      const q = `/audits?$select=auditid,action,operation,objecttypecode,_objectid_value,_userid_value,createdon&$orderby=createdon desc&$top=80` +
+        (filters.length ? `&$filter=${encodeURIComponent(filters.join(' and '))}` : '');
+      const data = await DV.fetch(q, { headers: { 'Prefer': 'odata.include-annotations="*"' } });
+      S.audits = data.value || [];
+      renderAuditList();
+    }
+
+    async function loadRecordHistory() {
+      const ent = $('sel-entity').value;
+      const rawId = $('inp-record-id').value.trim().replace(/[{}]/g, '');
+      if (!ent || !/^[0-9a-f-]{36}$/i.test(rawId)) {
+        DV.notify('Select the record Table and paste a valid 36-char GUID.', 'warning');
+        return;
+      }
+      const meta = S.entityMap.get(ent.toLowerCase());
+      const entitySet = meta?.EntitySetName || `${ent}s`;
+      const tParam = JSON.stringify({ '@odata.id': `${entitySet}(${rawId})` });
+      const pParam = JSON.stringify({ PageNumber: 1, Count: 80, ReturnTotalRecordCount: true });
+      const data = await DV.fetch(
+        `/RetrieveRecordChangeHistory(Target=@t,PagingInfo=@p)?@t=${encodeURIComponent(tParam)}&@p=${encodeURIComponent(pParam)}`,
+        { headers: { 'Prefer': 'odata.include-annotations="*"' } }
+      );
+      const details = data?.AuditDetailCollection?.AuditDetails || [];
+      S.audits = details.map(d => ({
+        ...(d.AuditRecord || {}),
+        _preloadedDetail: d
+      }));
+      renderAuditList();
+    }
+
+    function renderAuditList() {
+      const q = $('inp-search').value.trim().toLowerCase();
+      const rows = !q ? S.audits : S.audits.filter(a => JSON.stringify(a).toLowerCase().includes(q));
+      $('tel-count').textContent = `${rows.length} audit entries`;
+      $('btn-export-csv').disabled = !rows.length;
+      if (!rows.length) { $('left-pane').innerHTML = DV.ui.empty('No audit entries matched.'); return; }
+
+      $('left-pane').innerHTML = `<table class="dv-table">
+        <thead><tr><th>Created On</th><th>Table</th><th>Action / Op</th><th>User</th><th>Record</th></tr></thead>
+        <tbody>${rows.map((a, idx) => {
+          const act = a['action@OData.Community.Display.V1.FormattedValue'] || a.action || '–';
+          const op = a['operation@OData.Community.Display.V1.FormattedValue'] || a.operation || '';
+          const user = a['_userid_value@OData.Community.Display.V1.FormattedValue'] || a._userid_value || '–';
+          const rec = a['_objectid_value@OData.Community.Display.V1.FormattedValue'] || a._objectid_value || '–';
+          return `<tr class="ah-row" data-idx="${idx}" style="cursor:pointer;">
+            <td>${DV.esc(a.createdon ? new Date(a.createdon).toLocaleString() : '–')}</td>
+            <td><code>${DV.esc(a.objecttypecode || '–')}</code></td>
+            <td><strong>${DV.esc(act)}</strong> <span style="color:var(--text-muted);font-size:10px;">${DV.esc(op)}</span></td>
+            <td>${DV.esc(user)}</td>
+            <td title="${DV.esc(a._objectid_value || '')}">${DV.esc(rec)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+
+      $('left-pane').querySelectorAll('.ah-row').forEach(tr => {
+        tr.addEventListener('click', () => inspectAuditDetail(rows[Number(tr.dataset.idx)]));
+      });
+    }
+
+    function formatVal(obj, key) {
+      if (!obj || obj[key] === undefined || obj[key] === null) return '';
+      const fmt = obj[`${key}@OData.Community.Display.V1.FormattedValue`];
+      if (fmt !== undefined) return `${fmt} (${obj[key]})`;
+      return typeof obj[key] === 'object' ? JSON.stringify(obj[key]) : String(obj[key]);
+    }
+
+    async function inspectAuditDetail(auditRow) {
+      if (!auditRow?.auditid) return;
+      $('right-pane').innerHTML = '<div class="dv-empty">Loading audit detail diff…</div>';
+      try {
+        const detail = auditRow._preloadedDetail ||
+          (await DV.fetch(`/audits(${auditRow.auditid})/Microsoft.Dynamics.CRM.RetrieveAuditDetails()`, { headers: { 'Prefer': 'odata.include-annotations="*"' } }))?.AuditDetail;
+
+        const oldRec = detail?.OldValue || {};
+        const newRec = detail?.NewValue || {};
+        const keys = [...new Set([...Object.keys(oldRec), ...Object.keys(newRec)].filter(k => !k.startsWith('@') && !k.includes('@OData.')))].sort();
+        S.selectedDiffs = keys.map(k => ({ field: k, oldVal: formatVal(oldRec, k), newVal: formatVal(newRec, k) }));
+
+        const headerInfo = `
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+            <div>
+              <strong>${DV.esc(auditRow['action@OData.Community.Display.V1.FormattedValue'] || 'Audit Detail')}</strong>
+              <span style="color:var(--text-muted);font-size:12px;"> • ${DV.esc(auditRow.objecttypecode || '')}</span>
+            </div>
+            ${auditRow._objectid_value && auditRow.objecttypecode ? `<button class="dv-btn" id="btn-open-rec">🔎 Record Inspector</button>` : ''}
+          </div>`;
+
+        if (!keys.length) {
+          $('right-pane').innerHTML = headerInfo + `<pre class="dv-code">${DV.esc(JSON.stringify(detail || auditRow, null, 2))}</pre>`;
+        } else {
+          $('right-pane').innerHTML = headerInfo + `
+            <table class="dv-table">
+              <thead><tr><th>Attribute</th><th>Old Value</th><th>New Value</th></tr></thead>
+              <tbody>${S.selectedDiffs.map(d => `
+                <tr>
+                  <td><code>${DV.esc(d.field)}</code></td>
+                  <td>${d.oldVal ? `<span class="ah-old">${DV.esc(d.oldVal)}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
+                  <td>${d.newVal ? `<span class="ah-new">${DV.esc(d.newVal)}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
+                </tr>`).join('')}</tbody>
+            </table>`;
+        }
+        const recBtn = document.getElementById('btn-open-rec');
+        if (recBtn) {
+          recBtn.addEventListener('click', () => DV.openTool('record-inspector', { entityLogicalName: auditRow.objecttypecode, id: auditRow._objectid_value }));
+        }
+      } catch (err) {
+        $('right-pane').innerHTML = DV.ui.error(err.message);
+      }
+    }
+
+    function renderAuditConfig() {
+      const q = $('inp-search').value.trim().toLowerCase();
+      const rows = !q ? S.auditConfig : S.auditConfig.filter(e => e.LogicalName.toLowerCase().includes(q) || (e.DisplayName?.UserLocalizedLabel?.Label || '').toLowerCase().includes(q));
+      const enabledCount = rows.filter(r => r.IsAuditEnabled?.Value).length;
+      $('tel-count').textContent = `${enabledCount} / ${rows.length} tables audited`;
+      $('btn-export-csv').disabled = !rows.length;
+
+      $('left-pane').innerHTML = `<table class="dv-table">
+        <thead><tr><th>Logical Name</th><th>Display Name</th><th>Auditing</th></tr></thead>
+        <tbody>${rows.map(r => `
+          <tr class="ah-cfg-row" data-name="${DV.esc(r.LogicalName)}" style="cursor:pointer;">
+            <td><code>${DV.esc(r.LogicalName)}</code></td>
+            <td>${DV.esc(r.DisplayName?.UserLocalizedLabel?.Label || r.LogicalName)}</td>
+            <td><span class="dv-badge ${r.IsAuditEnabled?.Value ? 'dv-b-ok' : ''}">${r.IsAuditEnabled?.Value ? 'Enabled' : 'Disabled'}</span></td>
+          </tr>`).join('')}</tbody>
+      </table>`;
+
+      $('left-pane').querySelectorAll('.ah-cfg-row').forEach(tr => {
+        tr.addEventListener('click', async () => {
+          const name = tr.dataset.name;
+          $('right-pane').innerHTML = `<div class="dv-empty">Loading column audit flags for ${DV.esc(name)}…</div>`;
+          const a = await DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(name)}')/Attributes?$select=LogicalName,AttributeType,IsAuditEnabled`);
+          const cols = (a.value || []).sort((x, y) => Number(Boolean(y.IsAuditEnabled?.Value)) - Number(Boolean(x.IsAuditEnabled?.Value)) || x.LogicalName.localeCompare(y.LogicalName));
+          $('right-pane').innerHTML = `<div><strong>${DV.esc(name)}</strong> — ${cols.filter(c => c.IsAuditEnabled?.Value).length} / ${cols.length} columns audited</div>
+            <table class="dv-table"><thead><tr><th>Column</th><th>Type</th><th>Audited</th></tr></thead><tbody>${cols.map(c => `
+              <tr><td><code>${DV.esc(c.LogicalName)}</code></td><td>${DV.esc(c.AttributeType)}</td><td><span class="dv-badge ${c.IsAuditEnabled?.Value ? 'dv-b-ok' : ''}">${c.IsAuditEnabled?.Value ? 'Yes' : 'No'}</span></td></tr>
+            `).join('')}</tbody></table>`;
+        });
+      });
+    }
+
+    DV.onReady(async () => {
+      await loadEntities();
+      $('mode-tabs').querySelectorAll('.dv-seg-btn').forEach(btn => btn.addEventListener('click', () => {
+        S.mode = btn.dataset.mode;
+        $('mode-tabs').querySelectorAll('.dv-seg-btn').forEach(b => b.classList.toggle('active', b === btn));
+        $('inp-record-id').style.display = S.mode === 'record' ? 'inline-block' : 'none';
+        $('sel-op').style.display = S.mode === 'recent' ? 'inline-block' : 'none';
+        loadData();
+      }));
+      $('btn-load').addEventListener('click', loadData);
+      $('inp-search').addEventListener('input', () => S.mode === 'config' ? renderAuditConfig() : renderAuditList());
+      $('btn-export-csv').addEventListener('click', () => {
+        if (S.mode === 'config') {
+          DV.exportCsv('audit_table_config.csv', ['LogicalName', 'DisplayName', 'AuditEnabled'], S.auditConfig.map(r => [r.LogicalName, r.DisplayName?.UserLocalizedLabel?.Label || '', Boolean(r.IsAuditEnabled?.Value)]));
+        } else {
+          DV.exportCsv('audit_logs.csv', ['AuditId', 'CreatedOn', 'Table', 'Action', 'User', 'RecordId'], S.audits.map(a => [a.auditid, a.createdon, a.objecttypecode, a['action@OData.Community.Display.V1.FormattedValue'] || a.action, a['_userid_value@OData.Community.Display.V1.FormattedValue'] || a._userid_value, a._objectid_value]));
+        }
+      });
+      await loadRecentAudits();
+    });
+  </script>
+</body>
+</html>

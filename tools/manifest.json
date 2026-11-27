@@ -1,5 +1,16 @@
 [
   {
+    "wrName": "dvot_appsitemap.html",
+    "id": "app-sitemap",
+    "name": "App & Sitemap Auditor",
+    "icon": "🗺️",
+    "category": "Configuration",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Inspect Model-Driven Apps (appmodules), assigned Security Roles, app components, and parsed SiteMap XML navigation trees (Area → Group → SubArea & privileges).",
+    "sizeBytes": 9830
+  },
+  {
     "wrName": "dvot_envvars.html",
     "id": "env-vars",
     "name": "Environment Variables",
@@ -44,6 +55,17 @@
     "sizeBytes": 10957
   },
   {
+    "wrName": "dvot_dataimporter.html",
+    "id": "data-importer",
+    "name": "CSV / JSON Data Importer",
+    "icon": "📤",
+    "category": "Data",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Load a CSV or JSON file, map columns to Dataverse attributes (with Lookup @odata.bind wrapping, boolean/number parsing, and Alternate Key upserts), dry-run validate, and execute throttled creates or updates.",
+    "sizeBytes": 14969
+  },
+  {
     "wrName": "dvot_duprules.html",
     "id": "dup-rules",
     "name": "Duplicate Rules Auditor",
@@ -86,6 +108,17 @@
     "minHostVersion": "2025.11.1",
     "description": "Identify Dataverse log and file storage bloat across AsyncOperations, Plugin Traces, Audits, Notes/Attachments, and Bulk Delete jobs.",
     "sizeBytes": 6393
+  },
+  {
+    "wrName": "dvot_audithistory.html",
+    "id": "audit-history",
+    "name": "Audit History Explorer",
+    "icon": "🕵️",
+    "category": "Diagnostics",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Search Dataverse audit logs, run RetrieveRecordChangeHistory on any record, inspect old-vs-new field value diffs via RetrieveAuditDetails, and check which tables have IsAuditEnabled turned on.",
+    "sizeBytes": 14882
   },
   {
     "wrName": "dvot_envtimeline.html",
@@ -141,6 +174,17 @@
     "minHostVersion": "2025.11.1",
     "description": "Inspect Modern Command Bar buttons (appactions Power Fx & JavaScript) and Classic RibbonDiffXml diffs (ribbondiffs) per table.",
     "sizeBytes": 17647
+  },
+  {
+    "wrName": "dvot_customapi.html",
+    "id": "custom-api",
+    "name": "Custom API & Action Runner",
+    "icon": "🧰",
+    "category": "Extensibility",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Browse Custom APIs (with Request Parameters, Response Properties & linked Plugin Types) and Classic Actions, auto-build inputs, execute GET/POST requests, and copy snippets.",
+    "sizeBytes": 13741
   },
   {
     "wrName": "dvot_plugins.html",
@@ -308,6 +352,17 @@
     "sizeBytes": 27417
   },
   {
+    "wrName": "dvot_fetchxmlbuilder.html",
+    "id": "fetchxml-builder",
+    "name": "Visual FetchXML Builder",
+    "icon": "🧱",
+    "category": "Query",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Build Dataverse FetchXML visually (tables, columns, link-entity joins, AND/OR filters, ordering, aggregates) or reverse-parse FetchXML, preview rows, and send to FetchXML Runner or SQL Query.",
+    "sizeBytes": 31108
+  },
+  {
     "wrName": "dvot_accesschecker.html",
     "id": "access-checker",
     "name": "Access Diagnostics",
@@ -330,6 +385,17 @@
     "sizeBytes": 16503
   },
   {
+    "wrName": "dvot_fieldsecurity.html",
+    "id": "field-security",
+    "name": "Column Security Profiles",
+    "icon": "🔐",
+    "category": "Security",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Compare Field Level Security permissions (Read / Create / Update) across Column Security Profiles, discover secured columns (IsSecured eq true), edit permissions, and inspect assigned users & teams.",
+    "sizeBytes": 12223
+  },
+  {
     "wrName": "dvot_rolematrix.html",
     "id": "role-matrix",
     "name": "Role Matrix",
@@ -339,6 +405,17 @@
     "minHostVersion": "2025.11.1",
     "description": "Compare Dataverse Security Role table privileges side-by-side (Create, Read, Write, Delete, Append, Assign, Share) and export security audit CSVs.",
     "sizeBytes": 8470
+  },
+  {
+    "wrName": "dvot_solutioninspector.html",
+    "id": "solution-inspector",
+    "name": "Solution Inspector & History",
+    "icon": "📦",
+    "category": "Solutions",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Browse Dataverse Solutions, inspect Solution Components, run RetrieveMissingDependencies, audit Solution History / ImportJobs, and trigger ExportSolution ZIP downloads.",
+    "sizeBytes": 12964
   },
   {
     "wrName": "dvot_solutionlayers.html",

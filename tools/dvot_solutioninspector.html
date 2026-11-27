@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solution Inspector &amp; History</title>
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "solution-inspector",
+    "name":           "Solution Inspector & History",
+    "version":        "1.0.0",
+    "description":    "Browse Dataverse Solutions, inspect Solution Components, run RetrieveMissingDependencies, audit Solution History / ImportJobs, and trigger ExportSolution ZIP downloads.",
+    "icon":           "📦",
+    "category":       "Solutions",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+  <style>
+    .si-split { flex: 1; display: grid; grid-template-columns: minmax(320px, 38%) minmax(0, 1fr); min-height: 0; }
+    @media (max-width: 980px) { .si-split { grid-template-columns: 1fr; } }
+    .si-left { overflow: auto; border-right: 2px solid var(--border); }
+    .si-right { display: flex; flex-direction: column; min-height: 0; }
+    .si-body { flex: 1; overflow: auto; padding: 12px 14px; }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <input type="text" id="inp-search" placeholder="Filter solutions by name or unique name…" style="flex:1;min-width:200px;">
+    <select id="sel-managed" style="width:140px;">
+      <option value="all">All Solutions</option>
+      <option value="unmanaged">Unmanaged Only</option>
+      <option value="managed">Managed Only</option>
+    </select>
+    <button class="dv-btn" id="btn-load-history">🕒 Global History</button>
+    <button class="dv-btn dv-btn-primary" id="btn-load">↻ Reload</button>
+  </div>
+
+  <div class="si-split">
+    <div class="si-left" id="sol-list">
+      <div class="dv-empty">Loading Solutions…</div>
+    </div>
+    <div class="si-right">
+      <div class="dv-strip" style="flex-wrap:wrap;">
+        <div class="dv-seg-group" id="tab-btns">
+          <button class="dv-seg-btn active" data-tab="components">🧩 Components</button>
+          <button class="dv-seg-btn" data-tab="deps">⚠️ Missing Deps</button>
+          <button class="dv-seg-btn" data-tab="history">🕒 Solution History</button>
+        </div>
+        <div class="dv-spacer"></div>
+        <button class="dv-btn" id="btn-export-unmanaged" disabled>⬇ Export Unmanaged ZIP</button>
+        <button class="dv-btn" id="btn-export-managed" disabled>🔒 Export Managed ZIP</button>
+      </div>
+      <div class="si-body" id="detail-body">
+        <div class="dv-empty">Select a Solution on the left to inspect its components, check missing dependencies, or export ZIP.</div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg" style="font-size:11px;font-family:monospace;">—</span>
+    <div class="dv-spacer"></div>
+    <span id="tel-count">0 solutions</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const S = { solutions: [], selected: null, tab: 'components' };
+    const $ = id => document.getElementById(id);
+
+    const COMP_TYPES = {
+      1: 'Table (Entity)', 2: 'Column (Attribute)', 3: 'Relationship', 9: 'Option Set',
+      20: 'Security Role', 24: 'Form', 26: 'View (SavedQuery)', 29: 'Workflow / Flow',
+      50: 'RibbonDiff', 59: 'Chart', 60: 'System Form', 61: 'Web Resource',
+      62: 'Sitemap', 66: 'Custom Control', 70: 'Field Security Profile',
+      80: 'Model-Driven App', 90: 'Plugin Type', 91: 'Plugin Assembly',
+      92: 'SDK Message Step', 93: 'Step Image', 95: 'Service Endpoint',
+      300: 'Canvas App', 371: 'Connector', 372: 'Connection Ref', 380: 'Env Var Def', 381: 'Env Var Val'
+    };
+
+    async function loadSolutions() {
+      $('btn-load').disabled = true;
+      try {
+        const res = await DV.fetch('/solutions?$filter=isvisible eq true&$select=solutionid,uniquename,friendlyname,version,ismanaged,installedon,description&$orderby=friendlyname asc');
+        S.solutions = res.value || [];
+        $('tel-count').textContent = `${S.solutions.length} solutions`;
+        renderSolutions();
+      } catch (err) {
+        $('sol-list').innerHTML = DV.ui.error(err.message);
+      } finally {
+        $('btn-load').disabled = false;
+      }
+    }
+
+    function renderSolutions() {
+      const q = $('inp-search').value.trim().toLowerCase();
+      const mg = $('sel-managed').value;
+      const rows = S.solutions.filter(s => {
+        if (mg === 'managed' && !s.ismanaged) return false;
+        if (mg === 'unmanaged' && s.ismanaged) return false;
+        return !q || `${s.friendlyname} ${s.uniquename} ${s.version}`.toLowerCase().includes(q);
+      });
+      if (!rows.length) { $('sol-list').innerHTML = DV.ui.empty('No solutions match filter.'); return; }
+
+      $('sol-list').innerHTML = `<table class="dv-table"><thead><tr><th>Solution</th><th>Ver</th><th>Type</th></tr></thead><tbody>` +
+        rows.map((s, i) => `
+          <tr class="si-row" data-idx="${i}" style="cursor:pointer;">
+            <td><strong>${DV.esc(s.friendlyname)}</strong><div style="font-size:11px;color:var(--text-muted);font-family:monospace;">${DV.esc(s.uniquename)}</div></td>
+            <td><code>${DV.esc(s.version)}</code></td>
+            <td><span class="dv-badge ${s.ismanaged ? 'dv-b-info' : ''}">${s.ismanaged ? 'Managed' : 'Unmanaged'}</span></td>
+          </tr>`).join('') + '</tbody></table>';
+
+      $('sol-list').querySelectorAll('.si-row').forEach(tr => {
+        tr.addEventListener('click', () => {
+          S.selected = rows[Number(tr.dataset.idx)];
+          $('btn-export-unmanaged').disabled = Boolean(S.selected.ismanaged);
+          $('btn-export-managed').disabled = false;
+          renderTab();
+        });
+      });
+    }
+
+    async function renderTab() {
+      const body = $('detail-body');
+      if (S.tab === 'history') {
+        await loadHistory(S.selected?.uniquename || '');
+        return;
+      }
+      if (!S.selected) { body.innerHTML = DV.ui.empty('Select a Solution first.'); return; }
+      const sol = S.selected;
+      body.innerHTML = `<div class="dv-empty">Loading ${DV.esc(S.tab)} for ${DV.esc(sol.friendlyname)}…</div>`;
+
+      try {
+        if (S.tab === 'components') {
+          const res = await DV.fetch(`/solutioncomponents?$filter=_solutionid_value eq ${sol.solutionid}&$select=solutioncomponentid,componenttype,objectid,rootcomponentbehavior&$top=500`);
+          const comps = res.value || [];
+          if (!comps.length) { body.innerHTML = DV.ui.empty('No components in this solution.'); return; }
+          const counts = new Map();
+          for (const c of comps) counts.set(c.componenttype, (counts.get(c.componenttype) || 0) + 1);
+          const chips = Array.from(counts.entries()).map(([t, cnt]) => `<span class="dv-badge dv-b-info">${DV.esc(COMP_TYPES[t] || `Type ${t}`)}: ${cnt}</span>`).join(' ');
+          body.innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${chips}</div>
+            <table class="dv-table"><thead><tr><th>Component Type</th><th>Object ID</th><th>Behavior</th></tr></thead><tbody>` +
+            comps.map(c => `<tr><td>${DV.esc(COMP_TYPES[c.componenttype] || `Type ${c.componenttype}`)}</td><td style="font-family:monospace;">${DV.esc(c.objectid)}</td><td>${c.rootcomponentbehavior ?? '–'}</td></tr>`).join('') +
+            '</tbody></table>';
+        } else if (S.tab === 'deps') {
+          const res = await DV.fetch(`/RetrieveMissingDependencies(SolutionUniqueName=@s)?@s=${encodeURIComponent(`'${sol.uniquename}'`)}`);
+          const deps = res.EntityCollection?.Entities || res.value || [];
+          if (!deps.length) { body.innerHTML = '<div style="padding:20px;color:#107c10;font-weight:700;">✅ No missing dependencies reported for ' + DV.esc(sol.uniquename) + '.</div>'; return; }
+          body.innerHTML = `<pre class="dv-code">${DV.esc(JSON.stringify(deps, null, 2))}</pre>`;
+        }
+      } catch (err) {
+        body.innerHTML = DV.ui.error(err.message);
+      }
+    }
+
+    async function loadHistory(filterUniqueName = '') {
+      const body = $('detail-body');
+      body.innerHTML = '<div class="dv-empty">Loading Solution History…</div>';
+      try {
+        const f = filterUniqueName ? `&$filter=${encodeURIComponent(`msdyn_name eq '${filterUniqueName.replace(/'/g, "''")}'`)}` : '';
+        const res = await DV.fetch(`/msdyn_solutionhistories?$select=msdyn_name,msdyn_solutionversion,msdyn_operation,msdyn_suboperation,msdyn_status,msdyn_result,msdyn_starttime,msdyn_endtime,msdyn_exceptionmessage&$orderby=msdyn_starttime desc&$top=60${f}`, { headers: { 'Prefer': 'odata.include-annotations="*"' } });
+        const rows = res.value || [];
+        if (!rows.length) { body.innerHTML = DV.ui.empty('No Solution History rows found.'); return; }
+        body.innerHTML = `<table class="dv-table"><thead><tr><th>Start</th><th>Solution</th><th>Operation</th><th>Result</th><th>Error</th></tr></thead><tbody>` +
+          rows.map(r => `<tr>
+            <td>${DV.esc(r.msdyn_starttime ? new Date(r.msdyn_starttime).toLocaleString() : '–')}</td>
+            <td><strong>${DV.esc(r.msdyn_name || '–')}</strong> <span style="font-size:10px;">v${DV.esc(r.msdyn_solutionversion || '')}</span></td>
+            <td>${DV.esc(r['msdyn_operation@OData.Community.Display.V1.FormattedValue'] || r.msdyn_operation || '')} / ${DV.esc(r['msdyn_suboperation@OData.Community.Display.V1.FormattedValue'] || r.msdyn_suboperation || '')}</td>
+            <td><span class="dv-badge ${r.msdyn_result ? 'dv-b-ok' : 'dv-b-err'}">${DV.esc(r['msdyn_status@OData.Community.Display.V1.FormattedValue'] || (r.msdyn_result ? 'Success' : 'Failed'))}</span></td>
+            <td style="font-size:11px;color:var(--danger);">${DV.esc(r.msdyn_exceptionmessage || '')}</td>
+          </tr>`).join('') + '</tbody></table>';
+      } catch {
+        const imp = await DV.fetch('/importjobs?$select=importjobid,solutionname,progress,startedon,completedon&$orderby=startedon desc&$top=30');
+        const rows = imp.value || [];
+        body.innerHTML = rows.length
+          ? `<table class="dv-table"><thead><tr><th>Solution</th><th>Progress</th><th>Started</th><th>Completed</th></tr></thead><tbody>` +
+            rows.map(r => `<tr><td>${DV.esc(r.solutionname)}</td><td>${r.progress}%</td><td>${DV.esc(r.startedon || '')}</td><td>${DV.esc(r.completedon || '')}</td></tr>`).join('') + '</tbody></table>'
+          : DV.ui.empty('No solution history or import jobs found.');
+      }
+    }
+
+    async function exportSolutionZip(managed) {
+      if (!S.selected) return;
+      const btn = managed ? $('btn-export-managed') : $('btn-export-unmanaged');
+      btn.disabled = true;
+      try {
+        DV.notify(`Exporting ${S.selected.uniquename} (${managed ? 'Managed' : 'Unmanaged'})…`, 'info');
+        const res = await DV.fetch('/ExportSolution', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ SolutionName: S.selected.uniquename, Managed: managed })
+        });
+        const b64 = res.ExportSolutionFile;
+        if (!b64) throw new Error('ExportSolution did not return ExportSolutionFile.');
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const blob = new Blob([bytes], { type: 'application/zip' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${S.selected.uniquename}_${S.selected.version.replace(/\./g, '_')}${managed ? '_managed' : ''}.zip`;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+        DV.notify('Downloaded solution ZIP.', 'success');
+      } catch (err) {
+        DV.notify(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    DV.onReady(async () => {
+      $('btn-load').addEventListener('click', loadSolutions);
+      $('inp-search').addEventListener('input', renderSolutions);
+      $('sel-managed').addEventListener('change', renderSolutions);
+      $('tab-btns').querySelectorAll('.dv-seg-btn').forEach(b => b.addEventListener('click', () => {
+        S.tab = b.dataset.tab;
+        $('tab-btns').querySelectorAll('.dv-seg-btn').forEach(x => x.classList.toggle('active', x === b));
+        renderTab();
+      }));
+      $('btn-load-history').addEventListener('click', () => {
+        S.tab = 'history';
+        $('tab-btns').querySelectorAll('.dv-seg-btn').forEach(x => x.classList.toggle('active', x.dataset.tab === 'history'));
+        loadHistory('');
+      });
+      $('btn-export-unmanaged').addEventListener('click', () => exportSolutionZip(false));
+      $('btn-export-managed').addEventListener('click', () => exportSolutionZip(true));
+      await loadSolutions();
+    });
+  </script>
+</body>
+</html>

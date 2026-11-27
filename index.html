@@ -373,15 +373,15 @@
           <div class="pill">⚡ Open, Single-File Dataverse Developer Workbench</div>
           <h1>Zero-dependency tools for Microsoft Dataverse &amp; Power Platform.</h1>
           <p class="hero-sub">
-            32 self-contained HTML developer tools inside one unified tabbed workbench. Run natively inside Dynamics 365 as Web Resources, or connect from this page via a local proxy (PowerShell, C# .NET, or Node.js) — with zero build steps and zero tokens stored in the browser.
+            39 self-contained HTML developer tools inside one unified tabbed workbench. Run natively inside Dynamics 365 as Web Resources, or connect from this page via a local proxy (PowerShell, C# .NET, or Node.js) — with zero build steps and zero tokens stored in the browser.
           </p>
           <div class="hero-cta">
             <a href="dvot_host.html" class="btn btn-primary btn-lg">Launch DV Open Tools Host →</a>
-            <a href="#tools" class="btn btn-lg">Explore 32 Tools</a>
+            <a href="#tools" class="btn btn-lg">Explore 39 Tools</a>
             <a href="#local-proxy" class="btn btn-lg">Local Proxy Setup</a>
           </div>
           <div class="hero-stats">
-            <span><strong>32</strong> Built-in Tools</span>
+            <span><strong>39</strong> Built-in Tools</span>
             <span><strong>0</strong> Build Steps / Dependencies</span>
             <span><strong>3</strong> Security Gateway Modes</span>
             <span><strong>100%</strong> Relative GitHub Pages Paths</span>
@@ -477,8 +477,8 @@
       <div class="container">
         <div class="section-head">
           <div>
-            <h2>Included Tools (<span id="tools-count">32</span>)</h2>
-            <p>Download any single tool HTML, select tools to pack into a single bundle Web Resource, or download all 32 tools together alongside independent <code>dvot_host.html</code>.</p>
+            <h2>Included Tools (<span id="tools-count">39</span>)</h2>
+            <p>Download any single tool HTML, select tools to pack into a single bundle Web Resource, or download all 39 tools together alongside independent <code>dvot_host.html</code>.</p>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <a id="download-host-btn" href="dvot_host.html" download="dvot_host.html" class="btn">⬇️ Download Host (<span id="host-size-lbl">142.1 KB</span>)</a>
@@ -498,7 +498,7 @@
           <div class="bundle-row">
             <div class="bundle-left">
               <strong>📦 Bundle Builder</strong>
-              <button type="button" id="btn-sel-all" class="btn btn-sm">Select All (<span id="all-count">32</span>)</button>
+              <button type="button" id="btn-sel-all" class="btn btn-sm">Select All (<span id="all-count">39</span>)</button>
               <button type="button" id="btn-sel-filtered" class="btn btn-sm">Select Filtered</button>
               <button type="button" id="btn-sel-none" class="btn btn-sm">Clear</button>
               <span id="bundle-size-pill" class="size-pill">0 selected · 0 KB</span>
@@ -537,20 +537,26 @@
     const DATAVERSE_DEFAULT_WR_LIMIT = 5 * 1024 * 1024;
     const TOOLS = [
       { id: 'fetchxml-playground', file: 'tools/dvot_fetchxml.html', name: 'FetchXML Runner', icon: '🔍', category: 'Query', version: '1.2.0', sizeBytes: 20541, description: 'Execute FetchXML queries (with paging-cookie pagination, aggregates, $batch fallback, XML formatting, JS/Xrm snippets, and CSV/JSON export).' },
+      { id: 'fetchxml-builder', file: 'tools/dvot_fetchxmlbuilder.html', name: 'Visual FetchXML Builder', icon: '🧱', category: 'Query', version: '1.0.0', sizeBytes: 31108, description: 'Build Dataverse FetchXML visually (tables, columns, link-entity joins, AND/OR filters, ordering, aggregates) or reverse-parse FetchXML, preview rows, and send to FetchXML Runner or SQL Query.' },
       { id: 'webapi-playground', file: 'tools/dvot_webapi.html', name: 'OData Web API', icon: '🌐', category: 'Query', version: '1.0.0', sizeBytes: 18664, description: 'Execute GET, POST, PATCH, PUT, and DELETE Dataverse OData Web API requests with custom headers, JSON body editor, @odata.nextLink paging, JS/C# code snippets, and CSV/JSON export.' },
       { id: 'sql-playground', file: 'tools/dvot_sql.html', name: 'SQL Query', icon: '🗄️', category: 'Query', version: '1.0.0', sizeBytes: 27417, description: 'Execute read-only T-SQL SELECT queries via Dataverse Web API (?sql=), auto-resolve FROM tables, expand SELECT * from metadata, follow @odata.nextLink paging, generate snippets, and export CSV/JSON.' },
       { id: 'schema-browser', file: 'tools/dvot_schemabrowser.html', name: 'Schema Browser', icon: '📖', category: 'Metadata', version: '1.1.0', sizeBytes: 21232, description: 'Explore Dataverse EntityDefinitions, columns, OptionSet integer mappings, relationships, keys, and Global Option Sets.' },
       { id: 'erd-visualizer', file: 'tools/dvot_erd.html', name: 'ERD Visualizer', icon: '📐', category: 'Metadata', version: '1.0.0', sizeBytes: 11026, description: 'Select Dataverse tables to render an interactive pure-SVG Entity-Relationship diagram (1:N, N:1, N:N), export SVG, or copy Mermaid erDiagram.' },
       { id: 'plugin-traces', file: 'tools/dvot_plugintraces.html', name: 'Plugin Trace Logs', icon: '📜', category: 'Diagnostics', version: '1.1.0', sizeBytes: 13886, description: 'Stream and filter Dataverse plugintracelog entries, trace full correlation cascades by depth, inspect stack traces, and spot slow plugins.' },
+      { id: 'audit-history', file: 'tools/dvot_audithistory.html', name: 'Audit History Explorer', icon: '🕵️', category: 'Diagnostics', version: '1.0.0', sizeBytes: 14882, description: 'Search Dataverse audit logs, run RetrieveRecordChangeHistory on any record, inspect old-vs-new field value diffs via RetrieveAuditDetails, and check which tables have IsAuditEnabled turned on.' },
       { id: 'access-checker', file: 'tools/dvot_accesschecker.html', name: 'Access Diagnostics', icon: '🛡️', category: 'Security', version: '1.1.0', sizeBytes: 15402, description: 'Diagnose effective record permissions via RetrievePrincipalAccess and inspect Security Roles, Team memberships, and record ownership.' },
       { id: 'role-matrix', file: 'tools/dvot_rolematrix.html', name: 'Role Matrix', icon: '🎭', category: 'Security', version: '1.0.0', sizeBytes: 8470, description: 'Compare Dataverse Security Role table privileges side-by-side (Create, Read, Write, Delete, Append, Assign, Share) and export security audit CSVs.' },
+      { id: 'field-security', file: 'tools/dvot_fieldsecurity.html', name: 'Column Security Profiles', icon: '🔐', category: 'Security', version: '1.0.0', sizeBytes: 12223, description: 'Compare Field Level Security permissions (Read / Create / Update) across Column Security Profiles, discover secured columns (IsSecured eq true), edit permissions, and inspect assigned users & teams.' },
       { id: 'bu-queues', file: 'tools/dvot_buqueues.html', name: 'BU & Queue Explorer', icon: '🏢', category: 'Security', version: '1.0.0', sizeBytes: 16503, description: 'Visualize Business Unit hierarchy trees, default teams & divisions, plus inspect Public/Private Queues, email routing, and queue members.' },
       { id: 'solution-layers', file: 'tools/dvot_solutionlayers.html', name: 'Solution Layers', icon: '📦', category: 'Solutions', version: '1.1.0', sizeBytes: 14973, description: 'Inspect managed vs Active unmanaged solution component layers (msdyn_componentlayer) and diagnose delete blockers via RetrieveDependenciesForDelete.' },
+      { id: 'solution-inspector', file: 'tools/dvot_solutioninspector.html', name: 'Solution Inspector & History', icon: '📦', category: 'Solutions', version: '1.0.0', sizeBytes: 12964, description: 'Browse Dataverse Solutions, inspect Solution Components, run RetrieveMissingDependencies, audit Solution History / ImportJobs, and trigger ExportSolution ZIP downloads.' },
       { id: 'env-vars', file: 'tools/dvot_envvars.html', name: 'Environment Variables', icon: '⚙️', category: 'Configuration', version: '1.1.0', sizeBytes: 12195, description: 'Inspect Default vs Current Environment Variable values, validate JSON configs, spot missing values, and safely update overrides.' },
       { id: 'user-settings', file: 'tools/dvot_usersettings.html', name: 'User Settings & Views', icon: '👤', category: 'Configuration', version: '1.0.0', sizeBytes: 21382, description: 'Inspect and bulk-update User Settings (paging limit, timezone, UI language) and manage or reassign user-owned Personal Views and Personal Dashboards.' },
       { id: 'personal-views', file: 'tools/dvot_personalviews.html', name: 'Personal Views', icon: '🔭', category: 'Configuration', version: '1.0.0', sizeBytes: 103530, description: 'Discover, run FetchXML + LayoutXML, edit XML, manage sharing (GrantAccess/RevokeAccess), reassign, clone to users, or promote personal views, charts, and dashboards to System Views across all enabled users.' },
+      { id: 'app-sitemap', file: 'tools/dvot_appsitemap.html', name: 'App & Sitemap Auditor', icon: '🗺️', category: 'Configuration', version: '1.0.0', sizeBytes: 9830, description: 'Inspect Model-Driven Apps (appmodules), assigned Security Roles, app components, and parsed SiteMap XML navigation trees (Area → Group → SubArea & privileges).' },
       { id: 'record-inspector', file: 'tools/dvot_recordinspector.html', name: 'Record Inspector', icon: '🔎', category: 'Data', version: '1.0.0', sizeBytes: 13710, description: 'Inspect all fields (including hidden attributes) on any Dataverse record by pasting a URL or GUID, edit updatable values, or jump to Access Diagnostics.' },
       { id: 'bulk-ops', file: 'tools/dvot_bulkops.html', name: 'Bulk Operations', icon: '♻️', category: 'Data', version: '1.0.0', sizeBytes: 10957, description: 'Preview records with FetchXML and execute throttled bulk PATCH, state activation/deactivation, or DELETE operations safely under Host Security Gateway.' },
+      { id: 'data-importer', file: 'tools/dvot_dataimporter.html', name: 'CSV / JSON Data Importer', icon: '📤', category: 'Data', version: '1.0.0', sizeBytes: 14969, description: 'Load a CSV or JSON file, map columns to Dataverse attributes (with Lookup @odata.bind wrapping, boolean/number parsing, and Alternate Key upserts), dry-run validate, and execute throttled creates or updates.' },
       { id: 'row-counter', file: 'tools/dvot_rowcounter.html', name: 'Row Counter', icon: '📊', category: 'Data', version: '1.0.0', sizeBytes: 49607, description: 'Count records across Dataverse tables (Total, Active, Inactive, Custom Filter) with HTTP headers inspection & CSV export.' },
       { id: 'storage-analyzer', file: 'tools/dvot_storage.html', name: 'Storage Analyzer', icon: '💾', category: 'Data', version: '1.0.0', sizeBytes: 6393, description: 'Identify Dataverse log and file storage bloat across AsyncOperations, Plugin Traces, Audits, Notes/Attachments, and Bulk Delete jobs.' },
       { id: 'dup-rules', file: 'tools/dvot_duprules.html', name: 'Duplicate Rules Auditor', icon: '👯', category: 'Data', version: '1.0.0', sizeBytes: 14289, description: 'Inspect all Dataverse Duplicate Detection Rules, match conditions, operator parameters, case-sensitivity, and test records via RetrieveDuplicates.' },
@@ -562,6 +568,7 @@
       { id: 'flow-codeview', file: 'tools/dvot_flowcodeview.html', name: 'Flow CodeView Reader', icon: '🧬', category: 'Flow', version: '1.0.0', sizeBytes: 84022, description: 'Decode Cloud Flow clientdata or Peek-Code JSON into a readable action tree by resolving OptionSet integer codes to labels and GUIDs to actual Dataverse record names.' },
       { id: 'conn-refs', file: 'tools/dvot_connrefs.html', name: 'Connection Audit', icon: '🔗', category: 'Flow', version: '1.0.0', sizeBytes: 8094, description: 'Audit Connection References, map which Cloud Flows depend on each connection, and flag disconnected references or turned-off flows.' },
       { id: 'plugin-manager', file: 'tools/dvot_plugins.html', name: 'Plugin Step Manager', icon: '🧩', category: 'Extensibility', version: '1.0.0', sizeBytes: 10148, description: 'Browse registered Plugin Assemblies, Types, SDK Message Processing Steps, and Pre/Post Images, with 1-click step Enable/Disable.' },
+      { id: 'custom-api', file: 'tools/dvot_customapi.html', name: 'Custom API & Action Runner', icon: '🧰', category: 'Extensibility', version: '1.0.0', sizeBytes: 13741, description: 'Browse Custom APIs (with Request Parameters, Response Properties & linked Plugin Types) and Classic Actions, auto-build inputs, execute GET/POST requests, and copy snippets.' },
       { id: 'webhook-inspector', file: 'tools/dvot_webhooks.html', name: 'Webhook Inspector', icon: '🪝', category: 'Extensibility', version: '1.1.0', sizeBytes: 11600, description: 'Inspect Dataverse Service Endpoints and Webhooks, linked SDK Message Processing Steps, recent Async delivery failures, and build sample RemoteExecutionContext payloads.' },
       { id: 'wr-code-search', file: 'tools/dvot_wrsearch.html', name: 'Web Resource Search', icon: '💻', category: 'Extensibility', version: '1.0.0', sizeBytes: 18314, description: 'Decode and full-text / regex search across all JavaScript, HTML, CSS, XML, and ResX Web Resources to spot legacy Xrm.Page calls, hardcoded URLs/GUIDs, or field usage.' },
       { id: 'wr-manager', file: 'tools/dvot_wrmanager.html', name: 'Web Resource Manager', icon: '🗂️', category: 'Extensibility', version: '1.0.0', sizeBytes: 51055, description: 'Browse Dataverse Web Resources in a virtual folder tree, edit code inline or upload local files, preview images/SVGs, compare diffs, add to solutions, publish via PublishXml, and delete.' },

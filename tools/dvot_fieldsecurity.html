@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Column Security Profiles</title>
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "field-security",
+    "name":           "Column Security Profiles",
+    "version":        "1.0.0",
+    "description":    "Compare Field Level Security permissions (Read / Create / Update) across Column Security Profiles, discover secured columns (IsSecured eq true), edit permissions, and inspect assigned users & teams.",
+    "icon":           "🔐",
+    "category":       "Security",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+  <style>
+    .fs-chip { display: inline-flex; gap: 3px; font-family: monospace; font-size: 11px; }
+    .fs-y { background: rgba(16, 124, 16, 0.14); color: #107c10; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+    .fs-n { background: var(--surface-2); color: var(--text-muted); padding: 1px 5px; border-radius: 3px; }
+    .fs-split { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0; }
+    @media (max-width: 1020px) { .fs-split { grid-template-columns: 1fr; } }
+    .fs-main { overflow: auto; border-right: 2px solid var(--border); }
+    .fs-side { overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <input type="text" id="inp-search" placeholder="Filter table, column, or profile…" style="flex:1;min-width:200px;">
+    <select id="sel-entity" style="min-width:165px;"><option value="">All Tables</option></select>
+    <button class="dv-btn" id="btn-scan-secured" title="Scan customizable tables for IsSecured columns not yet configured">🔎 Find Secured Columns</button>
+    <button class="dv-btn" id="btn-export-csv" disabled>📥 Export Matrix CSV</button>
+    <button class="dv-btn dv-btn-primary" id="btn-load">↻ Reload</button>
+  </div>
+
+  <div class="fs-split">
+    <div class="fs-main" id="matrix-wrap">
+      <div class="dv-empty">Loading Column Security Profiles &amp; Field Permissions…</div>
+    </div>
+    <div class="fs-side" id="side-pane">
+      <div class="dv-empty">Click any cell or profile header to edit <code>CanRead / CanCreate / CanUpdate</code> permissions or inspect assigned users &amp; teams.</div>
+    </div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg" style="font-size:11px;font-family:monospace;">—</span>
+    <div class="dv-spacer"></div>
+    <span id="tel-count">0 profiles</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const S = { profiles: [], permissions: [], permMap: new Map(), fields: [] };
+    const $ = id => document.getElementById(id);
+    const norm = id => String(id || '').replace(/[{}]/g, '').toLowerCase();
+
+    async function loadAll() {
+      $('btn-load').disabled = true;
+      try {
+        const [pRes, fpRes] = await Promise.all([
+          DV.fetch('/fieldsecurityprofiles?$select=fieldsecurityprofileid,name,description,ismanaged&$orderby=name asc'),
+          DV.fetch('/fieldpermissions?$select=fieldpermissionid,entityname,attributelogicalname,canread,cancreate,canupdate,_fieldsecurityprofileid_value')
+        ]);
+        S.profiles = pRes.value || [];
+        S.permissions = fpRes.value || [];
+        S.permMap = new Map();
+        const fieldSet = new Set();
+        const entitySet = new Set();
+
+        for (const fp of S.permissions) {
+          const fk = `${fp.entityname}.${fp.attributelogicalname}`.toLowerCase();
+          fieldSet.add(fk);
+          entitySet.add(fp.entityname);
+          S.permMap.set(`${norm(fp._fieldsecurityprofileid_value)}::${fk}`, fp);
+        }
+        S.fields = Array.from(fieldSet).sort();
+
+        const sel = $('sel-entity');
+        const prev = sel.value;
+        sel.innerHTML = '<option value="">All Tables (' + entitySet.size + ')</option>' +
+          Array.from(entitySet).sort().map(e => `<option value="${DV.esc(e)}">${DV.esc(e)}</option>`).join('');
+        if (entitySet.has(prev)) sel.value = prev;
+
+        $('tel-count').textContent = `${S.profiles.length} profiles • ${S.fields.length} secured fields`;
+        $('btn-export-csv').disabled = !S.fields.length;
+        renderMatrix();
+      } catch (err) {
+        $('matrix-wrap').innerHTML = DV.ui.error(err.message);
+        DV.notify(err.message, 'error');
+      } finally {
+        $('btn-load').disabled = false;
+      }
+    }
+
+    function cellHtml(fp) {
+      const r = Number(fp?.canread) === 4;
+      const c = Number(fp?.cancreate) === 4;
+      const u = Number(fp?.canupdate) === 4;
+      return `<span class="fs-chip">
+        <span class="${r ? 'fs-y' : 'fs-n'}">R</span>
+        <span class="${c ? 'fs-y' : 'fs-n'}">C</span>
+        <span class="${u ? 'fs-y' : 'fs-n'}">U</span>
+      </span>`;
+    }
+
+    function renderMatrix() {
+      const q = $('inp-search').value.trim().toLowerCase();
+      const ent = $('sel-entity').value.toLowerCase();
+      const fields = S.fields.filter(f => {
+        if (ent && !f.startsWith(`${ent}.`)) return false;
+        return !q || f.includes(q);
+      });
+      if (!fields.length || !S.profiles.length) {
+        $('matrix-wrap').innerHTML = DV.ui.empty('No Column Security permissions found.');
+        return;
+      }
+
+      const hdrs = S.profiles.map((p, pi) =>
+        `<th class="fs-prof-hdr" data-pi="${pi}" style="cursor:pointer;white-space:nowrap;" title="Click to view assigned users &amp; teams">${DV.esc(p.name)}</th>`
+      ).join('');
+
+      const body = fields.map(fk => {
+        const [entName, colName] = fk.split('.');
+        const cells = S.profiles.map((p, pi) => {
+          const fp = S.permMap.get(`${norm(p.fieldsecurityprofileid)}::${fk}`);
+          return `<td class="fs-cell" data-pi="${pi}" data-fk="${DV.esc(fk)}" style="cursor:pointer;">${cellHtml(fp)}</td>`;
+        }).join('');
+        return `<tr><td><code>${DV.esc(entName)}</code>.<strong>${DV.esc(colName)}</strong></td>${cells}</tr>`;
+      }).join('');
+
+      $('matrix-wrap').innerHTML = `<table class="dv-table"><thead><tr><th>Table.Column</th>${hdrs}</tr></thead><tbody>${body}</tbody></table>`;
+
+      $('matrix-wrap').querySelectorAll('.fs-prof-hdr').forEach(th => {
+        th.addEventListener('click', () => inspectProfileMembers(S.profiles[Number(th.dataset.pi)]));
+      });
+      $('matrix-wrap').querySelectorAll('.fs-cell').forEach(td => {
+        td.addEventListener('click', () => openPermEditor(S.profiles[Number(td.dataset.pi)], td.dataset.fk));
+      });
+    }
+
+    function openPermEditor(profile, fk) {
+      const [entityname, attributelogicalname] = fk.split('.');
+      const fp = S.permMap.get(`${norm(profile.fieldsecurityprofileid)}::${fk}`);
+      const r = Number(fp?.canread) === 4, c = Number(fp?.cancreate) === 4, u = Number(fp?.canupdate) === 4;
+
+      $('side-pane').innerHTML = `
+        <div><strong>${DV.esc(profile.name)}</strong><div style="font-size:12px;color:var(--text-muted);"><code>${DV.esc(fk)}</code></div></div>
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="chk-r" ${r ? 'checked' : ''}> Can Read (4)</label>
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="chk-c" ${c ? 'checked' : ''}> Can Create (4)</label>
+        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="chk-u" ${u ? 'checked' : ''}> Can Update (4)</label>
+        <button class="dv-btn dv-btn-primary" id="btn-save-fp">💾 ${fp ? 'Update' : 'Create'} Permission</button>
+      `;
+
+      $('btn-save-fp').addEventListener('click', async () => {
+        const body = {
+          canread: $('chk-r').checked ? 4 : 0,
+          cancreate: $('chk-c').checked ? 4 : 0,
+          canupdate: $('chk-u').checked ? 4 : 0
+        };
+        try {
+          if (fp) {
+            await DV.fetch(`/fieldpermissions(${fp.fieldpermissionid})`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          } else {
+            await DV.fetch('/fieldpermissions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...body, entityname, attributelogicalname, 'fieldsecurityprofileid@odata.bind': `/fieldsecurityprofiles(${profile.fieldsecurityprofileid})` })
+            });
+          }
+          DV.notify('Saved column permission.', 'success');
+          await loadAll();
+          openPermEditor(profile, fk);
+        } catch (err) { DV.notify(err.message, 'error'); }
+      });
+    }
+
+    async function inspectProfileMembers(profile) {
+      $('side-pane').innerHTML = `<div class="dv-empty">Loading users &amp; teams for ${DV.esc(profile.name)}…</div>`;
+      try {
+        const [uRes, tRes] = await Promise.all([
+          DV.fetch(`/fieldsecurityprofiles(${profile.fieldsecurityprofileid})/systemuserprofiles_association?$select=systemuserid,fullname,internalemailaddress`),
+          DV.fetch(`/fieldsecurityprofiles(${profile.fieldsecurityprofileid})/teamprofiles_association?$select=teamid,name`)
+        ]);
+        const users = uRes.value || [], teams = tRes.value || [];
+        $('side-pane').innerHTML = `
+          <div><strong>${DV.esc(profile.name)}</strong><div style="font-size:11px;color:var(--text-muted);">${DV.esc(profile.description || '')}</div></div>
+          <div><strong>Assigned Users (${users.length})</strong></div>
+          <ul style="margin:0;padding-left:18px;font-size:12px;">${users.map(u => `<li>${DV.esc(u.fullname)}</li>`).join('') || '<li style="color:var(--text-muted);">None</li>'}</ul>
+          <div><strong>Assigned Teams (${teams.length})</strong></div>
+          <ul style="margin:0;padding-left:18px;font-size:12px;">${teams.map(t => `<li>${DV.esc(t.name)}</li>`).join('') || '<li style="color:var(--text-muted);">None</li>'}</ul>
+        `;
+      } catch (err) { $('side-pane').innerHTML = DV.ui.error(err.message); }
+    }
+
+    async function scanSecuredColumns() {
+      $('btn-scan-secured').disabled = true;
+      $('side-pane').innerHTML = '<div class="dv-empty">Scanning customizable tables for <code>IsSecured eq true</code>…</div>';
+      try {
+        const ents = (await DV.fetch('/EntityDefinitions?$select=LogicalName&$filter=IsCustomizable/Value eq true')).value || [];
+        const found = [];
+        for (const e of ents.slice(0, 60)) {
+          const attrs = await DV.fetch(`/EntityDefinitions(LogicalName='${encodeURIComponent(e.LogicalName)}')/Attributes?$select=LogicalName&$filter=IsSecured eq true`).catch(() => ({ value: [] }));
+          for (const a of (attrs.value || [])) found.push(`${e.LogicalName}.${a.LogicalName}`);
+        }
+        const merged = new Set([...S.fields, ...found.map(x => x.toLowerCase())]);
+        S.fields = Array.from(merged).sort();
+        renderMatrix();
+        $('side-pane').innerHTML = `<div><strong>Found ${found.length} secured columns</strong> (added any unconfigured columns to the matrix so you can click cells to grant permissions).</div>`;
+      } finally {
+        $('btn-scan-secured').disabled = false;
+      }
+    }
+
+    DV.onReady(async () => {
+      $('btn-load').addEventListener('click', loadAll);
+      $('inp-search').addEventListener('input', renderMatrix);
+      $('sel-entity').addEventListener('change', renderMatrix);
+      $('btn-scan-secured').addEventListener('click', scanSecuredColumns);
+      $('btn-export-csv').addEventListener('click', () => {
+        const headers = ['Table.Column', ...S.profiles.map(p => p.name)];
+        const rows = S.fields.map(fk => [fk, ...S.profiles.map(p => {
+          const fp = S.permMap.get(`${norm(p.fieldsecurityprofileid)}::${fk}`);
+          return fp ? `${Number(fp.canread) === 4 ? 'R' : '-'}${Number(fp.cancreate) === 4 ? 'C' : '-'}${Number(fp.canupdate) === 4 ? 'U' : '-'}` : '---';
+        })]);
+        DV.exportCsv(`field_security_matrix_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+      });
+      await loadAll();
+    });
+  </script>
+</body>
+</html>
