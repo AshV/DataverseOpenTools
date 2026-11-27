@@ -11,6 +11,17 @@
     "sizeBytes": 12195
   },
   {
+    "wrName": "dvot_personalviews.html",
+    "id": "personal-views",
+    "name": "Personal Views",
+    "icon": "🔭",
+    "category": "Configuration",
+    "version": "1.0.0",
+    "minHostVersion": "1.0.0",
+    "description": "Discover, run FetchXML + LayoutXML, edit XML, manage sharing (GrantAccess/RevokeAccess), reassign, clone to users, or promote personal views, charts, and dashboards to System Views across all enabled users.",
+    "sizeBytes": 103530
+  },
+  {
     "wrName": "dvot_usersettings.html",
     "id": "user-settings",
     "name": "User Settings & Views",

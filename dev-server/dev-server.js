@@ -378,7 +378,7 @@ function mimeTypeFor(filePath) {
 function applyCorsHeaders(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] || 'Content-Type, Accept, OData-MaxVersion, OData-Version, Prefer, If-Match, If-None-Match');
+  res.setHeader('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] || 'Content-Type, Accept, OData-MaxVersion, OData-Version, Prefer, If-Match, If-None-Match, MSCRMCallerID, CallerObjectId');
   res.setHeader('Access-Control-Expose-Headers', '*');
   res.setHeader('Access-Control-Allow-Private-Network', 'true');
 }
@@ -433,6 +433,10 @@ function proxyToDataverse(req, res, opts, reqBodyBuffer, retried = false, onLogD
   if (isWebResourceDiscovery) headers['Accept-Encoding'] = 'identity';
   if (req.headers['content-type']) headers['Content-Type'] = req.headers['content-type'];
   if (req.headers['prefer']) headers['Prefer'] = req.headers['prefer'];
+  if (req.headers['if-match']) headers['If-Match'] = req.headers['if-match'];
+  if (req.headers['if-none-match']) headers['If-None-Match'] = req.headers['if-none-match'];
+  if (req.headers['mscrmcallerid']) headers['MSCRMCallerID'] = req.headers['mscrmcallerid'];
+  if (req.headers['callerobjectid']) headers['CallerObjectId'] = req.headers['callerobjectid'];
   if (reqBodyBuffer.length > 0) headers['Content-Length'] = reqBodyBuffer.length;
 
   const proxyReq = https.request(target, { method: req.method, headers }, proxyRes => {

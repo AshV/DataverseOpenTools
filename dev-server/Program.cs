@@ -717,7 +717,7 @@ Options:
         res.Headers["Access-Control-Allow-Origin"] = "*";
         res.Headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, PUT, DELETE, OPTIONS";
         res.Headers["Access-Control-Allow-Headers"] = req.Headers["Access-Control-Request-Headers"]
-            ?? "Content-Type, Accept, OData-MaxVersion, OData-Version, Prefer, If-Match, If-None-Match";
+            ?? "Content-Type, Accept, OData-MaxVersion, OData-Version, Prefer, If-Match, If-None-Match, MSCRMCallerID, CallerObjectId";
         res.Headers["Access-Control-Expose-Headers"] = "*";
         res.Headers["Access-Control-Allow-Private-Network"] = "true";
     }
@@ -915,6 +915,10 @@ Options:
             msg.Headers.TryAddWithoutValidation("If-Match", req.Headers["If-Match"]);
         if (!string.IsNullOrEmpty(req.Headers["If-None-Match"]))
             msg.Headers.TryAddWithoutValidation("If-None-Match", req.Headers["If-None-Match"]);
+        if (!string.IsNullOrEmpty(req.Headers["MSCRMCallerID"]))
+            msg.Headers.TryAddWithoutValidation("MSCRMCallerID", req.Headers["MSCRMCallerID"]);
+        if (!string.IsNullOrEmpty(req.Headers["CallerObjectId"]))
+            msg.Headers.TryAddWithoutValidation("CallerObjectId", req.Headers["CallerObjectId"]);
 
         if (reqBody.Length > 0)
         {

@@ -1,0 +1,2259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personal Views</title>
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id": "personal-views",
+    "name": "Personal Views",
+    "icon": "🔭",
+    "category": "Configuration",
+    "version": "1.0.0",
+    "minHostVersion": "1.0.0",
+    "description": "Discover, run FetchXML + LayoutXML, edit XML, manage sharing (GrantAccess/RevokeAccess), reassign, clone to users, or promote personal views, charts, and dashboards to System Views across all enabled users."
+  }
+  </script>
+  <style>
+    .pv-toolbar { gap: 8px; flex-wrap: wrap; }
+    .pv-split {
+      display: grid;
+      grid-template-columns: minmax(360px, 43%) minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+    @media (max-width: 1080px) {
+      .pv-split { grid-template-columns: 1fr; }
+    }
+    .pv-panel {
+      background: var(--dv-surface);
+      border: 1px solid var(--dv-border);
+      border-radius: var(--dv-radius);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .pv-panel-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--dv-border);
+      background: var(--dv-surface-2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .pv-tabs {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .pv-tab {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--dv-muted);
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .pv-tab:hover { color: var(--dv-text); background: var(--dv-surface); }
+    .pv-tab.active {
+      color: var(--dv-text);
+      background: var(--dv-surface);
+      border-color: var(--dv-border);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+    .pv-list-scroll {
+      max-height: calc(100vh - 290px);
+      min-height: 320px;
+      overflow: auto;
+    }
+    .pv-row-selected { background: rgba(0, 120, 212, 0.11) !important; }
+    .pv-item-title { font-weight: 600; color: var(--dv-text); line-height: 1.3; }
+    .pv-item-sub { font-size: 11px; color: var(--dv-muted); margin-top: 2px; }
+    .pv-progress {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: rgba(0, 120, 212, 0.08);
+      border: 1px solid rgba(0, 120, 212, 0.25);
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .pv-progress.active { display: flex; }
+    .pv-progress-bar {
+      flex: 1;
+      height: 7px;
+      background: var(--dv-surface-2);
+      border-radius: 99px;
+      overflow: hidden;
+      min-width: 120px;
+    }
+    .pv-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--dv-primary);
+      transition: width 0.15s ease;
+    }
+    .pv-bulk-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 8px 12px;
+      background: rgba(202, 80, 16, 0.08);
+      border: 1px solid rgba(202, 80, 16, 0.3);
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .pv-bulk-bar.active { display: flex; }
+    .pv-detail-body { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+    .pv-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 8px;
+      background: var(--dv-surface-2);
+      border: 1px solid var(--dv-border);
+      border-radius: 6px;
+      padding: 9px 11px;
+      font-size: 12px;
+    }
+    .pv-meta-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--dv-muted); }
+    .pv-meta-val { font-weight: 600; color: var(--dv-text); word-break: break-all; margin-top: 2px; }
+    .pv-code {
+      font-family: var(--dv-mono);
+      font-size: 12px;
+      line-height: 1.45;
+      min-height: 190px;
+      resize: vertical;
+      white-space: pre;
+      tab-size: 2;
+    }
+    .pv-results-wrap {
+      max-height: 460px;
+      overflow: auto;
+      border: 1px solid var(--dv-border);
+      border-radius: 6px;
+    }
+    .pv-results-table th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--dv-surface-2);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .pv-results-table td {
+      max-width: 280px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+    .pv-cell-copy:hover { text-decoration: underline; cursor: pointer; }
+    .pv-section-card {
+      border: 1px solid var(--dv-border);
+      border-radius: 6px;
+      padding: 12px;
+      background: var(--dv-surface-2);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .pv-section-title { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+    .pv-perm-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 12px;
+    }
+    .pv-perm-chip {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--dv-surface-2);
+      border: 1px solid var(--dv-border);
+      margin-right: 3px;
+      margin-bottom: 2px;
+    }
+    .pv-form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 10px;
+    }
+    .pv-field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--dv-muted);
+      margin-bottom: 4px;
+    }
+    .pv-empty {
+      padding: 36px 20px;
+      text-align: center;
+      color: var(--dv-muted);
+      font-size: 13px;
+    }
+    .pv-multi-users {
+      max-height: 150px;
+      overflow: auto;
+      border: 1px solid var(--dv-border);
+      border-radius: 6px;
+      background: var(--dv-surface);
+      padding: 6px 8px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 4px 10px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-header">
+    <div>
+      <h1>
+        🔭 Personal Views
+        <span class="dv-badge dv-badge-info" id="hdr-scope-badge">Initializing…</span>
+        <span class="dv-badge" id="hdr-count-badge">0 items</span>
+      </h1>
+      <div class="dv-subtitle">Discover, run, edit, share, reassign, clone, or promote personal views, charts &amp; dashboards across users via MSCRMCallerID</div>
+    </div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+      <button class="dv-btn" id="btn-sample" title="Load rich offline sample users, personal views, charts &amp; dashboards">🧪 Sample</button>
+      <button class="dv-btn" id="btn-export-list" title="Export filtered personal items list to CSV">📥 Export List CSV</button>
+      <button class="dv-btn dv-btn-primary" id="btn-load">↻ Scan / Load</button>
+    </div>
+  </div>
+
+  <!-- Scope & Filter Controls -->
+  <div class="dv-toolbar pv-toolbar">
+    <select class="dv-select" id="sel-scope" title="How personal items are discovered across Dataverse" style="min-width:190px;">
+      <option value="all">🌐 Scan All Enabled Users</option>
+      <option value="user">👤 Pick Specific User (Impersonate)</option>
+      <option value="me">🙋 Visible to Current Caller</option>
+    </select>
+
+    <select class="dv-select" id="sel-target-user" style="min-width:220px; display:none;" title="Impersonate this user via MSCRMCallerID"></select>
+
+    <label id="lbl-conc" style="display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--dv-muted);" title="Parallel MSCRMCallerID user requests during full scan">
+      Batch:
+      <select class="dv-select" id="sel-concurrency" style="width:62px;">
+        <option value="2">2</option>
+        <option value="4" selected>4</option>
+        <option value="8">8</option>
+      </select>
+    </label>
+
+    <div class="pv-tabs" id="type-tabs" role="tablist">
+      <button class="pv-tab active" data-type="view">📋 Views <span class="dv-badge" id="cnt-view">0</span></button>
+      <button class="pv-tab" data-type="chart">📊 Charts <span class="dv-badge" id="cnt-chart">0</span></button>
+      <button class="pv-tab" data-type="dashboard">🖼️ Dashboards <span class="dv-badge" id="cnt-dashboard">0</span></button>
+    </div>
+
+    <input class="dv-input" id="txt-search" placeholder="Search name, table, owner, FetchXML, GUID…" style="flex:1; min-width:200px;">
+
+    <select class="dv-select" id="sel-entity" style="min-width:145px;">
+      <option value="">All Tables</option>
+    </select>
+
+    <select class="dv-select" id="sel-owner" style="min-width:160px;">
+      <option value="">All Owners</option>
+    </select>
+
+    <select class="dv-select" id="sel-state" style="width:110px;">
+      <option value="all">All States</option>
+      <option value="0">Active</option>
+      <option value="1">Inactive</option>
+    </select>
+  </div>
+
+  <!-- Progress Bar -->
+  <div class="pv-progress" id="scan-progress">
+    <span id="scan-progress-text">Scanning users…</span>
+    <div class="pv-progress-bar"><div class="pv-progress-fill" id="scan-progress-fill"></div></div>
+    <button class="dv-btn dv-btn-sm" id="btn-stop-scan">⏹ Stop</button>
+  </div>
+
+  <!-- Bulk Operations Bar -->
+  <div class="pv-bulk-bar" id="bulk-bar">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <strong id="bulk-count">0 selected</strong>
+      <button class="dv-btn dv-btn-sm" id="btn-clear-sel">Clear</button>
+    </div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+      <button class="dv-btn dv-btn-sm" id="btn-bulk-share">👥 Bulk Share</button>
+      <button class="dv-btn dv-btn-sm" id="btn-bulk-reassign">🔄 Bulk Reassign</button>
+      <button class="dv-btn dv-btn-sm" id="btn-bulk-activate">✅ Activate</button>
+      <button class="dv-btn dv-btn-sm" id="btn-bulk-deactivate">⏸️ Deactivate</button>
+      <button class="dv-btn dv-btn-sm dv-btn-danger" id="btn-bulk-delete">🗑️ Bulk Delete</button>
+    </div>
+  </div>
+
+  <!-- Master-Detail Split -->
+  <div class="pv-split">
+    <!-- Left List Pane -->
+    <div class="pv-panel">
+      <div class="pv-panel-head">
+        <span style="font-size:12px; font-weight:700;" id="list-summary">0 items shown</span>
+        <span style="font-size:11px; color:var(--dv-muted);" id="list-tip">Click a row to inspect or run</span>
+      </div>
+      <div class="pv-list-scroll">
+        <table class="dv-table" id="tbl-items">
+          <thead>
+            <tr>
+              <th style="width:28px;"><input type="checkbox" id="chk-all" title="Select all visible rows"></th>
+              <th>Name</th>
+              <th>Table</th>
+              <th>Owner</th>
+              <th>State</th>
+              <th style="width:74px;">Quick</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-items">
+            <tr><td colspan="6" class="pv-empty">Click <strong>↻ Scan / Load</strong> (or <strong>🧪 Sample</strong>) to discover personal views across users.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Right Detail & Runner Pane -->
+    <div class="pv-panel" id="detail-panel">
+      <div class="pv-panel-head">
+        <div class="pv-tabs" id="detail-tabs">
+          <button class="pv-tab active" data-tab="run">▶ Run Results</button>
+          <button class="pv-tab" data-tab="xml">📝 XML &amp; Details</button>
+          <button class="pv-tab" data-tab="share">👥 Sharing <span class="dv-badge" id="cnt-shares">–</span></button>
+          <button class="pv-tab" data-tab="actions">🛠️ Actions</button>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;" id="detail-quick-btns">
+          <button class="dv-btn dv-btn-sm dv-btn-primary" id="btn-run-view" disabled>▶ Run View</button>
+          <button class="dv-btn dv-btn-sm" id="btn-open-fetchxml" disabled title="Open this view's FetchXML in FetchXML Runner">🔍 Open in FetchXML</button>
+          <button class="dv-btn dv-btn-sm dv-btn-danger" id="btn-delete-one" disabled>🗑️ Delete</button>
+        </div>
+      </div>
+
+      <div class="pv-detail-body" id="detail-empty">
+        <div class="pv-empty">Select any personal view, chart, or dashboard on the left to inspect its XML, run its query with formatted columns, manage sharing, clone, reassign, or promote it to a System View.</div>
+      </div>
+
+      <div class="pv-detail-body" id="detail-content" style="display:none;">
+        <!-- Metadata Header Card -->
+        <div class="pv-meta-grid">
+          <div>
+            <div class="pv-meta-lbl">Name</div>
+            <div class="pv-meta-val" id="det-name">–</div>
+          </div>
+          <div>
+            <div class="pv-meta-lbl">Target Table</div>
+            <div class="pv-meta-val" id="det-entity">–</div>
+          </div>
+          <div>
+            <div class="pv-meta-lbl">Owner</div>
+            <div class="pv-meta-val" id="det-owner">–</div>
+          </div>
+          <div>
+            <div class="pv-meta-lbl">State &amp; Modified</div>
+            <div class="pv-meta-val" id="det-state-mod">–</div>
+          </div>
+          <div>
+            <div class="pv-meta-lbl">Record GUID <span class="pv-cell-copy" id="btn-copy-id" style="color:var(--dv-primary);">(copy)</span></div>
+            <div class="pv-meta-val" style="font-family:var(--dv-mono); font-size:11px;" id="det-id">–</div>
+          </div>
+          <div id="det-shared-via-wrap" style="display:none;">
+            <div class="pv-meta-lbl">Seen Via Impersonation</div>
+            <div class="pv-meta-val" id="det-seen-via">–</div>
+          </div>
+        </div>
+
+        <!-- TAB: Run Results -->
+        <div id="tab-run" style="display:flex; flex-direction:column; gap:10px;">
+          <div class="pv-section-card" style="padding:9px 11px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:12px;">
+                <label style="display:inline-flex; align-items:center; gap:4px;">
+                  Run as:
+                  <select class="dv-select" id="sel-run-as" style="width:175px;">
+                    <option value="owner">Owner (MSCRMCallerID)</option>
+                    <option value="me">Current Admin Caller</option>
+                  </select>
+                </label>
+                <label style="display:inline-flex; align-items:center; gap:4px;">
+                  Page size:
+                  <select class="dv-select" id="sel-page-size" style="width:92px;">
+                    <option value="">View default</option>
+                    <option value="25">25</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                    <option value="250">250</option>
+                  </select>
+                </label>
+                <input class="dv-input" id="txt-filter-rows" placeholder="Filter current page rows…" style="width:170px;">
+              </div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button class="dv-btn dv-btn-sm" id="btn-export-rows-csv" disabled>📥 CSV</button>
+                <button class="dv-btn dv-btn-sm" id="btn-export-rows-json" disabled>📥 JSON</button>
+              </div>
+            </div>
+            <div id="run-status" style="font-size:12px; color:var(--dv-muted);">Click <strong>▶ Run View</strong> to execute this view's FetchXML and render its LayoutXML columns.</div>
+          </div>
+
+          <div class="pv-results-wrap" id="run-results-wrap" style="display:none;">
+            <table class="dv-table pv-results-table" id="tbl-results">
+              <thead id="thead-results"></thead>
+              <tbody id="tbody-results"></tbody>
+            </table>
+          </div>
+
+          <div id="run-pager" style="display:none; justify-content:space-between; align-items:center; font-size:12px;">
+            <span id="run-page-info">Page 1</span>
+            <div style="display:flex; gap:6px;">
+              <button class="dv-btn dv-btn-sm" id="btn-prev-page" disabled>← Prev</button>
+              <button class="dv-btn dv-btn-sm" id="btn-next-page" disabled>Next →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: XML & Details -->
+        <div id="tab-xml" style="display:none; flex-direction:column; gap:10px;">
+          <div class="pv-form-row">
+            <div class="pv-field">
+              <label for="edit-name">Display Name</label>
+              <input class="dv-input" id="edit-name" style="width:100%;">
+            </div>
+            <div class="pv-field">
+              <label for="edit-state">Status</label>
+              <select class="dv-select" id="edit-state" style="width:100%;">
+                <option value="0">Active</option>
+                <option value="1">Inactive</option>
+              </select>
+            </div>
+          </div>
+          <div class="pv-field">
+            <label for="edit-desc">Description</label>
+            <input class="dv-input" id="edit-desc" style="width:100%;">
+          </div>
+
+          <div class="pv-field" id="wrap-xml-1">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label for="edit-xml-1" id="lbl-xml-1" style="margin:0;">FetchXML</label>
+              <div style="display:flex; gap:6px;">
+                <button class="dv-btn dv-btn-sm" id="btn-fmt-xml-1">✨ Format XML</button>
+                <button class="dv-btn dv-btn-sm" id="btn-copy-xml-1">📋 Copy</button>
+              </div>
+            </div>
+            <textarea class="dv-textarea pv-code" id="edit-xml-1" spellcheck="false" style="width:100%;"></textarea>
+          </div>
+
+          <div class="pv-field" id="wrap-xml-2">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label for="edit-xml-2" id="lbl-xml-2" style="margin:0;">LayoutXML</label>
+              <div style="display:flex; gap:6px;">
+                <button class="dv-btn dv-btn-sm" id="btn-fmt-xml-2">✨ Format XML</button>
+                <button class="dv-btn dv-btn-sm" id="btn-copy-xml-2">📋 Copy</button>
+              </div>
+            </div>
+            <textarea class="dv-textarea pv-code" id="edit-xml-2" spellcheck="false" style="width:100%; min-height:140px;"></textarea>
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button class="dv-btn dv-btn-primary" id="btn-save-xml">💾 Save Changes</button>
+          </div>
+        </div>
+
+        <!-- TAB: Sharing -->
+        <div id="tab-share" style="display:none; flex-direction:column; gap:12px;">
+          <div class="pv-section-card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div class="pv-section-title">Shared Principals &amp; Access Rights</div>
+              <button class="dv-btn dv-btn-sm" id="btn-refresh-shares">↻ Refresh</button>
+            </div>
+            <table class="dv-table" id="tbl-shares">
+              <thead>
+                <tr>
+                  <th>Principal</th>
+                  <th>Type</th>
+                  <th>Access Rights</th>
+                  <th style="width:85px;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-shares">
+                <tr><td colspan="4" class="pv-empty">Open the Sharing tab or click Refresh to query <code>RetrieveSharedPrincipalsAndAccess</code>.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="pv-section-card">
+            <div class="pv-section-title">➕ Grant or Update Access (<code>GrantAccess</code>)</div>
+            <div class="pv-form-row">
+              <div class="pv-field">
+                <label for="share-principal-type">Principal Type</label>
+                <select class="dv-select" id="share-principal-type" style="width:100%;">
+                  <option value="systemuser">User (systemuser)</option>
+                  <option value="team">Team (team)</option>
+                </select>
+              </div>
+              <div class="pv-field">
+                <label for="share-principal-filter">Filter User / Team</label>
+                <input class="dv-input" id="share-principal-filter" placeholder="Type name to filter…" style="width:100%;">
+              </div>
+              <div class="pv-field">
+                <label for="share-principal-select">Select Principal</label>
+                <select class="dv-select" id="share-principal-select" style="width:100%;"></select>
+              </div>
+            </div>
+            <div>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+                <span style="font-size:11px; font-weight:600; color:var(--dv-muted);">Access Mask Permissions</span>
+                <div style="display:flex; gap:5px;">
+                  <button class="dv-btn dv-btn-sm" type="button" id="btn-preset-read">Read Only</button>
+                  <button class="dv-btn dv-btn-sm" type="button" id="btn-preset-rw">Read + Write</button>
+                  <button class="dv-btn dv-btn-sm" type="button" id="btn-preset-full">Full Collab</button>
+                </div>
+              </div>
+              <div class="pv-perm-grid" id="share-perm-boxes">
+                <label><input type="checkbox" value="ReadAccess" checked> Read</label>
+                <label><input type="checkbox" value="WriteAccess"> Write</label>
+                <label><input type="checkbox" value="DeleteAccess"> Delete</label>
+                <label><input type="checkbox" value="AppendAccess"> Append</label>
+                <label><input type="checkbox" value="AppendToAccess"> AppendTo</label>
+                <label><input type="checkbox" value="AssignAccess"> Assign</label>
+                <label><input type="checkbox" value="ShareAccess"> Share</label>
+              </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end;">
+              <button class="dv-btn dv-btn-primary" id="btn-grant-share">🔑 Grant Access</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Actions (Reassign / Clone / Promote) -->
+        <div id="tab-actions" style="display:none; flex-direction:column; gap:12px;">
+          <!-- Reassign -->
+          <div class="pv-section-card">
+            <div class="pv-section-title">🔄 Reassign Owner</div>
+            <div style="font-size:12px; color:var(--dv-muted);">Transfers ownership via <code>ownerid@odata.bind</code> while impersonating the current owner.</div>
+            <div class="pv-form-row">
+              <div class="pv-field">
+                <label for="reassign-type">New Owner Type</label>
+                <select class="dv-select" id="reassign-type" style="width:100%;">
+                  <option value="systemuser">User</option>
+                  <option value="team">Team</option>
+                </select>
+              </div>
+              <div class="pv-field">
+                <label for="reassign-target">Select New Owner</label>
+                <select class="dv-select" id="reassign-target" style="width:100%;"></select>
+              </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end;">
+              <button class="dv-btn dv-btn-primary" id="btn-reassign-one">🔄 Reassign Ownership</button>
+            </div>
+          </div>
+
+          <!-- Clone to Users -->
+          <div class="pv-section-card">
+            <div class="pv-section-title">🧬 Clone to Other User(s)</div>
+            <div style="font-size:12px; color:var(--dv-muted);">Creates an independent copy owned by each selected user using target <code>MSCRMCallerID</code>.</div>
+            <div class="pv-form-row">
+              <div class="pv-field">
+                <label for="clone-name">Cloned View Name</label>
+                <input class="dv-input" id="clone-name" style="width:100%;">
+              </div>
+              <div class="pv-field">
+                <label for="clone-user-filter">Filter Target Users</label>
+                <input class="dv-input" id="clone-user-filter" placeholder="Filter users…" style="width:100%;">
+              </div>
+            </div>
+            <div class="pv-multi-users" id="clone-users-box"></div>
+            <div style="display:flex; justify-content:flex-end;">
+              <button class="dv-btn dv-btn-primary" id="btn-clone-users">🧬 Clone to Selected Users</button>
+            </div>
+          </div>
+
+          <!-- Promote to System View -->
+          <div class="pv-section-card" id="card-promote">
+            <div class="pv-section-title">🚀 Promote Personal View to System View (<code>savedquery</code>)</div>
+            <div style="font-size:12px; color:var(--dv-muted);">Creates a public/system <code>savedquery</code> on <strong id="promote-entity-lbl">–</strong>, optionally adds it to an unmanaged solution, and publishes table customizations.</div>
+            <div class="pv-form-row">
+              <div class="pv-field">
+                <label for="promote-name">System View Name</label>
+                <input class="dv-input" id="promote-name" style="width:100%;">
+              </div>
+              <div class="pv-field">
+                <label for="promote-qtype">System View Type</label>
+                <select class="dv-select" id="promote-qtype" style="width:100%;">
+                  <option value="0">Public View (0)</option>
+                  <option value="2">Associated View (2)</option>
+                  <option value="4">Quick Find View (4)</option>
+                  <option value="1">Advanced Find View (1)</option>
+                </select>
+              </div>
+              <div class="pv-field">
+                <label for="promote-solution">Add to Unmanaged Solution (optional)</label>
+                <select class="dv-select" id="promote-solution" style="width:100%;">
+                  <option value="">Default Solution Only</option>
+                </select>
+              </div>
+            </div>
+            <div class="pv-field">
+              <label for="promote-desc">System View Description</label>
+              <input class="dv-input" id="promote-desc" style="width:100%;">
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+              <label style="font-size:12px; display:inline-flex; align-items:center; gap:6px;">
+                <input type="checkbox" id="chk-promote-publish" checked> Publish table XML after creating (<code>PublishXml</code>)
+              </label>
+              <button class="dv-btn dv-btn-primary" id="btn-promote-sys">🚀 Create System View</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Confirmation / Bulk Prompt Modal -->
+  <div class="dv-modal-backdrop" id="pv-modal-backdrop" style="display:none;">
+    <div class="dv-modal" style="max-width:480px; width:92%;">
+      <div class="dv-modal-head">
+        <h3 id="pv-modal-title" style="margin:0; font-size:15px;">Confirm Action</h3>
+        <button class="dv-btn dv-btn-sm" id="pv-modal-close">✕</button>
+      </div>
+      <div class="dv-modal-body" id="pv-modal-body" style="padding:14px; font-size:13px; display:flex; flex-direction:column; gap:10px;"></div>
+      <div class="dv-modal-foot" style="padding:10px 14px; display:flex; justify-content:flex-end; gap:8px; border-top:1px solid var(--dv-border);">
+        <button class="dv-btn" id="pv-modal-cancel">Cancel</button>
+        <button class="dv-btn dv-btn-primary" id="pv-modal-confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    'use strict';
+
+    const TYPE_META = {
+      view: {
+        entitySet: 'userqueries',
+        logicalName: 'userquery',
+        idAttr: 'userqueryid',
+        select: 'userqueryid,name,description,returnedtypecode,querytype,fetchxml,layoutxml,statecode,statuscode,_ownerid_value,modifiedon,createdon',
+        label: 'Personal View'
+      },
+      chart: {
+        entitySet: 'userqueryvisualizations',
+        logicalName: 'userqueryvisualization',
+        idAttr: 'userqueryvisualizationid',
+        select: 'userqueryvisualizationid,name,description,primaryentitytypecode,datadescription,presentationdescription,charttype,_ownerid_value,modifiedon,createdon',
+        label: 'Personal Chart'
+      },
+      dashboard: {
+        entitySet: 'userforms',
+        logicalName: 'userform',
+        idAttr: 'userformid',
+        select: 'userformid,name,description,objecttypecode,type,formxml,_ownerid_value,modifiedon,createdon',
+        label: 'Personal Dashboard'
+      }
+    };
+
+    const S = {
+      context: null,
+      sampleMode: false,
+      users: [],
+      teams: [],
+      solutions: [],
+      userMap: new Map(),
+      teamMap: new Map(),
+      entityMetaCache: new Map(),
+      items: { view: [], chart: [], dashboard: [] },
+      activeType: 'view',
+      activeTab: 'run',
+      selectedIds: new Set(),
+      focusedId: null,
+      scanning: false,
+      abortScan: false,
+      shares: [],
+      runState: {
+        rows: [],
+        columns: [],
+        entitySetName: '',
+        logicalName: '',
+        primaryIdAttr: '',
+        pagingCookie: '',
+        moreRecords: false,
+        page: 1,
+        pageStack: [],
+        sortCol: null,
+        sortAsc: true
+      }
+    };
+
+    const $ = id => document.getElementById(id);
+    const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    function normId(id) {
+      return String(id || '').replace(/[{}]/g, '').toLowerCase();
+    }
+
+    function getItemId(item, type = S.activeType) {
+      return normId(item?.[TYPE_META[type].idAttr]);
+    }
+
+    function getItemTable(item, type = S.activeType) {
+      if (type === 'view') return item.returnedtypecode || '';
+      if (type === 'chart') return item.primaryentitytypecode || '';
+      return item.objecttypecode || 'dashboard';
+    }
+
+    function getItemOwnerId(item) {
+      return normId(item?._ownerid_value || item?.ownerId || '');
+    }
+
+    function getOwnerName(item) {
+      const oid = getItemOwnerId(item);
+      if (item?.['_ownerid_value@OData.Community.Display.V1.FormattedValue']) {
+        return item['_ownerid_value@OData.Community.Display.V1.FormattedValue'];
+      }
+      return S.userMap.get(oid)?.fullname || S.teamMap.get(oid)?.name || oid || 'Unknown';
+    }
+
+    function isActiveState(item) {
+      return item?.statecode === undefined || item?.statecode === null || Number(item.statecode) === 0;
+    }
+
+    function buildODataHeaders(callerUserId, extra = {}) {
+      const headers = {
+        'Prefer': 'odata.include-annotations="*"',
+        ...extra
+      };
+      const cleanCaller = normId(callerUserId);
+      if (cleanCaller) headers['MSCRMCallerID'] = cleanCaller;
+      return headers;
+    }
+
+    async function dvFetchAs(path, opts = {}, callerUserId = '') {
+      if (S.sampleMode) return handleSampleFetch(path, opts, callerUserId);
+      const headers = buildODataHeaders(callerUserId, opts.headers || {});
+      return await DV.fetch(path, { ...opts, headers });
+    }
+
+    async function fetchAllPaged(path, callerUserId = '', maxPages = 20) {
+      const all = [];
+      let next = path;
+      let count = 0;
+      while (next && count < maxPages) {
+        count++;
+        const data = await dvFetchAs(next, {}, callerUserId);
+        if (Array.isArray(data?.value)) all.push(...data.value);
+        next = data?.['@odata.nextLink'] || null;
+      }
+      return all;
+    }
+
+    function setBadge(scopeText, countText) {
+      $('hdr-scope-badge').textContent = scopeText;
+      $('hdr-count-badge').textContent = countText;
+    }
+
+    /* ─── XML Helpers ───────────────────────────────────────────── */
+    function validateXml(xmlText, label = 'XML') {
+      const s = String(xmlText || '').trim();
+      if (!s) return `${label} is empty.`;
+      const doc = new DOMParser().parseFromString(s, 'text/xml');
+      const err = doc.querySelector('parsererror');
+      if (err) return `${label} parse error: ${err.textContent.trim().slice(0, 140)}`;
+      return null;
+    }
+
+    function formatXml(xmlStr) {
+      const s = String(xmlStr || '').trim();
+      if (!s) return '';
+      const doc = new DOMParser().parseFromString(s, 'text/xml');
+      if (doc.querySelector('parsererror')) throw new Error('Invalid XML syntax');
+      const lines = [];
+      function walk(node, depth) {
+        const pad = '  '.repeat(depth);
+        if (node.nodeType === 3) {
+          const t = node.nodeValue.trim();
+          if (t) lines.push(pad + esc(t));
+          return;
+        }
+        if (node.nodeType !== 1) return;
+        const attrs = Array.from(node.attributes || [])
+          .map(a => ` ${a.name}="${esc(a.value)}"`).join('');
+        const children = Array.from(node.childNodes || []).filter(c => c.nodeType === 1 || (c.nodeType === 3 && c.nodeValue.trim()));
+        if (!children.length) {
+          lines.push(`${pad}<${node.nodeName}${attrs} />`);
+          return;
+        }
+        if (children.length === 1 && children[0].nodeType === 3) {
+          lines.push(`${pad}<${node.nodeName}${attrs}>${esc(children[0].nodeValue.trim())}</${node.nodeName}>`);
+          return;
+        }
+        lines.push(`${pad}<${node.nodeName}${attrs}>`);
+        for (const ch of children) walk(ch, depth + 1);
+        lines.push(`${pad}</${node.nodeName}>`);
+      }
+      walk(doc.documentElement, 0);
+      return lines.join('\n');
+    }
+
+    function parseLayoutColumns(layoutXml, fetchXml) {
+      const cols = [];
+      const seen = new Set();
+      if (layoutXml && String(layoutXml).trim()) {
+        try {
+          const ldoc = new DOMParser().parseFromString(layoutXml, 'text/xml');
+          if (!ldoc.querySelector('parsererror')) {
+            ldoc.querySelectorAll('cell').forEach(cell => {
+              const name = cell.getAttribute('name');
+              if (name && !seen.has(name)) {
+                seen.add(name);
+                cols.push({
+                  name,
+                  width: parseInt(cell.getAttribute('width') || '120', 10) || 120
+                });
+              }
+            });
+          }
+        } catch {}
+      }
+      if (!cols.length && fetchXml) {
+        try {
+          const fdoc = new DOMParser().parseFromString(fetchXml, 'text/xml');
+          fdoc.querySelectorAll('entity > attribute, link-entity > attribute').forEach(attr => {
+            const rawName = attr.getAttribute('alias') || attr.getAttribute('name');
+            const le = attr.parentElement?.nodeName === 'link-entity' ? attr.parentElement : null;
+            const leAlias = le?.getAttribute('alias');
+            const fullName = (!attr.getAttribute('alias') && leAlias) ? `${leAlias}.${rawName}` : rawName;
+            if (fullName && !seen.has(fullName)) {
+              seen.add(fullName);
+              cols.push({ name: fullName, width: 140 });
+            }
+          });
+        } catch {}
+      }
+      return cols;
+    }
+
+    function prepareFetchXml(fetchXml, pageNum, pagingCookie, pageSizeOverride) {
+      const doc = new DOMParser().parseFromString(String(fetchXml || '').trim(), 'text/xml');
+      const err = doc.querySelector('parsererror');
+      if (err) throw new Error('Invalid FetchXML: ' + err.textContent.slice(0, 120));
+      const fetchEl = doc.querySelector('fetch');
+      if (!fetchEl) throw new Error('Missing <fetch> root element.');
+      const entEl = fetchEl.querySelector('entity');
+      const logicalName = entEl?.getAttribute('name');
+      if (!logicalName) throw new Error('Missing <entity name="..."> in FetchXML.');
+
+      if (pageSizeOverride) {
+        fetchEl.setAttribute('count', String(pageSizeOverride));
+      } else if (!fetchEl.getAttribute('count')) {
+        fetchEl.setAttribute('count', '50');
+      }
+      if (pageNum > 1 && pagingCookie) {
+        fetchEl.setAttribute('page', String(pageNum));
+        fetchEl.setAttribute('paging-cookie', pagingCookie);
+      } else if (pageNum > 1) {
+        fetchEl.setAttribute('page', String(pageNum));
+      } else {
+        fetchEl.removeAttribute('paging-cookie');
+        if (fetchEl.getAttribute('page') && fetchEl.getAttribute('page') !== '1') {
+          fetchEl.setAttribute('page', '1');
+        }
+      }
+      return {
+        logicalName,
+        xml: new XMLSerializer().serializeToString(doc)
+      };
+    }
+
+    function decodePagingCookie(rawCookieXml) {
+      if (!rawCookieXml) return '';
+      try {
+        const doc = new DOMParser().parseFromString(rawCookieXml, 'text/xml');
+        const cEl = doc.querySelector('cookie');
+        let raw = cEl?.getAttribute('pagingcookie') || '';
+        try { raw = decodeURIComponent(decodeURIComponent(raw)); } catch {}
+        return raw;
+      } catch {
+        return '';
+      }
+    }
+
+    /* ─── Directory & Metadata Loading ──────────────────────────── */
+    async function ensureDirectory() {
+      if (S.sampleMode) return;
+      const tasks = [];
+      if (!S.users.length) {
+        tasks.push(
+          fetchAllPaged('/systemusers?$filter=isdisabled eq false and accessmode ne 4&$select=systemuserid,fullname,domainname,internalemailaddress&$orderby=fullname asc')
+            .then(rows => {
+              S.users = rows;
+              S.userMap = new Map(rows.map(u => [normId(u.systemuserid), u]));
+            })
+        );
+      }
+      if (!S.teams.length) {
+        tasks.push(
+          fetchAllPaged('/teams?$filter=teamtype ne 1&$select=teamid,name,teamtype&$orderby=name asc')
+            .then(rows => {
+              S.teams = rows;
+              S.teamMap = new Map(rows.map(t => [normId(t.teamid), t]));
+            })
+            .catch(() => {})
+        );
+      }
+      if (!S.solutions.length) {
+        tasks.push(
+          fetchAllPaged('/solutions?$filter=ismanaged eq false and isvisible eq true&$select=solutionid,uniquename,friendlyname,version&$orderby=friendlyname asc')
+            .then(rows => { S.solutions = rows; })
+            .catch(() => {})
+        );
+      }
+      await Promise.all(tasks);
+      populateDirectoryPickers();
+    }
+
+    function populateDirectoryPickers() {
+      const targetUserSel = $('sel-target-user');
+      const currTarget = targetUserSel.value;
+      targetUserSel.innerHTML = '<option value="">-- Choose user --</option>' +
+        S.users.map(u => `<option value="${esc(normId(u.systemuserid))}">${esc(u.fullname)}${u.internalemailaddress ? ` (${esc(u.internalemailaddress)})` : ''}</option>`).join('');
+      if (currTarget) targetUserSel.value = currTarget;
+      else if (S.context?.userId && S.userMap.has(normId(S.context.userId))) {
+        targetUserSel.value = normId(S.context.userId);
+      }
+
+      const solSel = $('promote-solution');
+      solSel.innerHTML = '<option value="">Default Solution Only</option>' +
+        S.solutions.map(s => `<option value="${esc(s.uniquename)}">${esc(s.friendlyname)} (${esc(s.uniquename)})</option>`).join('');
+
+      refreshPrincipalDropdowns();
+      renderCloneUserCheckboxes();
+    }
+
+    function refreshPrincipalDropdowns() {
+      const shareType = $('share-principal-type').value;
+      const filter = $('share-principal-filter').value.trim().toLowerCase();
+      const sel = $('share-principal-select');
+      const list = shareType === 'team'
+        ? S.teams.map(t => ({ id: normId(t.teamid), name: t.name }))
+        : S.users.map(u => ({ id: normId(u.systemuserid), name: `${u.fullname}${u.internalemailaddress ? ` (${u.internalemailaddress})` : ''}` }));
+      const filtered = filter ? list.filter(x => x.name.toLowerCase().includes(filter)) : list;
+      sel.innerHTML = filtered.slice(0, 300).map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('') ||
+        '<option value="">No matching principals</option>';
+
+      const reassignType = $('reassign-type').value;
+      const rList = reassignType === 'team'
+        ? S.teams.map(t => ({ id: normId(t.teamid), name: t.name }))
+        : S.users.map(u => ({ id: normId(u.systemuserid), name: u.fullname }));
+      $('reassign-target').innerHTML = rList.map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+    }
+
+    function renderCloneUserCheckboxes() {
+      const box = $('clone-users-box');
+      const filter = $('clone-user-filter').value.trim().toLowerCase();
+      const filtered = filter
+        ? S.users.filter(u => `${u.fullname} ${u.internalemailaddress || ''}`.toLowerCase().includes(filter))
+        : S.users;
+      const checked = new Set(Array.from(box.querySelectorAll('input:checked')).map(c => c.value));
+      box.innerHTML = filtered.slice(0, 200).map(u => {
+        const uid = normId(u.systemuserid);
+        return `<label style="display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(u.fullname)}">
+          <input type="checkbox" value="${esc(uid)}" ${checked.has(uid) ? 'checked' : ''}> ${esc(u.fullname)}
+        </label>`;
+      }).join('') || '<span style="color:var(--dv-muted);">No users loaded.</span>';
+    }
+
+    async function resolveEntityMeta(logicalName) {
+      const key = String(logicalName || '').toLowerCase();
+      if (!key) throw new Error('Missing entity logical name.');
+      if (S.entityMetaCache.has(key)) return S.entityMetaCache.get(key);
+      const data = await dvFetchAs(
+        `/EntityDefinitions(LogicalName='${encodeURIComponent(key)}')?$select=LogicalName,EntitySetName,PrimaryIdAttribute,PrimaryNameAttribute`,
+        {}, ''
+      );
+      const meta = {
+        logicalName: data.LogicalName || key,
+        entitySetName: data.EntitySetName,
+        primaryIdAttribute: data.PrimaryIdAttribute || `${key}id`,
+        primaryNameAttribute: data.PrimaryNameAttribute || 'name'
+      };
+      S.entityMetaCache.set(key, meta);
+      return meta;
+    }
+
+    /* ─── Discovery Across Users ────────────────────────────────── */
+    function mergePersonalItems(mapByType, rows, impersonatedUserId) {
+      for (const type of ['view', 'chart', 'dashboard']) {
+        const idAttr = TYPE_META[type].idAttr;
+        for (const row of (rows[type] || [])) {
+          const id = normId(row[idAttr]);
+          if (!id) continue;
+          const existing = mapByType[type].get(id);
+          const rec = existing || { ...row, _seenViaUsers: [] };
+          if (impersonatedUserId) {
+            const impName = S.userMap.get(impersonatedUserId)?.fullname || impersonatedUserId;
+            if (!rec._seenViaUsers.includes(impName)) rec._seenViaUsers.push(impName);
+          }
+          // Prefer record copy retrieved directly under the record owner's context
+          if (!existing || normId(row._ownerid_value) === impersonatedUserId) {
+            mapByType[type].set(id, { ...row, _seenViaUsers: rec._seenViaUsers });
+          } else {
+            mapByType[type].set(id, rec);
+          }
+        }
+      }
+    }
+
+    async function fetchAllTypesForCaller(callerUserId) {
+      const [views, charts, dashboards] = await Promise.all([
+        fetchAllPaged(`/${TYPE_META.view.entitySet}?$select=${TYPE_META.view.select}&$orderby=name asc`, callerUserId, 10),
+        fetchAllPaged(`/${TYPE_META.chart.entitySet}?$select=${TYPE_META.chart.select}&$orderby=name asc`, callerUserId, 5).catch(() => []),
+        fetchAllPaged(`/${TYPE_META.dashboard.entitySet}?$select=${TYPE_META.dashboard.select}&$orderby=name asc`, callerUserId, 5).catch(() => [])
+      ]);
+      return { view: views, chart: charts, dashboard: dashboards };
+    }
+
+    async function scanItems() {
+      if (S.scanning) return;
+      const scope = $('sel-scope').value;
+      S.scanning = true;
+      S.abortScan = false;
+      $('btn-load').disabled = true;
+
+      try {
+        await ensureDirectory();
+        const maps = { view: new Map(), chart: new Map(), dashboard: new Map() };
+
+        if (scope === 'me') {
+          setBadge('Visible to Me', 'Loading…');
+          const rows = await fetchAllTypesForCaller('');
+          mergePersonalItems(maps, rows, '');
+          setBadge('Visible to Me', `${maps.view.size} views`);
+        } else if (scope === 'user') {
+          const targetId = normId($('sel-target-user').value);
+          if (!targetId) {
+            DV.notify('Select a target user first.', 'warning');
+            return;
+          }
+          const uname = S.userMap.get(targetId)?.fullname || targetId;
+          setBadge(`User: ${uname}`, 'Loading…');
+          const rows = await fetchAllTypesForCaller(targetId);
+          mergePersonalItems(maps, rows, targetId);
+          setBadge(`User: ${uname}`, `${maps.view.size} views`);
+        } else {
+          // Scan all enabled users with bounded concurrency
+          const users = S.users.slice();
+          if (!users.length) {
+            DV.notify('No enabled users found; falling back to caller-visible views.', 'warning');
+            const rows = await fetchAllTypesForCaller('');
+            mergePersonalItems(maps, rows, '');
+          } else {
+            const conc = Math.max(1, parseInt($('sel-concurrency').value || '4', 10));
+            const prog = $('scan-progress');
+            prog.classList.add('active');
+            let done = 0;
+            let idx = 0;
+            let permError = false;
+
+            const updateProg = () => {
+              const pct = Math.round((done / users.length) * 100);
+              $('scan-progress-fill').style.width = `${pct}%`;
+              $('scan-progress-text').textContent = `Scanning user ${done} / ${users.length} (${maps.view.size} views, ${maps.chart.size} charts, ${maps.dashboard.size} dashboards)…`;
+            };
+            updateProg();
+
+            const worker = async () => {
+              while (idx < users.length && !S.abortScan && !permError) {
+                const u = users[idx++];
+                const uid = normId(u.systemuserid);
+                try {
+                  const rows = await fetchAllTypesForCaller(uid);
+                  mergePersonalItems(maps, rows, uid);
+                } catch (err) {
+                  const msg = String(err?.message || err);
+                  if (/403|ActOnBehalfOfAnotherUser|privilege/i.test(msg)) {
+                    permError = true;
+                    DV.notify(`Impersonation denied (${msg}). Verify prvActOnBehalfOfAnotherUser privilege or switch to "Visible to Current Caller".`, 'error', 7000);
+                  }
+                } finally {
+                  done++;
+                  updateProg();
+                }
+              }
+            };
+
+            await Promise.all(Array.from({ length: Math.min(conc, users.length) }, worker));
+            prog.classList.remove('active');
+            setBadge(S.sampleMode ? 'Sample Mode (All Users)' : `All Users (${done}/${users.length})`, `${maps.view.size} views`);
+          }
+        }
+
+        S.items.view = Array.from(maps.view.values());
+        S.items.chart = Array.from(maps.chart.values());
+        S.items.dashboard = Array.from(maps.dashboard.values());
+        S.selectedIds.clear();
+        updateCountsAndFilters();
+        renderItemList();
+        if (getFilteredItems().length && (!S.focusedId || !getItemById(S.focusedId))) {
+          selectFocusedItem(getItemId(getFilteredItems()[0]));
+        } else {
+          renderDetail();
+        }
+      } catch (err) {
+        DV.notify(`Scan failed: ${err.message || err}`, 'error', 6000);
+      } finally {
+        $('scan-progress').classList.remove('active');
+        S.scanning = false;
+        $('btn-load').disabled = false;
+      }
+    }
+
+    function updateCountsAndFilters() {
+      $('cnt-view').textContent = String(S.items.view.length);
+      $('cnt-chart').textContent = String(S.items.chart.length);
+      $('cnt-dashboard').textContent = String(S.items.dashboard.length);
+
+      const list = S.items[S.activeType] || [];
+      $('hdr-count-badge').textContent = `${list.length} ${S.activeType}${list.length === 1 ? '' : 's'}`;
+
+      const prevEnt = $('sel-entity').value;
+      const entities = Array.from(new Set(list.map(x => getItemTable(x)).filter(Boolean))).sort();
+      $('sel-entity').innerHTML = '<option value="">All Tables</option>' +
+        entities.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join('');
+      if (entities.includes(prevEnt)) $('sel-entity').value = prevEnt;
+
+      const prevOwner = $('sel-owner').value;
+      const ownerPairs = new Map();
+      for (const item of list) {
+        const oid = getItemOwnerId(item);
+        if (oid && !ownerPairs.has(oid)) ownerPairs.set(oid, getOwnerName(item));
+      }
+      const sortedOwners = Array.from(ownerPairs.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+      $('sel-owner').innerHTML = '<option value="">All Owners (' + sortedOwners.length + ')</option>' +
+        sortedOwners.map(([id, name]) => `<option value="${esc(id)}">${esc(name)}</option>`).join('');
+      if (ownerPairs.has(prevOwner)) $('sel-owner').value = prevOwner;
+    }
+
+    function getFilteredItems() {
+      const list = S.items[S.activeType] || [];
+      const q = $('txt-search').value.trim().toLowerCase();
+      const ent = $('sel-entity').value;
+      const owner = $('sel-owner').value;
+      const st = $('sel-state').value;
+
+      return list.filter(item => {
+        if (ent && getItemTable(item) !== ent) return false;
+        if (owner && getItemOwnerId(item) !== owner) return false;
+        if (st !== 'all') {
+          const active = isActiveState(item) ? '0' : '1';
+          if (active !== st) return false;
+        }
+        if (q) {
+          const hay = [
+            item.name,
+            item.description,
+            getItemTable(item),
+            getOwnerName(item),
+            getItemId(item),
+            item.fetchxml,
+            item.layoutxml
+          ].join(' ').toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+    }
+
+    function getItemById(id, type = S.activeType) {
+      const clean = normId(id);
+      return (S.items[type] || []).find(x => getItemId(x, type) === clean) || null;
+    }
+
+    function renderItemList() {
+      const rows = getFilteredItems();
+      const tbody = $('tbody-items');
+      $('list-summary').textContent = `${rows.length} of ${(S.items[S.activeType] || []).length} ${TYPE_META[S.activeType].label.toLowerCase()}s`;
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="pv-empty">No matching personal items.</td></tr>';
+        updateBulkBar();
+        return;
+      }
+
+      tbody.innerHTML = rows.map(item => {
+        const id = getItemId(item);
+        const focused = id === S.focusedId;
+        const checked = S.selectedIds.has(id);
+        const active = isActiveState(item);
+        const tbl = getItemTable(item) || '–';
+        const ownerName = getOwnerName(item);
+        return `<tr data-id="${esc(id)}" class="${focused ? 'pv-row-selected' : ''}" style="cursor:pointer;">
+          <td onclick="event.stopPropagation();"><input type="checkbox" class="pv-row-chk" data-id="${esc(id)}" ${checked ? 'checked' : ''}></td>
+          <td>
+            <div class="pv-item-title">${esc(item.name || '(Unnamed)')}</div>
+            ${item.description ? `<div class="pv-item-sub">${esc(item.description.slice(0, 75))}</div>` : ''}
+          </td>
+          <td><code>${esc(tbl)}</code></td>
+          <td>${esc(ownerName)}</td>
+          <td><span class="dv-badge ${active ? 'dv-badge-success' : ''}">${active ? 'Active' : 'Inactive'}</span></td>
+          <td onclick="event.stopPropagation();" style="white-space:nowrap;">
+            ${S.activeType === 'view' ? `<button class="dv-btn dv-btn-sm pv-quick-run" data-id="${esc(id)}" title="Run this Personal View">▶</button>` : ''}
+            <button class="dv-btn dv-btn-sm pv-quick-share" data-id="${esc(id)}" title="Manage Sharing">👥</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('tr[data-id]').forEach(tr => {
+        tr.addEventListener('click', () => selectFocusedItem(tr.dataset.id));
+      });
+      tbody.querySelectorAll('.pv-row-chk').forEach(chk => {
+        chk.addEventListener('change', () => {
+          if (chk.checked) S.selectedIds.add(chk.dataset.id);
+          else S.selectedIds.delete(chk.dataset.id);
+          updateBulkBar();
+        });
+      });
+      tbody.querySelectorAll('.pv-quick-run').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await selectFocusedItem(btn.dataset.id, 'run');
+          runFocusedView(1, '');
+        });
+      });
+      tbody.querySelectorAll('.pv-quick-share').forEach(btn => {
+        btn.addEventListener('click', () => selectFocusedItem(btn.dataset.id, 'share'));
+      });
+      updateBulkBar();
+    }
+
+    function updateBulkBar() {
+      const cnt = S.selectedIds.size;
+      const bar = $('bulk-bar');
+      bar.classList.toggle('active', cnt > 0);
+      $('bulk-count').textContent = `${cnt} selected`;
+      const filtered = getFilteredItems();
+      $('chk-all').checked = filtered.length > 0 && filtered.every(x => S.selectedIds.has(getItemId(x)));
+    }
+
+    /* ─── Detail Pane & Tabs ────────────────────────────────────── */
+    async function selectFocusedItem(id, switchToTab = null) {
+      S.focusedId = normId(id);
+      if (switchToTab) setActiveDetailTab(switchToTab);
+      renderItemList();
+      renderDetail();
+      if (S.activeTab === 'share') await loadSharesForFocused();
+    }
+
+    function setActiveDetailTab(tab) {
+      S.activeTab = tab;
+      $('detail-tabs').querySelectorAll('.pv-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      $('tab-run').style.display = tab === 'run' ? 'flex' : 'none';
+      $('tab-xml').style.display = tab === 'xml' ? 'flex' : 'none';
+      $('tab-share').style.display = tab === 'share' ? 'flex' : 'none';
+      $('tab-actions').style.display = tab === 'actions' ? 'flex' : 'none';
+    }
+
+    function renderDetail() {
+      const item = getItemById(S.focusedId);
+      if (!item) {
+        $('detail-empty').style.display = 'flex';
+        $('detail-content').style.display = 'none';
+        $('btn-run-view').disabled = true;
+        $('btn-open-fetchxml').disabled = true;
+        $('btn-delete-one').disabled = true;
+        return;
+      }
+
+      $('detail-empty').style.display = 'none';
+      $('detail-content').style.display = 'flex';
+      const isView = S.activeType === 'view';
+      $('btn-run-view').disabled = !isView;
+      $('btn-open-fetchxml').disabled = !isView || !item.fetchxml;
+      $('btn-delete-one').disabled = false;
+
+      $('det-name').textContent = item.name || '(Unnamed)';
+      $('det-entity').textContent = getItemTable(item) || '–';
+      $('det-owner').textContent = getOwnerName(item);
+      $('det-state-mod').textContent = `${isActiveState(item) ? 'Active' : 'Inactive'} • ${item.modifiedon ? new Date(item.modifiedon).toLocaleString() : '–'}`;
+      $('det-id').textContent = getItemId(item);
+
+      if (item._seenViaUsers?.length) {
+        $('det-shared-via-wrap').style.display = 'block';
+        $('det-seen-via').textContent = item._seenViaUsers.slice(0, 5).join(', ') + (item._seenViaUsers.length > 5 ? ` (+${item._seenViaUsers.length - 5})` : '');
+      } else {
+        $('det-shared-via-wrap').style.display = 'none';
+      }
+
+      // XML & Details tab fields
+      $('edit-name').value = item.name || '';
+      $('edit-state').value = isActiveState(item) ? '0' : '1';
+      $('edit-desc').value = item.description || '';
+
+      if (isView) {
+        $('lbl-xml-1').textContent = 'FetchXML';
+        $('edit-xml-1').value = item.fetchxml || '';
+        $('wrap-xml-2').style.display = 'block';
+        $('lbl-xml-2').textContent = 'LayoutXML';
+        $('edit-xml-2').value = item.layoutxml || '';
+      } else if (S.activeType === 'chart') {
+        $('lbl-xml-1').textContent = 'DataDescription XML';
+        $('edit-xml-1').value = item.datadescription || '';
+        $('wrap-xml-2').style.display = 'block';
+        $('lbl-xml-2').textContent = 'PresentationDescription XML';
+        $('edit-xml-2').value = item.presentationdescription || '';
+      } else {
+        $('lbl-xml-1').textContent = 'FormXML (Dashboard Layout)';
+        $('edit-xml-1').value = item.formxml || '';
+        $('wrap-xml-2').style.display = 'none';
+      }
+
+      // Actions defaults
+      $('clone-name').value = `${item.name || 'Copy'} (Copy)`;
+      $('card-promote').style.display = isView ? 'flex' : 'none';
+      $('promote-entity-lbl').textContent = getItemTable(item) || '–';
+      $('promote-name').value = item.name || '';
+      $('promote-desc').value = item.description || '';
+
+      // Reset run table only when changing focused view
+      if (S.runState.lastViewId !== S.focusedId) {
+        $('run-results-wrap').style.display = 'none';
+        $('run-pager').style.display = 'none';
+        $('btn-export-rows-csv').disabled = true;
+        $('btn-export-rows-json').disabled = true;
+        $('run-status').textContent = isView
+          ? 'Click ▶ Run View to execute this view\'s FetchXML and render its LayoutXML columns.'
+          : 'Running queries applies to Personal Views. Use XML, Sharing, or Actions tabs for Charts & Dashboards.';
+        S.shares = [];
+        $('cnt-shares').textContent = '–';
+      }
+    }
+
+    /* ─── Run Personal View ─────────────────────────────────────── */
+    async function runFocusedView(page = 1, pagingCookie = '') {
+      const item = getItemById(S.focusedId, 'view');
+      if (!item || !item.fetchxml) {
+        DV.notify('Select a Personal View with FetchXML first.', 'warning');
+        return;
+      }
+      setActiveDetailTab('run');
+      const runAs = $('sel-run-as').value;
+      const callerId = runAs === 'owner' ? getItemOwnerId(item) : '';
+      const pageSize = $('sel-page-size').value;
+
+      $('btn-run-view').disabled = true;
+      $('run-status').textContent = `Running FetchXML (page ${page}${callerId ? `, as ${getOwnerName(item)}` : ''})…`;
+
+      try {
+        const prepared = prepareFetchXml(item.fetchxml, page, pagingCookie, pageSize);
+        const meta = await resolveEntityMeta(prepared.logicalName);
+        const cols = parseLayoutColumns(item.layoutxml, prepared.xml);
+        const relPath = `/${meta.entitySetName}?fetchXml=${encodeURIComponent(prepared.xml)}`;
+
+        let json;
+        if (relPath.length > 1900 && !S.sampleMode) {
+          const batchId = 'batch_' + Math.random().toString(36).slice(2, 10);
+          const envUrl = S.context?.environmentUrl || location.origin;
+          const apiVer = S.context?.apiVersion || '9.2';
+          const fullUrl = `${envUrl}/api/data/v${apiVer}${relPath}`;
+          const batchBody = [
+            `--${batchId}`,
+            'Content-Type: application/http',
+            'Content-Transfer-Encoding: binary',
+            '',
+            `GET ${fullUrl} HTTP/1.1`,
+            'Accept: application/json',
+            'Prefer: odata.include-annotations="*"',
+            '',
+            `--${batchId}--`
+          ].join('\r\n');
+          const batchRes = await dvFetchAs('/$batch', {
+            method: 'POST',
+            headers: { 'Content-Type': `multipart/mixed;boundary=${batchId}` },
+            body: batchBody
+          }, callerId);
+          if (batchRes?.error) throw new Error(batchRes.error.message || 'Batch request failed');
+          if (typeof batchRes?.raw === 'string') {
+            const s = batchRes.raw.indexOf('{'), e = batchRes.raw.lastIndexOf('}');
+            json = (s !== -1 && e > s) ? JSON.parse(batchRes.raw.slice(s, e + 1)) : batchRes;
+          } else {
+            json = batchRes;
+          }
+          if (json?.error) throw new Error(json.error.message || 'Batch inner query error');
+        } else {
+          json = await dvFetchAs(relPath, {}, callerId);
+        }
+
+        const rows = Array.isArray(json?.value) ? json.value : [];
+        const rawCookieXml = json?.['@Microsoft.Dynamics.CRM.fetchxmlpagingcookie'];
+        const nextCookie = decodePagingCookie(rawCookieXml);
+        const more = Boolean(json?.['@Microsoft.Dynamics.CRM.morerecords'] || nextCookie);
+
+        // If layoutxml & fetchxml had no explicit attributes (e.g. <all-attributes/>), infer from rows
+        let finalCols = cols;
+        if (!finalCols.length && rows.length) {
+          const keys = new Set();
+          for (const r of rows.slice(0, 10)) {
+            for (const k of Object.keys(r)) {
+              if (!k.startsWith('@') && !k.includes('@OData.')) keys.add(k);
+            }
+          }
+          finalCols = Array.from(keys).map(name => ({ name, width: 150 }));
+        }
+
+        if (page === 1) S.runState.pageStack = [];
+        S.runState.lastViewId = S.focusedId;
+        S.runState.rows = rows;
+        S.runState.columns = finalCols;
+        S.runState.entitySetName = meta.entitySetName;
+        S.runState.logicalName = meta.logicalName;
+        S.runState.primaryIdAttr = meta.primaryIdAttribute;
+        S.runState.pagingCookie = nextCookie;
+        S.runState.moreRecords = more;
+        S.runState.page = page;
+        S.runState.sortCol = null;
+
+        renderRunResults();
+      } catch (err) {
+        $('run-status').textContent = `Error: ${err.message || err}`;
+        DV.notify(`View execution failed: ${err.message || err}`, 'error', 6000);
+      } finally {
+        $('btn-run-view').disabled = false;
+      }
+    }
+
+    function getCellDisplay(row, colName) {
+      // Handle lookup GUIDs (_attr_value) or formatted OData annotations
+      const candidates = [colName];
+      if (!colName.startsWith('_') && row[`_${colName}_value`] !== undefined) {
+        candidates.unshift(`_${colName}_value`);
+      }
+      for (const k of candidates) {
+        const fmt = row[`${k}@OData.Community.Display.V1.FormattedValue`];
+        const raw = row[k];
+        if (fmt !== undefined || raw !== undefined) {
+          return {
+            display: fmt !== undefined ? String(fmt) : String(raw ?? ''),
+            raw: raw !== undefined ? String(raw) : String(fmt ?? '')
+          };
+        }
+      }
+      return { display: '', raw: '' };
+    }
+
+    function renderRunResults() {
+      const { rows, columns, page, moreRecords, sortCol, sortAsc } = S.runState;
+      const filterText = $('txt-filter-rows').value.trim().toLowerCase();
+
+      let displayRows = rows.slice();
+      if (filterText) {
+        displayRows = displayRows.filter(r =>
+          columns.some(c => getCellDisplay(r, c.name).display.toLowerCase().includes(filterText))
+        );
+      }
+      if (sortCol) {
+        displayRows.sort((a, b) => {
+          const av = getCellDisplay(a, sortCol).display;
+          const bv = getCellDisplay(b, sortCol).display;
+          return sortAsc ? av.localeCompare(bv, undefined, { numeric: true }) : bv.localeCompare(av, undefined, { numeric: true });
+        });
+      }
+
+      $('run-status').innerHTML = `<strong>${displayRows.length}</strong> row${displayRows.length === 1 ? '' : 's'} shown on page ${page}` +
+        ` from <code>${esc(S.runState.entitySetName)}</code>` +
+        `${moreRecords ? ' • more pages available' : ' • end of results'}`;
+
+      $('run-results-wrap').style.display = 'block';
+      $('run-pager').style.display = 'flex';
+      $('run-page-info').textContent = `Page ${page} (${rows.length} fetched)`;
+      $('btn-prev-page').disabled = page <= 1;
+      $('btn-next-page').disabled = !moreRecords;
+      $('btn-export-rows-csv').disabled = !rows.length;
+      $('btn-export-rows-json').disabled = !rows.length;
+
+      $('thead-results').innerHTML = `<tr>${columns.map(c => {
+        const arrow = sortCol === c.name ? (sortAsc ? ' ▲' : ' ▼') : '';
+        return `<th data-col="${esc(c.name)}" style="min-width:${Math.min(260, Math.max(85, c.width))}px;">${esc(c.name)}${arrow}</th>`;
+      }).join('')}</tr>`;
+
+      $('thead-results').querySelectorAll('th[data-col]').forEach(th => {
+        th.addEventListener('click', () => {
+          const c = th.dataset.col;
+          if (S.runState.sortCol === c) S.runState.sortAsc = !S.runState.sortAsc;
+          else { S.runState.sortCol = c; S.runState.sortAsc = true; }
+          renderRunResults();
+        });
+      });
+
+      if (!displayRows.length) {
+        $('tbody-results').innerHTML = `<tr><td colspan="${Math.max(1, columns.length)}" class="pv-empty">No records match on this page.</td></tr>`;
+        return;
+      }
+
+      $('tbody-results').innerHTML = displayRows.map(r => `<tr>${columns.map(c => {
+        const { display, raw } = getCellDisplay(r, c.name);
+        return `<td class="pv-cell-copy" title="${esc(raw && raw !== display ? `${display} (raw: ${raw}) — click to copy` : `${display} — click to copy`)}" data-copy="${esc(raw || display)}">${esc(display)}</td>`;
+      }).join('')}</tr>`).join('');
+
+      $('tbody-results').querySelectorAll('.pv-cell-copy').forEach(td => {
+        td.addEventListener('click', () => {
+          if (td.dataset.copy) DV.copyText(td.dataset.copy, 'Copied cell value');
+        });
+      });
+    }
+
+    /* ─── Save XML Changes ──────────────────────────────────────── */
+    async function saveXmlChanges() {
+      const item = getItemById(S.focusedId);
+      if (!item) return;
+      const meta = TYPE_META[S.activeType];
+      const name = $('edit-name').value.trim();
+      const desc = $('edit-desc').value.trim();
+      const statecode = parseInt($('edit-state').value, 10);
+      const xml1 = $('edit-xml-1').value;
+      const xml2 = $('edit-xml-2').value;
+
+      if (!name) { DV.notify('Name cannot be empty.', 'warning'); return; }
+      const err1 = validateXml(xml1, $('lbl-xml-1').textContent);
+      if (err1) { DV.notify(err1, 'error'); return; }
+      if ($('wrap-xml-2').style.display !== 'none' && xml2.trim()) {
+        const err2 = validateXml(xml2, $('lbl-xml-2').textContent);
+        if (err2) { DV.notify(err2, 'error'); return; }
+      }
+
+      const payload = { name, description: desc || null, statecode };
+      if (S.activeType === 'view') {
+        payload.fetchxml = xml1;
+        if (xml2.trim()) payload.layoutxml = xml2;
+      } else if (S.activeType === 'chart') {
+        payload.datadescription = xml1;
+        if (xml2.trim()) payload.presentationdescription = xml2;
+      } else {
+        payload.formxml = xml1;
+      }
+
+      const ownerId = getItemOwnerId(item);
+      await dvFetchAs(`/${meta.entitySet}(${getItemId(item)})`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }, ownerId);
+
+      Object.assign(item, payload, { modifiedon: new Date().toISOString() });
+      DV.notify(`Saved "${name}".`, 'success');
+      renderItemList();
+      renderDetail();
+    }
+
+    /* ─── Sharing (RetrieveSharedPrincipalsAndAccess / Grant / Revoke) */
+    function formatAccessRights(accessMask) {
+      if (Array.isArray(accessMask)) return accessMask;
+      if (typeof accessMask === 'string') {
+        return accessMask.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      const n = Number(accessMask) || 0;
+      const map = [
+        [1, 'ReadAccess'], [2, 'WriteAccess'], [4, 'AppendAccess'],
+        [16, 'AppendToAccess'], [32, 'CreateAccess'], [65536, 'DeleteAccess'],
+        [262144, 'ShareAccess'], [524288, 'AssignAccess']
+      ];
+      return map.filter(([bit]) => (n & bit) === bit).map(([, name]) => name);
+    }
+
+    function targetODataObj(item, type = S.activeType) {
+      const meta = TYPE_META[type];
+      return {
+        '@odata.type': `Microsoft.Dynamics.CRM.${meta.logicalName}`,
+        [meta.idAttr]: getItemId(item, type)
+      };
+    }
+
+    function principalODataObj(pType, principalId) {
+      const clean = normId(principalId);
+      if (pType === 'team') {
+        return { '@odata.type': 'Microsoft.Dynamics.CRM.team', teamid: clean };
+      }
+      return { '@odata.type': 'Microsoft.Dynamics.CRM.systemuser', systemuserid: clean };
+    }
+
+    async function loadSharesForFocused() {
+      const item = getItemById(S.focusedId);
+      if (!item) return;
+      const meta = TYPE_META[S.activeType];
+      const id = getItemId(item);
+      const ownerId = getItemOwnerId(item);
+
+      $('tbody-shares').innerHTML = '<tr><td colspan="4" class="pv-empty">Loading shares…</td></tr>';
+      try {
+        const param = JSON.stringify({ '@odata.id': `${meta.entitySet}(${id})` });
+        const data = await dvFetchAs(`/RetrieveSharedPrincipalsAndAccess(Target=@p1)?@p1=${encodeURIComponent(param)}`, {}, ownerId);
+        const list = Array.isArray(data?.PrincipalAccesses) ? data.PrincipalAccesses : [];
+        S.shares = list;
+        $('cnt-shares').textContent = String(list.length);
+        renderSharesTable();
+      } catch (err) {
+        $('tbody-shares').innerHTML = `<tr><td colspan="4" class="pv-empty" style="color:var(--dv-danger);">Failed to query shares: ${esc(err.message || err)}</td></tr>`;
+      }
+    }
+
+    function renderSharesTable() {
+      const tbody = $('tbody-shares');
+      if (!S.shares.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="pv-empty">Not shared with any users or teams.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = S.shares.map((pa, idx) => {
+        const p = pa.Principal || {};
+        const isTeam = Boolean(p.teamid) || /team/i.test(p['@odata.type'] || '');
+        const pid = normId(p.teamid || p.systemuserid || '');
+        const pName = isTeam
+          ? (S.teamMap.get(pid)?.name || p.name || pid)
+          : (S.userMap.get(pid)?.fullname || p.fullname || pid);
+        const rights = formatAccessRights(pa.AccessMask);
+        return `<tr>
+          <td><strong>${esc(pName)}</strong><div class="pv-item-sub" style="font-family:var(--dv-mono);">${esc(pid)}</div></td>
+          <td><span class="dv-badge">${isTeam ? 'Team' : 'User'}</span></td>
+          <td>${rights.map(r => `<span class="pv-perm-chip">${esc(r.replace(/Access$/, ''))}</span>`).join('')}</td>
+          <td><button class="dv-btn dv-btn-sm dv-btn-danger pv-revoke-btn" data-idx="${idx}">Revoke</button></td>
+        </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('.pv-revoke-btn').forEach(btn => {
+        btn.addEventListener('click', () => revokeShareAt(parseInt(btn.dataset.idx, 10)));
+      });
+    }
+
+    function getSelectedPermMask() {
+      return Array.from($('share-perm-boxes').querySelectorAll('input:checked')).map(c => c.value);
+    }
+
+    async function grantShare(item, principalType, principalId, maskArr) {
+      const accessMask = maskArr.join(', ');
+      if (!accessMask) throw new Error('Select at least one permission.');
+      await dvFetchAs('/GrantAccess', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          Target: targetODataObj(item),
+          PrincipalAccess: {
+            Principal: principalODataObj(principalType, principalId),
+            AccessMask: accessMask
+          }
+        })
+      }, getItemOwnerId(item));
+    }
+
+    async function revokeShareAt(idx) {
+      const item = getItemById(S.focusedId);
+      const pa = S.shares[idx];
+      if (!item || !pa) return;
+      const p = pa.Principal || {};
+      const isTeam = Boolean(p.teamid) || /team/i.test(p['@odata.type'] || '');
+      const pid = normId(p.teamid || p.systemuserid || '');
+
+      await dvFetchAs('/RevokeAccess', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          Target: targetODataObj(item),
+          Revokee: principalODataObj(isTeam ? 'team' : 'systemuser', pid)
+        })
+      }, getItemOwnerId(item));
+      DV.notify('Access revoked.', 'success');
+      await loadSharesForFocused();
+    }
+
+    /* ─── Reassign / Clone / Promote / Delete ───────────────────── */
+    async function reassignItem(item, newOwnerType, newOwnerId) {
+      const meta = TYPE_META[S.activeType];
+      const bindSet = newOwnerType === 'team' ? 'teams' : 'systemusers';
+      const cleanNew = normId(newOwnerId);
+      await dvFetchAs(`/${meta.entitySet}(${getItemId(item)})`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 'ownerid@odata.bind': `/${bindSet}(${cleanNew})` })
+      }, getItemOwnerId(item));
+      item._ownerid_value = cleanNew;
+      delete item['_ownerid_value@OData.Community.Display.V1.FormattedValue'];
+    }
+
+    async function cloneToSelectedUsers() {
+      const item = getItemById(S.focusedId);
+      if (!item) return;
+      const targetUserIds = Array.from($('clone-users-box').querySelectorAll('input:checked')).map(c => c.value);
+      if (!targetUserIds.length) { DV.notify('Select at least one target user.', 'warning'); return; }
+      const cloneName = $('clone-name').value.trim() || `${item.name || 'View'} (Copy)`;
+      const meta = TYPE_META[S.activeType];
+
+      let ok = 0;
+      for (const uid of targetUserIds) {
+        const body = { name: cloneName, description: item.description || null };
+        if (S.activeType === 'view') {
+          body.returnedtypecode = item.returnedtypecode;
+          body.querytype = item.querytype ?? 0;
+          body.fetchxml = item.fetchxml;
+          if (item.layoutxml) body.layoutxml = item.layoutxml;
+        } else if (S.activeType === 'chart') {
+          body.primaryentitytypecode = item.primaryentitytypecode;
+          body.datadescription = item.datadescription;
+          body.presentationdescription = item.presentationdescription;
+          body.charttype = item.charttype;
+        } else {
+          body.objecttypecode = item.objecttypecode;
+          body.type = item.type;
+          body.formxml = item.formxml;
+        }
+        const created = await dvFetchAs(`/${meta.entitySet}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+          body: JSON.stringify(body)
+        }, uid);
+        if (created && created[meta.idAttr]) {
+          S.items[S.activeType].push(created);
+        }
+        ok++;
+      }
+      DV.notify(`Cloned to ${ok} user${ok === 1 ? '' : 's'}.`, 'success');
+      updateCountsAndFilters();
+      renderItemList();
+    }
+
+    async function promoteToSystemView() {
+      const item = getItemById(S.focusedId, 'view');
+      if (!item) return;
+      const name = $('promote-name').value.trim();
+      const desc = $('promote-desc').value.trim();
+      const querytype = parseInt($('promote-qtype').value, 10);
+      const solUniqueName = $('promote-solution').value;
+      const doPublish = $('chk-promote-publish').checked;
+
+      if (!name) { DV.notify('Enter a System View name.', 'warning'); return; }
+      const err1 = validateXml(item.fetchxml, 'FetchXML');
+      if (err1) { DV.notify(err1, 'error'); return; }
+
+      const created = await dvFetchAs('/savedqueries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+        body: JSON.stringify({
+          name,
+          description: desc || null,
+          returnedtypecode: item.returnedtypecode,
+          querytype,
+          fetchxml: item.fetchxml,
+          layoutxml: item.layoutxml || null
+        })
+      }, '');
+
+      const newId = normId(created?.savedqueryid || '');
+      if (solUniqueName && newId) {
+        await dvFetchAs('/AddSolutionComponent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ComponentId: newId,
+            ComponentType: 26,
+            SolutionUniqueName: solUniqueName,
+            AddRequiredComponents: false,
+            DoNotIncludeSubcomponents: true
+          })
+        }, '');
+      }
+
+      if (doPublish && item.returnedtypecode) {
+        await dvFetchAs('/PublishXml', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ParameterXml: `<importexportxml><entities><entity>${esc(item.returnedtypecode)}</entity></entities></importexportxml>`
+          })
+        }, '');
+      }
+
+      DV.notify(`System View "${name}" created${solUniqueName ? ` in ${solUniqueName}` : ''}${doPublish ? ' & published' : ''}!`, 'success', 5000);
+    }
+
+    /* ─── Modal Helpers (Delete / Bulk Share / Bulk Reassign) ──── */
+    function openModal({ title, html, confirmLabel = 'Confirm', danger = false, onConfirm }) {
+      const bd = $('pv-modal-backdrop');
+      $('pv-modal-title').textContent = title;
+      $('pv-modal-body').innerHTML = html;
+      const cbtn = $('pv-modal-confirm');
+      cbtn.textContent = confirmLabel;
+      cbtn.className = `dv-btn ${danger ? 'dv-btn-danger' : 'dv-btn-primary'}`;
+      bd.style.display = 'flex';
+
+      const close = () => { bd.style.display = 'none'; cbtn.onclick = null; };
+      $('pv-modal-close').onclick = close;
+      $('pv-modal-cancel').onclick = close;
+      cbtn.onclick = async () => {
+        cbtn.disabled = true;
+        try {
+          await onConfirm();
+          close();
+        } catch (err) {
+          DV.notify(err.message || String(err), 'error', 5000);
+        } finally {
+          cbtn.disabled = false;
+        }
+      };
+    }
+
+    async function deleteItems(items) {
+      if (!items.length) return;
+      const meta = TYPE_META[S.activeType];
+      const namesPreview = items.slice(0, 6).map(x => `<li><strong>${esc(x.name)}</strong> (${esc(getOwnerName(x))})</li>`).join('');
+      const moreTxt = items.length > 6 ? `<li>…and ${items.length - 6} more</li>` : '';
+      openModal({
+        title: `Delete ${items.length} ${meta.label}${items.length === 1 ? '' : 's'}?`,
+        html: `<div>This permanently deletes the selected Dataverse record(s) under their owner context:</div><ul style="margin:0;padding-left:18px;">${namesPreview}${moreTxt}</ul>`,
+        confirmLabel: `🗑️ Delete (${items.length})`,
+        danger: true,
+        onConfirm: async () => {
+          const delIds = new Set();
+          for (const it of items) {
+            const id = getItemId(it);
+            await dvFetchAs(`/${meta.entitySet}(${id})`, { method: 'DELETE' }, getItemOwnerId(it));
+            delIds.add(id);
+          }
+          S.items[S.activeType] = S.items[S.activeType].filter(x => !delIds.has(getItemId(x)));
+          for (const id of delIds) S.selectedIds.delete(id);
+          if (delIds.has(S.focusedId)) S.focusedId = null;
+          updateCountsAndFilters();
+          renderItemList();
+          renderDetail();
+          DV.notify(`Deleted ${delIds.size} item${delIds.size === 1 ? '' : 's'}.`, 'success');
+        }
+      });
+    }
+
+    async function bulkSetState(targetState) {
+      const items = Array.from(S.selectedIds).map(id => getItemById(id)).filter(Boolean);
+      if (!items.length) return;
+      const meta = TYPE_META[S.activeType];
+      for (const it of items) {
+        await dvFetchAs(`/${meta.entitySet}(${getItemId(it)})`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ statecode: targetState })
+        }, getItemOwnerId(it));
+        it.statecode = targetState;
+      }
+      renderItemList();
+      renderDetail();
+      DV.notify(`Updated state for ${items.length} item(s).`, 'success');
+    }
+
+    function openBulkReassignModal() {
+      const items = Array.from(S.selectedIds).map(id => getItemById(id)).filter(Boolean);
+      if (!items.length) return;
+      const userOpts = S.users.map(u => `<option value="systemuser:${esc(normId(u.systemuserid))}">👤 ${esc(u.fullname)}</option>`).join('');
+      const teamOpts = S.teams.map(t => `<option value="team:${esc(normId(t.teamid))}">👥 ${esc(t.name)}</option>`).join('');
+      openModal({
+        title: `Reassign ${items.length} Selected Items`,
+        html: `<div>Select the new owner for all ${items.length} selected items:</div>
+          <select class="dv-select" id="modal-bulk-owner" style="width:100%;">${userOpts}${teamOpts}</select>`,
+        confirmLabel: '🔄 Reassign All',
+        onConfirm: async () => {
+          const val = document.getElementById('modal-bulk-owner').value;
+          const [otype, oid] = val.split(':');
+          for (const it of items) await reassignItem(it, otype, oid);
+          updateCountsAndFilters();
+          renderItemList();
+          renderDetail();
+          DV.notify(`Reassigned ${items.length} item(s).`, 'success');
+        }
+      });
+    }
+
+    function openBulkShareModal() {
+      const items = Array.from(S.selectedIds).map(id => getItemById(id)).filter(Boolean);
+      if (!items.length) return;
+      const userOpts = S.users.map(u => `<option value="systemuser:${esc(normId(u.systemuserid))}">👤 ${esc(u.fullname)}</option>`).join('');
+      const teamOpts = S.teams.map(t => `<option value="team:${esc(normId(t.teamid))}">👥 ${esc(t.name)}</option>`).join('');
+      openModal({
+        title: `Share ${items.length} Selected Items`,
+        html: `<div>Choose a User or Team to grant access to all ${items.length} selected items:</div>
+          <select class="dv-select" id="modal-bulk-share-p" style="width:100%;">${userOpts}${teamOpts}</select>
+          <div class="pv-perm-grid" id="modal-bulk-perms">
+            <label><input type="checkbox" value="ReadAccess" checked> Read</label>
+            <label><input type="checkbox" value="WriteAccess"> Write</label>
+            <label><input type="checkbox" value="DeleteAccess"> Delete</label>
+            <label><input type="checkbox" value="AppendAccess"> Append</label>
+            <label><input type="checkbox" value="ShareAccess"> Share</label>
+          </div>`,
+        confirmLabel: '🔑 Grant to Selected',
+        onConfirm: async () => {
+          const val = document.getElementById('modal-bulk-share-p').value;
+          const [ptype, pid] = val.split(':');
+          const mask = Array.from(document.getElementById('modal-bulk-perms').querySelectorAll('input:checked')).map(c => c.value);
+          if (!mask.length) throw new Error('Select at least one permission.');
+          for (const it of items) await grantShare(it, ptype, pid, mask);
+          DV.notify(`Shared ${items.length} item(s).`, 'success');
+          if (S.activeTab === 'share') await loadSharesForFocused();
+        }
+      });
+    }
+
+    /* ─── Sample Dataset & Offline Simulation ───────────────────── */
+    const SAMPLE_DATA = {
+      users: [
+        { systemuserid: '11111111-1111-1111-1111-111111111101', fullname: 'Alice Chen', internalemailaddress: 'alice@contoso.com' },
+        { systemuserid: '11111111-1111-1111-1111-111111111102', fullname: 'Bob Kumar', internalemailaddress: 'bob@contoso.com' },
+        { systemuserid: '11111111-1111-1111-1111-111111111103', fullname: 'Carol Diaz', internalemailaddress: 'carol@contoso.com' }
+      ],
+      teams: [
+        { teamid: '22222222-2222-2222-2222-222222222201', name: 'Enterprise Sales Team', teamtype: 0 },
+        { teamid: '22222222-2222-2222-2222-222222222202', name: 'Tier-2 Escalations', teamtype: 0 }
+      ],
+      solutions: [
+        { solutionid: '33333333-3333-3333-3333-333333333301', uniquename: 'SalesCoreExt', friendlyname: 'Sales Core Extensions' }
+      ],
+      views: [
+        {
+          userqueryid: 'aaaa0001-0000-0000-0000-000000000001',
+          name: 'VIP Renewal Accounts (Q4)',
+          description: 'High-revenue enterprise accounts owned in West region',
+          returnedtypecode: 'account',
+          querytype: 0,
+          statecode: 0,
+          _ownerid_value: '11111111-1111-1111-1111-111111111101',
+          modifiedon: '2026-11-20T14:22:00Z',
+          fetchxml: `<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">\n  <entity name="account">\n    <attribute name="name" />\n    <attribute name="accountnumber" />\n    <attribute name="revenue" />\n    <attribute name="industrycode" />\n    <attribute name="primarycontactid" />\n    <order attribute="revenue" descending="true" />\n    <filter type="and">\n      <condition attribute="statecode" operator="eq" value="0" />\n      <condition attribute="revenue" operator="gt" value="500000" />\n    </filter>\n  </entity>\n</fetch>`,
+          layoutxml: `<grid name="resultset" jump="name" select="1" icon="1" preview="1">\n  <row name="result" id="accountid">\n    <cell name="name" width="220" />\n    <cell name="accountnumber" width="110" />\n    <cell name="revenue" width="130" />\n    <cell name="industrycode" width="140" />\n    <cell name="primarycontactid" width="160" />\n  </row>\n</grid>`
+        },
+        {
+          userqueryid: 'aaaa0002-0000-0000-0000-000000000002',
+          name: 'Stale Open Opportunities (>30d)',
+          description: 'Opportunities not modified in 30+ days',
+          returnedtypecode: 'opportunity',
+          querytype: 0,
+          statecode: 0,
+          _ownerid_value: '11111111-1111-1111-1111-111111111102',
+          modifiedon: '2026-11-18T09:10:00Z',
+          fetchxml: `<fetch version="1.0" mapping="logical">\n  <entity name="opportunity">\n    <attribute name="name" />\n    <attribute name="estimatedvalue" />\n    <attribute name="estimatedclosedate" />\n    <attribute name="stepname" />\n    <filter>\n      <condition attribute="statecode" operator="eq" value="0" />\n    </filter>\n  </entity>\n</fetch>`,
+          layoutxml: `<grid name="resultset" jump="name">\n  <row name="result" id="opportunityid">\n    <cell name="name" width="230" />\n    <cell name="stepname" width="130" />\n    <cell name="estimatedvalue" width="130" />\n    <cell name="estimatedclosedate" width="120" />\n  </row>\n</grid>`
+        },
+        {
+          userqueryid: 'aaaa0003-0000-0000-0000-000000000003',
+          name: 'SLA Breached Cases - My Queue',
+          description: 'Escalated cases requiring immediate triage',
+          returnedtypecode: 'incident',
+          querytype: 0,
+          statecode: 1,
+          _ownerid_value: '11111111-1111-1111-1111-111111111103',
+          modifiedon: '2026-10-05T16:40:00Z',
+          fetchxml: `<fetch version="1.0" mapping="logical">\n  <entity name="incident">\n    <attribute name="ticketnumber" />\n    <attribute name="title" />\n    <attribute name="prioritycode" />\n    <filter><condition attribute="prioritycode" operator="eq" value="1" /></filter>\n  </entity>\n</fetch>`,
+          layoutxml: `<grid name="resultset" jump="title">\n  <row name="result" id="incidentid">\n    <cell name="ticketnumber" width="120" />\n    <cell name="title" width="240" />\n    <cell name="prioritycode" width="100" />\n  </row>\n</grid>`
+        }
+      ],
+      charts: [
+        {
+          userqueryvisualizationid: 'bbbb0001-0000-0000-0000-000000000001',
+          name: 'Pipeline Revenue by Stage (Bob)',
+          description: 'Stacked bar chart for weekly forecast',
+          primaryentitytypecode: 'opportunity',
+          _ownerid_value: '11111111-1111-1111-1111-111111111102',
+          modifiedon: '2026-11-19T11:05:00Z',
+          datadescription: '<datadefinition><fetchcollection><fetch mapping="logical" aggregate="true"><entity name="opportunity"><attribute name="estimatedvalue" aggregate="sum" alias="sum_val"/></entity></fetch></fetchcollection></datadefinition>',
+          presentationdescription: '<Chart><Series><Series ChartType="Bar" /></Series></Chart>'
+        }
+      ],
+      dashboards: [
+        {
+          userformid: 'cccc0001-0000-0000-0000-000000000001',
+          name: 'Alice Executive Renewal Hub',
+          description: '2-column sales executive personal dashboard',
+          objecttypecode: 'dashboard',
+          type: 0,
+          _ownerid_value: '11111111-1111-1111-1111-111111111101',
+          modifiedon: '2026-11-22T08:15:00Z',
+          formxml: '<form><tabs><tab name="Overview"><columns><column width="50%"><sections><section name="VIPViews"/></sections></column></columns></tab></tabs></form>'
+        }
+      ],
+      sharesByRecord: {
+        'aaaa0001-0000-0000-0000-000000000001': [
+          { Principal: { teamid: '22222222-2222-2222-2222-222222222201', '@odata.type': 'Microsoft.Dynamics.CRM.team' }, AccessMask: 'ReadAccess, WriteAccess' }
+        ],
+        'aaaa0002-0000-0000-0000-000000000002': [
+          { Principal: { systemuserid: '11111111-1111-1111-1111-111111111101', '@odata.type': 'Microsoft.Dynamics.CRM.systemuser' }, AccessMask: 'ReadAccess' }
+        ]
+      }
+    };
+
+    async function handleSampleFetch(path, opts = {}, callerUserId = '') {
+      const m = (opts.method || 'GET').toUpperCase();
+      if (path.startsWith('/EntityDefinitions(')) {
+        const lm = decodeURIComponent((path.match(/LogicalName='([^']+)'/i) || [])[1] || 'account');
+        const setMap = { account: 'accounts', opportunity: 'opportunities', incident: 'incidents', contact: 'contacts' };
+        return { LogicalName: lm, EntitySetName: setMap[lm] || `${lm}s`, PrimaryIdAttribute: `${lm}id`, PrimaryNameAttribute: 'name' };
+      }
+      if (path.startsWith('/userqueries?')) {
+        return { value: SAMPLE_DATA.views.filter(v => !callerUserId || v._ownerid_value === callerUserId) };
+      }
+      if (path.startsWith('/userqueryvisualizations?')) {
+        return { value: SAMPLE_DATA.charts.filter(v => !callerUserId || v._ownerid_value === callerUserId) };
+      }
+      if (path.startsWith('/userforms?')) {
+        return { value: SAMPLE_DATA.dashboards.filter(v => !callerUserId || v._ownerid_value === callerUserId) };
+      }
+      if (path.includes('fetchXml=')) {
+        if (path.startsWith('/accounts')) {
+          return {
+            value: [
+              { accountid: 'acc-1', name: 'Northwind Traders', accountnumber: 'NW-1042', revenue: 1250000, 'revenue@OData.Community.Display.V1.FormattedValue': '$1,250,000.00', industrycode: 3, 'industrycode@OData.Community.Display.V1.FormattedValue': 'Consulting', _primarycontactid_value: 'con-1', '_primarycontactid_value@OData.Community.Display.V1.FormattedValue': 'Maya Lin' },
+              { accountid: 'acc-2', name: 'Fabrikam Manufacturing', accountnumber: 'FB-2091', revenue: 890000, 'revenue@OData.Community.Display.V1.FormattedValue': '$890,000.00', industrycode: 19, 'industrycode@OData.Community.Display.V1.FormattedValue': 'Manufacturing', _primarycontactid_value: 'con-2', '_primarycontactid_value@OData.Community.Display.V1.FormattedValue': 'Liam Patel' }
+            ]
+          };
+        }
+        return {
+          value: [
+            { opportunityid: 'opp-1', name: 'Contoso FY27 Cloud Renewal', stepname: '3-Propose', estimatedvalue: 420000, 'estimatedvalue@OData.Community.Display.V1.FormattedValue': '$420,000.00', estimatedclosedate: '2026-12-18', ticketnumber: 'CAS-90211', title: 'SSO SAML token latency', prioritycode: 1, 'prioritycode@OData.Community.Display.V1.FormattedValue': 'High' }
+          ]
+        };
+      }
+      if (path.startsWith('/RetrieveSharedPrincipalsAndAccess')) {
+        const idMatch = decodeURIComponent(path).match(/\(([0-9a-f-]{36})\)/i);
+        const recId = idMatch ? normId(idMatch[1]) : '';
+        return { PrincipalAccesses: SAMPLE_DATA.sharesByRecord[recId] || [] };
+      }
+      if (path === '/GrantAccess' && m === 'POST') {
+        const body = JSON.parse(opts.body);
+        const recId = normId(Object.values(body.Target).find(v => /^[0-9a-f-]{36}$/i.test(String(v))));
+        SAMPLE_DATA.sharesByRecord[recId] = SAMPLE_DATA.sharesByRecord[recId] || [];
+        const pid = normId(body.PrincipalAccess.Principal.teamid || body.PrincipalAccess.Principal.systemuserid);
+        SAMPLE_DATA.sharesByRecord[recId] = SAMPLE_DATA.sharesByRecord[recId].filter(s => normId(s.Principal.teamid || s.Principal.systemuserid) !== pid);
+        SAMPLE_DATA.sharesByRecord[recId].push(body.PrincipalAccess);
+        return {};
+      }
+      if (path === '/RevokeAccess' && m === 'POST') {
+        const body = JSON.parse(opts.body);
+        const recId = normId(Object.values(body.Target).find(v => /^[0-9a-f-]{36}$/i.test(String(v))));
+        const pid = normId(body.Revokee.teamid || body.Revokee.systemuserid);
+        SAMPLE_DATA.sharesByRecord[recId] = (SAMPLE_DATA.sharesByRecord[recId] || []).filter(s => normId(s.Principal.teamid || s.Principal.systemuserid) !== pid);
+        return {};
+      }
+      if (path.startsWith('/savedqueries') && m === 'POST') {
+        return { savedqueryid: '99999999-9999-9999-9999-' + String(Date.now()).slice(-12) };
+      }
+      if (m === 'POST') {
+        const body = opts.body ? JSON.parse(opts.body) : {};
+        return { ...body, userqueryid: 'dddd' + String(Date.now()).slice(-8) + '-0000-0000-0000-000000000001' };
+      }
+      return {};
+    }
+
+    async function activateSampleMode() {
+      S.sampleMode = true;
+      S.users = SAMPLE_DATA.users.slice();
+      S.teams = SAMPLE_DATA.teams.slice();
+      S.solutions = SAMPLE_DATA.solutions.slice();
+      S.userMap = new Map(S.users.map(u => [normId(u.systemuserid), u]));
+      S.teamMap = new Map(S.teams.map(t => [normId(t.teamid), t]));
+      populateDirectoryPickers();
+      await scanItems();
+      DV.notify('Loaded Sample Personal Views dataset.', 'info');
+    }
+
+    /* ─── Export Helpers ────────────────────────────────────────── */
+    function exportItemsCsv() {
+      const items = getFilteredItems();
+      if (!items.length) { DV.notify('No items to export.', 'warning'); return; }
+      DV.exportCsv(
+        `personal_${S.activeType}s_${new Date().toISOString().slice(0, 10)}.csv`,
+        ['ID', 'Name', 'Table', 'Owner', 'OwnerId', 'State', 'ModifiedOn', 'Description'],
+        items.map(it => [
+          getItemId(it), it.name || '', getItemTable(it), getOwnerName(it),
+          getItemOwnerId(it), isActiveState(it) ? 'Active' : 'Inactive',
+          it.modifiedon || '', it.description || ''
+        ])
+      );
+    }
+
+    /* ─── Event Wiring ──────────────────────────────────────────── */
+    function wireEvents() {
+      $('btn-load').addEventListener('click', () => { S.sampleMode = false; scanItems(); });
+      $('btn-sample').addEventListener('click', activateSampleMode);
+      $('btn-stop-scan').addEventListener('click', () => { S.abortScan = true; });
+      $('btn-export-list').addEventListener('click', exportItemsCsv);
+
+      $('sel-scope').addEventListener('change', () => {
+        const scope = $('sel-scope').value;
+        $('sel-target-user').style.display = scope === 'user' ? 'inline-block' : 'none';
+        $('lbl-conc').style.display = scope === 'all' ? 'inline-flex' : 'none';
+        if (scope === 'user' && !S.users.length && !S.sampleMode) ensureDirectory().catch(() => {});
+      });
+
+      $('type-tabs').querySelectorAll('.pv-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          S.activeType = btn.dataset.type;
+          S.selectedIds.clear();
+          S.focusedId = null;
+          S.runState.lastViewId = null;
+          $('type-tabs').querySelectorAll('.pv-tab').forEach(b => b.classList.toggle('active', b === btn));
+          if (S.activeType !== 'view' && S.activeTab === 'run') setActiveDetailTab('xml');
+          updateCountsAndFilters();
+          renderItemList();
+          const first = getFilteredItems()[0];
+          if (first) selectFocusedItem(getItemId(first));
+          else renderDetail();
+        });
+      });
+
+      ['txt-search', 'sel-entity', 'sel-owner', 'sel-state'].forEach(id => {
+        $(id).addEventListener(id === 'txt-search' ? 'input' : 'change', renderItemList);
+      });
+
+      $('chk-all').addEventListener('change', e => {
+        const rows = getFilteredItems();
+        if (e.target.checked) rows.forEach(r => S.selectedIds.add(getItemId(r)));
+        else rows.forEach(r => S.selectedIds.delete(getItemId(r)));
+        renderItemList();
+      });
+      $('btn-clear-sel').addEventListener('click', () => { S.selectedIds.clear(); renderItemList(); });
+
+      $('btn-bulk-share').addEventListener('click', openBulkShareModal);
+      $('btn-bulk-reassign').addEventListener('click', openBulkReassignModal);
+      $('btn-bulk-activate').addEventListener('click', () => bulkSetState(0));
+      $('btn-bulk-deactivate').addEventListener('click', () => bulkSetState(1));
+      $('btn-bulk-delete').addEventListener('click', () => {
+        deleteItems(Array.from(S.selectedIds).map(id => getItemById(id)).filter(Boolean));
+      });
+
+      $('detail-tabs').querySelectorAll('.pv-tab').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          setActiveDetailTab(btn.dataset.tab);
+          if (btn.dataset.tab === 'share' && S.focusedId) await loadSharesForFocused();
+        });
+      });
+
+      $('btn-copy-id').addEventListener('click', () => {
+        if (S.focusedId) DV.copyText(S.focusedId, 'Copied GUID');
+      });
+
+      $('btn-run-view').addEventListener('click', () => runFocusedView(1, ''));
+      $('btn-open-fetchxml').addEventListener('click', () => {
+        const item = getItemById(S.focusedId, 'view');
+        if (item?.fetchxml) DV.openTool('fetchxml-playground', { fetchXml: item.fetchxml });
+      });
+      $('btn-delete-one').addEventListener('click', () => {
+        const item = getItemById(S.focusedId);
+        if (item) deleteItems([item]);
+      });
+
+      $('txt-filter-rows').addEventListener('input', renderRunResults);
+      $('btn-prev-page').addEventListener('click', () => {
+        if (S.runState.page > 1) {
+          const prev = S.runState.pageStack.pop() || { page: 1, cookie: '' };
+          runFocusedView(prev.page, prev.cookie);
+        }
+      });
+      $('btn-next-page').addEventListener('click', () => {
+        if (S.runState.moreRecords) {
+          S.runState.pageStack.push({ page: S.runState.page, cookie: S.runState.pagingCookie });
+          runFocusedView(S.runState.page + 1, S.runState.pagingCookie);
+        }
+      });
+      $('btn-export-rows-csv').addEventListener('click', () => {
+        const cols = S.runState.columns.map(c => c.name);
+        DV.exportCsv(
+          `personal_view_results_${S.runState.logicalName}_${new Date().toISOString().slice(0, 10)}.csv`,
+          cols,
+          S.runState.rows.map(r => cols.map(c => getCellDisplay(r, c).display))
+        );
+      });
+      $('btn-export-rows-json').addEventListener('click', () => {
+        DV.exportJson(`personal_view_results_${S.runState.logicalName}.json`, S.runState.rows);
+      });
+
+      $('btn-fmt-xml-1').addEventListener('click', () => {
+        try { $('edit-xml-1').value = formatXml($('edit-xml-1').value); }
+        catch (e) { DV.notify(e.message, 'error'); }
+      });
+      $('btn-fmt-xml-2').addEventListener('click', () => {
+        try { $('edit-xml-2').value = formatXml($('edit-xml-2').value); }
+        catch (e) { DV.notify(e.message, 'error'); }
+      });
+      $('btn-copy-xml-1').addEventListener('click', () => DV.copyText($('edit-xml-1').value, 'Copied XML'));
+      $('btn-copy-xml-2').addEventListener('click', () => DV.copyText($('edit-xml-2').value, 'Copied XML'));
+      $('btn-save-xml').addEventListener('click', () => {
+        saveXmlChanges().catch(err => DV.notify(err.message || String(err), 'error', 5000));
+      });
+
+      $('btn-refresh-shares').addEventListener('click', loadSharesForFocused);
+      $('share-principal-type').addEventListener('change', refreshPrincipalDropdowns);
+      $('share-principal-filter').addEventListener('input', refreshPrincipalDropdowns);
+      $('reassign-type').addEventListener('change', refreshPrincipalDropdowns);
+      $('clone-user-filter').addEventListener('input', renderCloneUserCheckboxes);
+
+      const setPermChecks = vals => {
+        const set = new Set(vals);
+        $('share-perm-boxes').querySelectorAll('input').forEach(c => { c.checked = set.has(c.value); });
+      };
+      $('btn-preset-read').addEventListener('click', () => setPermChecks(['ReadAccess']));
+      $('btn-preset-rw').addEventListener('click', () => setPermChecks(['ReadAccess', 'WriteAccess']));
+      $('btn-preset-full').addEventListener('click', () => setPermChecks(['ReadAccess', 'WriteAccess', 'AppendAccess', 'AppendToAccess', 'ShareAccess']));
+
+      $('btn-grant-share').addEventListener('click', async () => {
+        const item = getItemById(S.focusedId);
+        const ptype = $('share-principal-type').value;
+        const pid = $('share-principal-select').value;
+        if (!item || !pid) { DV.notify('Select a user or team first.', 'warning'); return; }
+        try {
+          await grantShare(item, ptype, pid, getSelectedPermMask());
+          DV.notify('Access granted.', 'success');
+          await loadSharesForFocused();
+        } catch (err) {
+          DV.notify(err.message || String(err), 'error', 5000);
+        }
+      });
+
+      $('btn-reassign-one').addEventListener('click', async () => {
+        const item = getItemById(S.focusedId);
+        const rtype = $('reassign-type').value;
+        const rid = $('reassign-target').value;
+        if (!item || !rid) { DV.notify('Select a new owner first.', 'warning'); return; }
+        try {
+          await reassignItem(item, rtype, rid);
+          updateCountsAndFilters();
+          renderItemList();
+          renderDetail();
+          DV.notify('Ownership reassigned.', 'success');
+        } catch (err) {
+          DV.notify(err.message || String(err), 'error', 5000);
+        }
+      });
+
+      $('btn-clone-users').addEventListener('click', () => {
+        cloneToSelectedUsers().catch(err => DV.notify(err.message || String(err), 'error', 5000));
+      });
+      $('btn-promote-sys').addEventListener('click', () => {
+        promoteToSystemView().catch(err => DV.notify(err.message || String(err), 'error', 5000));
+      });
+    }
+
+    DV.onReady(async context => {
+      S.context = context;
+      wireEvents();
+      setBadge('Ready', '0 items');
+      if (!context?.environmentUrl) {
+        $('list-tip').textContent = 'Connect to Dataverse or try 🧪 Sample';
+        return;
+      }
+      // Preload user directory non-blockingly so "Pick User" & Sharing pickers work right away
+      ensureDirectory().catch(() => {});
+    });
+  })();
+  </script>
+</body>
+</html>

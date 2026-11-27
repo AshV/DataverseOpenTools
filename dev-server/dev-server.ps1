@@ -365,7 +365,7 @@ function Apply-CorsHeaders($Req, $Res) {
     $Res.Headers['Access-Control-Allow-Origin'] = '*'
     $Res.Headers['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, PUT, DELETE, OPTIONS'
     $reqHdrs = $Req.Headers['Access-Control-Request-Headers']
-    $Res.Headers['Access-Control-Allow-Headers'] = if ($reqHdrs) { $reqHdrs } else { 'Content-Type, Accept, OData-MaxVersion, OData-Version, Prefer, If-Match, If-None-Match' }
+    $Res.Headers['Access-Control-Allow-Headers'] = if ($reqHdrs) { $reqHdrs } else { 'Content-Type, Accept, OData-MaxVersion, OData-Version, Prefer, If-Match, If-None-Match, MSCRMCallerID, CallerObjectId' }
     $Res.Headers['Access-Control-Expose-Headers'] = '*'
     $Res.Headers['Access-Control-Allow-Private-Network'] = 'true'
 }
@@ -436,6 +436,8 @@ function Invoke-DataverseProxy($Req, $Res, [string]$RawUrl, [string]$EnvUrl, [st
         if ($Req.Headers['Prefer']) { [void]$msg.Headers.TryAddWithoutValidation('Prefer', $Req.Headers['Prefer']) }
         if ($Req.Headers['If-Match']) { [void]$msg.Headers.TryAddWithoutValidation('If-Match', $Req.Headers['If-Match']) }
         if ($Req.Headers['If-None-Match']) { [void]$msg.Headers.TryAddWithoutValidation('If-None-Match', $Req.Headers['If-None-Match']) }
+        if ($Req.Headers['MSCRMCallerID']) { [void]$msg.Headers.TryAddWithoutValidation('MSCRMCallerID', $Req.Headers['MSCRMCallerID']) }
+        if ($Req.Headers['CallerObjectId']) { [void]$msg.Headers.TryAddWithoutValidation('CallerObjectId', $Req.Headers['CallerObjectId']) }
 
         if ($BodyBytes.Length -gt 0) {
             $msg.Content = New-Object System.Net.Http.ByteArrayContent(,$BodyBytes)

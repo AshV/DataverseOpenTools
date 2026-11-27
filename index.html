@@ -373,15 +373,15 @@
           <div class="pill">⚡ Open, Single-File Dataverse Developer Workbench</div>
           <h1>Zero-dependency tools for Microsoft Dataverse &amp; Power Platform.</h1>
           <p class="hero-sub">
-            30 self-contained HTML developer tools inside one unified tabbed workbench. Run natively inside Dynamics 365 as Web Resources, or connect from this page via a local proxy (PowerShell, C# .NET, or Node.js) — with zero build steps and zero tokens stored in the browser.
+            31 self-contained HTML developer tools inside one unified tabbed workbench. Run natively inside Dynamics 365 as Web Resources, or connect from this page via a local proxy (PowerShell, C# .NET, or Node.js) — with zero build steps and zero tokens stored in the browser.
           </p>
           <div class="hero-cta">
             <a href="dvot_host.html" class="btn btn-primary btn-lg">Launch DV Open Tools Host →</a>
-            <a href="#tools" class="btn btn-lg">Explore 30 Tools</a>
+            <a href="#tools" class="btn btn-lg">Explore 31 Tools</a>
             <a href="#local-proxy" class="btn btn-lg">Local Proxy Setup</a>
           </div>
           <div class="hero-stats">
-            <span><strong>30</strong> Built-in Tools</span>
+            <span><strong>31</strong> Built-in Tools</span>
             <span><strong>0</strong> Build Steps / Dependencies</span>
             <span><strong>3</strong> Security Gateway Modes</span>
             <span><strong>100%</strong> Relative GitHub Pages Paths</span>
@@ -477,8 +477,8 @@
       <div class="container">
         <div class="section-head">
           <div>
-            <h2>Included Tools (<span id="tools-count">30</span>)</h2>
-            <p>Download any single tool HTML, select tools to pack into a single bundle Web Resource, or download all 30 tools together alongside independent <code>dvot_host.html</code>.</p>
+            <h2>Included Tools (<span id="tools-count">31</span>)</h2>
+            <p>Download any single tool HTML, select tools to pack into a single bundle Web Resource, or download all 31 tools together alongside independent <code>dvot_host.html</code>.</p>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <a id="download-host-btn" href="dvot_host.html" download="dvot_host.html" class="btn">⬇️ Download Host (<span id="host-size-lbl">142.1 KB</span>)</a>
@@ -498,7 +498,7 @@
           <div class="bundle-row">
             <div class="bundle-left">
               <strong>📦 Bundle Builder</strong>
-              <button type="button" id="btn-sel-all" class="btn btn-sm">Select All (<span id="all-count">30</span>)</button>
+              <button type="button" id="btn-sel-all" class="btn btn-sm">Select All (<span id="all-count">31</span>)</button>
               <button type="button" id="btn-sel-filtered" class="btn btn-sm">Select Filtered</button>
               <button type="button" id="btn-sel-none" class="btn btn-sm">Clear</button>
               <span id="bundle-size-pill" class="size-pill">0 selected · 0 KB</span>
@@ -547,6 +547,7 @@
       { id: 'solution-layers', file: 'tools/dvot_solutionlayers.html', name: 'Solution Layers', icon: '📦', category: 'Solutions', version: '1.1.0', sizeBytes: 14973, description: 'Inspect managed vs Active unmanaged solution component layers (msdyn_componentlayer) and diagnose delete blockers via RetrieveDependenciesForDelete.' },
       { id: 'env-vars', file: 'tools/dvot_envvars.html', name: 'Environment Variables', icon: '⚙️', category: 'Configuration', version: '1.1.0', sizeBytes: 12195, description: 'Inspect Default vs Current Environment Variable values, validate JSON configs, spot missing values, and safely update overrides.' },
       { id: 'user-settings', file: 'tools/dvot_usersettings.html', name: 'User Settings & Views', icon: '👤', category: 'Configuration', version: '1.0.0', sizeBytes: 21382, description: 'Inspect and bulk-update User Settings (paging limit, timezone, UI language) and manage or reassign user-owned Personal Views and Personal Dashboards.' },
+      { id: 'personal-views', file: 'tools/dvot_personalviews.html', name: 'Personal Views', icon: '🔭', category: 'Configuration', version: '1.0.0', sizeBytes: 103530, description: 'Discover, run FetchXML + LayoutXML, edit XML, manage sharing (GrantAccess/RevokeAccess), reassign, clone to users, or promote personal views, charts, and dashboards to System Views across all enabled users.' },
       { id: 'record-inspector', file: 'tools/dvot_recordinspector.html', name: 'Record Inspector', icon: '🔎', category: 'Data', version: '1.0.0', sizeBytes: 13710, description: 'Inspect all fields (including hidden attributes) on any Dataverse record by pasting a URL or GUID, edit updatable values, or jump to Access Diagnostics.' },
       { id: 'bulk-ops', file: 'tools/dvot_bulkops.html', name: 'Bulk Operations', icon: '♻️', category: 'Data', version: '1.0.0', sizeBytes: 10957, description: 'Preview records with FetchXML and execute throttled bulk PATCH, state activation/deactivation, or DELETE operations safely under Host Security Gateway.' },
       { id: 'row-counter', file: 'tools/dvot_rowcounter.html', name: 'Row Counter', icon: '📊', category: 'Data', version: '1.0.0', sizeBytes: 49607, description: 'Count records across Dataverse tables (Total, Active, Inactive, Custom Filter) with HTTP headers inspection & CSV export.' },
@@ -844,10 +845,10 @@
     });
 
     const DEV_SERVER_FILES = [
-      { path: 'dev-server/dev-server.ps1', archivePath: 'dev-server/dev-server.ps1', group: 'ps', sizeBytes: 35512 },
+      { path: 'dev-server/dev-server.ps1', archivePath: 'dev-server/dev-server.ps1', group: 'ps', sizeBytes: 35822 },
       { path: 'dev-server/DvOpenTools.Proxy.csproj', archivePath: 'dev-server/DvOpenTools.Proxy.csproj', group: 'dotnet', sizeBytes: 325 },
-      { path: 'dev-server/Program.cs', archivePath: 'dev-server/Program.cs', group: 'dotnet', sizeBytes: 44877 },
-      { path: 'dev-server/dev-server.js', archivePath: 'dev-server/dev-server.js', group: 'node', sizeBytes: 27819 },
+      { path: 'dev-server/Program.cs', archivePath: 'dev-server/Program.cs', group: 'dotnet', sizeBytes: 45233 },
+      { path: 'dev-server/dev-server.js', archivePath: 'dev-server/dev-server.js', group: 'node', sizeBytes: 28210 },
       { path: 'dev-server/dev-server.config.example.json', archivePath: 'dev-server/dev-server.config.example.json', group: 'cfg', sizeBytes: 363 },
       { path: 'dev-server/README.md', archivePath: 'dev-server/README.md', group: 'doc', sizeBytes: 7298 }
     ];
