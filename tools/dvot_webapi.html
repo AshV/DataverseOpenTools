@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OData Web API Explorer</title>
+
+  <script type="application/json" id="dvopentools-manifest">
+  {
+    "id":             "webapi-playground",
+    "name":           "OData Web API",
+    "version":        "1.0.0",
+    "description":    "Execute GET, POST, PATCH, PUT, and DELETE Dataverse OData Web API requests with custom headers, JSON body editor, @odata.nextLink paging, JS/C# code snippets, and CSV/JSON export.",
+    "icon":           "🌐",
+    "category":       "Query",
+    "author":         "Ashish Vishwakarma",
+    "minHostVersion": "2025.11.1"
+  }
+  </script>
+
+  <style>
+    .oa-editor-pane {
+      display: flex; flex-direction: column; border-bottom: 2px solid var(--border);
+      min-height: 190px; max-height: 46%; flex-shrink: 0;
+    }
+    .oa-code-area {
+      flex: 1; width: 100%; border: none !important; border-radius: 0 !important;
+      resize: none; padding: 10px 14px !important; background: var(--code-bg) !important;
+      font-family: 'Cascadia Code', 'Consolas', monospace !important; line-height: 1.5;
+    }
+    .oa-split { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+    .oa-col { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); }
+    .oa-col:last-child { border-right: none; }
+    .oa-raw-sub { display: block; font-size: 10px; color: var(--text-muted); font-family: monospace; }
+  </style>
+</head>
+<body class="dv-app">
+
+  <div class="dv-toolbar">
+    <select id="preset-select"><option value="">Load Preset…</option></select>
+    <select id="history-select"><option value="">History (0)</option></select>
+    <button class="dv-btn" id="btn-format">✨ Format JSON</button>
+    <button class="dv-btn" id="btn-save">💾 Save</button>
+    <div class="dv-spacer"></div>
+    <span id="api-version-lbl" style="font-size:11px;color:var(--text-muted);font-family:monospace;">/api/data/v9.2</span>
+    <button class="dv-btn dv-btn-primary" id="btn-run" disabled>▶ Execute (Ctrl+Enter)</button>
+  </div>
+
+  <div class="oa-editor-pane" id="pane-odata">
+    <div class="dv-strip">
+      <select id="odata-method" style="width:98px;font-weight:700;">
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+        <option value="PATCH">PATCH</option>
+        <option value="PUT">PUT</option>
+        <option value="DELETE">DELETE</option>
+      </select>
+      <input type="text" id="odata-path" style="flex:1;font-family:monospace;" value="/accounts?$select=name,accountnumber,statecode,createdon&$top=20">
+    </div>
+    <div class="oa-split">
+      <div class="oa-col">
+        <div class="dv-strip" style="font-size:11px;font-weight:700;color:var(--text-sec);">Request Headers (JSON)</div>
+        <textarea id="odata-headers" class="oa-code-area" spellcheck="false">{
+  "Prefer": "odata.include-annotations=\"*\""
+}</textarea>
+      </div>
+      <div class="oa-col">
+        <div class="dv-strip" style="font-size:11px;font-weight:700;color:var(--text-sec);">Request Body (JSON — POST / PATCH / PUT)</div>
+        <textarea id="odata-body" class="oa-code-area" spellcheck="false" placeholder='{\n  "name": "Contoso Ltd"\n}'></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="dv-toolbar" style="padding:6px 14px;">
+    <div class="dv-seg-group">
+      <button class="dv-seg-btn active" data-view="table">Table</button>
+      <button class="dv-seg-btn" data-view="json">JSON</button>
+      <button class="dv-seg-btn" data-view="code">Code Snippets</button>
+    </div>
+    <span class="dv-badge dv-b-info" id="res-count-badge">0 rows</span>
+    <input type="text" id="res-filter" placeholder="Filter rows…" style="width:180px;">
+    <button class="dv-btn" id="btn-next-page" style="display:none;">Next Page →</button>
+    <div class="dv-spacer"></div>
+    <button class="dv-btn" id="btn-copy-json" disabled>📋 Copy JSON</button>
+    <button class="dv-btn" id="btn-export-csv" disabled>📥 Export CSV</button>
+  </div>
+
+  <div class="dv-scroll" id="results-body">
+    <div class="dv-empty">Enter an OData Web API path above and press <strong>Execute (Ctrl+Enter)</strong>.</div>
+  </div>
+
+  <footer class="dv-footer">
+    <span class="dv-pill" id="tel-pill">Ready</span>
+    <span id="tel-msg" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:480px;font-family:monospace;">—</span>
+    <div class="dv-spacer"></div>
+    <span id="tel-store">Storage: —</span>
+  </footer>
+
+  <script>
+    'use strict';
+
+    const HOST_ORIGIN = window.location.origin;
+    let context = null, store = null;
+    let activeView = 'table';
+    let lastRows = [], lastRawJson = null, nextPageInfo = null, history = [];
+
+    const ODATA_PRESETS = {
+      'WhoAmI': { method: 'GET', path: '/WhoAmI', body: '' },
+      'Accounts (Top 20)': { method: 'GET', path: '/accounts?$select=name,accountnumber,statecode,createdon&$top=20', body: '' },
+      'Solutions': { method: 'GET', path: '/solutions?$select=uniquename,friendlyname,version,ismanaged&$filter=isvisible eq true&$orderby=friendlyname asc', body: '' },
+      'Plugin Trace Logs': { method: 'GET', path: '/plugintracelogs?$select=typename,messagename,primaryentity,performanceexecutionduration,createdon&$orderby=createdon desc&$top=20', body: '' },
+      'Entity Definitions': { method: 'GET', path: '/EntityDefinitions?$select=LogicalName,EntitySetName,PrimaryIdAttribute&$filter=IsCustomizable/Value eq true', body: '' },
+      'Create Account (POST)': { method: 'POST', path: '/accounts', body: '{\n  "name": "Contoso Demo"\n}' }
+    };
+
+    window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
+
+    window.addEventListener('message', e => {
+      if (e.origin !== HOST_ORIGIN || e.data?.source !== 'dvopentools-host') return;
+      const { type, payload } = e.data;
+      if (type === 'CONTEXT_INIT') { context = payload; onContextReady(); }
+      if (type === 'TOOL_LAUNCH' && payload?.odataPath) applyLaunchOData(payload);
+    });
+
+    function applyLaunchOData(payload) {
+      if (payload.method) document.getElementById('odata-method').value = payload.method;
+      if (payload.odataPath) document.getElementById('odata-path').value = payload.odataPath;
+      if (payload.body !== undefined) {
+        document.getElementById('odata-body').value = typeof payload.body === 'string'
+          ? payload.body : JSON.stringify(payload.body, null, 2);
+      }
+      if (payload.headers && typeof payload.headers === 'object') {
+        document.getElementById('odata-headers').value = JSON.stringify(payload.headers, null, 2);
+      }
+    }
+
+    function populatePresets() {
+      const sel = document.getElementById('preset-select');
+      sel.innerHTML = '<option value="">Load Preset…</option>';
+      for (const k of Object.keys(ODATA_PRESETS)) {
+        const opt = document.createElement('option');
+        opt.value = k; opt.textContent = k;
+        sel.appendChild(opt);
+      }
+    }
+
+    async function onContextReady() {
+      store = DV.store('webapi-playground');
+      document.getElementById('tel-store').textContent = `Storage: ${store.type}`;
+      document.getElementById('api-version-lbl').textContent = `/api/data/v${context.apiVersion}`;
+      document.getElementById('btn-run').disabled = false;
+
+      history = store.get('history', []) || [];
+      renderHistoryDropdown();
+      populatePresets();
+
+      const lastOData = store.get('lastOData');
+      if (lastOData) {
+        document.getElementById('odata-method').value = lastOData.method || 'GET';
+        document.getElementById('odata-path').value = lastOData.path || '/WhoAmI';
+        document.getElementById('odata-body').value = lastOData.body || '';
+        if (lastOData.headers) document.getElementById('odata-headers').value = lastOData.headers;
+      }
+      if (context.launchData?.odataPath) applyLaunchOData(context.launchData);
+    }
+
+    async function executeQuery(isNextPage = false) {
+      if (!context || !window.DV) return;
+      const btn = document.getElementById('btn-run');
+      btn.disabled = true; btn.textContent = '⏳ Running…';
+      try {
+        await executeOData(isNextPage);
+      } catch (err) {
+        document.getElementById('results-body').innerHTML = DV.ui.error(err.message);
+        document.getElementById('res-count-badge').textContent = 'Error';
+        DV.notify(err.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = '▶ Execute (Ctrl+Enter)';
+      }
+    }
+
+    async function executeOData(isNextPage) {
+      const method = document.getElementById('odata-method').value;
+      const apiPrefix = `${context.environmentUrl}/api/data/v${context.apiVersion}`;
+      let path = isNextPage && nextPageInfo?.nextLink
+        ? nextPageInfo.nextLink.replace(apiPrefix, '')
+        : document.getElementById('odata-path').value.trim();
+      if (!path) throw new Error('OData path cannot be empty.');
+      if (!path.startsWith('/')) path = '/' + path;
+
+      let customHeaders = {};
+      const hdrText = document.getElementById('odata-headers').value.trim();
+      if (hdrText) {
+        try { customHeaders = JSON.parse(hdrText); } catch { throw new Error('Request Headers must be valid JSON.'); }
+      }
+      let body = null;
+      const bodyText = document.getElementById('odata-body').value.trim();
+      if (method !== 'GET' && method !== 'DELETE' && bodyText) {
+        try { JSON.parse(bodyText); body = bodyText; } catch { throw new Error('Request Body must be valid JSON.'); }
+      }
+      if (!isNextPage) {
+        store.set('lastOData', { method, path, body: bodyText, headers: hdrText });
+        addHistory(`${method} ${path}`, JSON.stringify({ method, path, body: bodyText, headers: hdrText }));
+      }
+
+      const json = await DV.fetch(path, { method, headers: customHeaders, body });
+      nextPageInfo = json && json['@odata.nextLink'] ? { nextLink: json['@odata.nextLink'] } : null;
+      handleResultData(json, `${method} ${path.split('?')[0]}`);
+    }
+
+    function handleResultData(json, label) {
+      const normalized = (json === null || json === undefined) ? { status: '204 No Content (Success)' } : json;
+      lastRawJson = normalized;
+      lastRows = Array.isArray(normalized.value)
+        ? normalized.value
+        : (typeof normalized === 'object' && Object.keys(normalized).length ? [normalized] : []);
+      document.getElementById('btn-next-page').style.display = nextPageInfo ? 'inline-flex' : 'none';
+      document.getElementById('btn-copy-json').disabled = !lastRawJson;
+      document.getElementById('btn-export-csv').disabled = !lastRows.length;
+      DV.setTitle(`Web API — ${lastRows.length} rows (${label})`);
+      renderActiveView();
+    }
+
+    function renderActiveView() {
+      const container = document.getElementById('results-body');
+      const filter = document.getElementById('res-filter').value.trim().toLowerCase();
+      if (activeView === 'code') { renderCodeSnippets(container); return; }
+      if (!lastRawJson) { container.innerHTML = DV.ui.empty('No results yet. Execute an OData Web API request to inspect data.'); return; }
+      if (activeView === 'json') {
+        document.getElementById('res-count-badge').textContent = `${lastRows.length} rows`;
+        container.innerHTML = `<pre class="dv-code" style="border:none;border-radius:0;padding:12px 14px;">${DV.esc(JSON.stringify(lastRawJson, null, 2))}</pre>`;
+        return;
+      }
+
+      const filteredRows = !filter ? lastRows : lastRows.filter(r => JSON.stringify(r).toLowerCase().includes(filter));
+      document.getElementById('res-count-badge').textContent = `${filteredRows.length} rows${nextPageInfo ? ' (more)' : ''}`;
+      if (!filteredRows.length) { container.innerHTML = DV.ui.empty('Request succeeded with 0 matching rows.'); return; }
+
+      const cols = [...new Set(filteredRows.flatMap(r => Object.keys(r).filter(k => !k.startsWith('@odata.') && !k.includes('@OData.Community.') && !k.includes('@Microsoft.Dynamics.CRM.'))))];
+      if (!cols.length) {
+        container.innerHTML = `<pre class="dv-code" style="border:none;padding:12px 14px;">${DV.esc(JSON.stringify(lastRawJson, null, 2))}</pre>`;
+        return;
+      }
+
+      let html = '<table class="dv-table"><thead><tr><th>#</th>' + cols.map(c => `<th>${DV.esc(c)}</th>`).join('') + '</tr></thead><tbody>';
+      filteredRows.forEach((row, idx) => {
+        html += `<tr><td style="color:var(--text-muted);">${idx + 1}</td>`;
+        for (const c of cols) {
+          const raw = row[c], fmt = row[`${c}@OData.Community.Display.V1.FormattedValue`];
+          const rawStr = raw === null || raw === undefined ? '' : typeof raw === 'object' ? JSON.stringify(raw) : String(raw);
+          html += (fmt !== undefined && String(fmt) !== rawStr)
+            ? `<td title="${DV.esc(fmt)} (${DV.esc(rawStr)})">${DV.esc(fmt)}<span class="oa-raw-sub">${DV.esc(rawStr)}</span></td>`
+            : `<td title="${DV.esc(rawStr)}">${raw === null || raw === undefined ? '<span style="color:var(--text-muted)">null</span>' : DV.esc(rawStr)}</td>`;
+        }
+        html += '</tr>';
+      });
+      container.innerHTML = html + '</tbody></table>';
+    }
+
+    function renderCodeSnippets(container) {
+      const baseUrl = `${context.environmentUrl}/api/data/v${context.apiVersion}`;
+      const method = document.getElementById('odata-method').value;
+      const rawPath = document.getElementById('odata-path').value.trim();
+      const relPath = rawPath.startsWith('/') ? rawPath : '/' + rawPath;
+      const body = document.getElementById('odata-body').value.trim();
+      const hasBody = method !== 'GET' && method !== 'DELETE' && body;
+
+      const jsSnippet = `// 1. JavaScript Fetch API\nconst res = await fetch("${baseUrl}${relPath}", {\n  method: "${method}",\n  headers: { "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json", "Content-Type": "application/json" }${hasBody ? `,\n  body: JSON.stringify(${body})` : ''}\n});\nconst data = res.status === 204 ? null : await res.json();`;
+      const csMethod = method === 'GET' ? 'HttpMethod.Get' : method === 'POST' ? 'HttpMethod.Post' : method === 'DELETE' ? 'HttpMethod.Delete' : `HttpMethod.Patch`;
+      const csSnippet = `// 2. C# HttpClient (.NET)\nusing var req = new HttpRequestMessage(${csMethod}, "${baseUrl}${relPath}");\nreq.Headers.Add("OData-MaxVersion", "4.0");\nreq.Headers.Add("OData-Version", "4.0");\nreq.Headers.Add("Prefer", "odata.include-annotations=\\"*\\"");${hasBody ? `\nreq.Content = new StringContent(${JSON.stringify(body)}, Encoding.UTF8, "application/json");` : ''}\nusing var resp = await httpClient.SendAsync(req);\nvar json = await resp.Content.ReadAsStringAsync();`;
+
+      container.innerHTML = `<pre class="dv-code" style="border:none;padding:12px 14px;">${DV.esc(jsSnippet + '\n\n' + csSnippet)}</pre>`;
+    }
+
+    function addHistory(label, data) {
+      history = history.filter(h => h.data !== data);
+      history.unshift({ label, data, ts: new Date().toLocaleTimeString() });
+      if (history.length > 20) history.pop();
+      store.set('history', history);
+      renderHistoryDropdown();
+    }
+
+    function renderHistoryDropdown() {
+      const sel = document.getElementById('history-select');
+      sel.innerHTML = `<option value="">History (${history.length})</option>` +
+        history.map((h, i) => `<option value="${i}">${DV.esc(h.label)} (${DV.esc(h.ts)})</option>`).join('');
+    }
+
+    document.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', () => {
+      activeView = btn.dataset.view;
+      document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b === btn));
+      renderActiveView();
+    }));
+
+    document.getElementById('preset-select').addEventListener('change', e => {
+      const k = e.target.value; if (!k) return;
+      const p = ODATA_PRESETS[k];
+      document.getElementById('odata-method').value = p.method;
+      document.getElementById('odata-path').value = p.path;
+      document.getElementById('odata-body').value = p.body;
+      e.target.value = '';
+    });
+
+    document.getElementById('history-select').addEventListener('change', e => {
+      if (e.target.value === '') return;
+      const item = history[Number(e.target.value)]; if (!item) return;
+      const p = JSON.parse(item.data);
+      document.getElementById('odata-method').value = p.method || 'GET';
+      document.getElementById('odata-path').value = p.path || '/';
+      document.getElementById('odata-body').value = p.body || '';
+      if (p.headers) document.getElementById('odata-headers').value = p.headers;
+      e.target.value = '';
+    });
+
+    document.getElementById('btn-format').addEventListener('click', () => {
+      ['odata-body', 'odata-headers'].forEach(id => {
+        const el = document.getElementById(id);
+        try { if (el.value.trim()) el.value = JSON.stringify(JSON.parse(el.value), null, 2); } catch { DV.notify(`Invalid JSON in ${id}`, 'warning'); }
+      });
+    });
+
+    document.getElementById('btn-save').addEventListener('click', () => {
+      store.set('lastOData', {
+        method: document.getElementById('odata-method').value,
+        path: document.getElementById('odata-path').value,
+        body: document.getElementById('odata-body').value,
+        headers: document.getElementById('odata-headers').value
+      });
+      DV.notify('OData request saved to local tool storage', 'success');
+    });
+
+    document.getElementById('btn-run').addEventListener('click', () => executeQuery(false));
+    document.getElementById('btn-next-page').addEventListener('click', () => executeQuery(true));
+    document.getElementById('res-filter').addEventListener('input', renderActiveView);
+    document.getElementById('btn-copy-json').addEventListener('click', () => lastRawJson && DV.copyText(JSON.stringify(lastRawJson, null, 2), 'JSON copied to clipboard'));
+    document.getElementById('btn-export-csv').addEventListener('click', () => {
+      if (!lastRows.length) return;
+      const cols = [...new Set(lastRows.flatMap(r => Object.keys(r).filter(k => !k.startsWith('@odata.') && !k.includes('@OData.'))))];
+      DV.exportCsv(`dataverse_webapi_${new Date().toISOString().slice(0, 10)}.csv`, cols, lastRows.map(r => cols.map(c => r[`${c}@OData.Community.Display.V1.FormattedValue`] ?? r[c])));
+    });
+    document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); executeQuery(false); } });
+  </script>
+</body>
+</html>

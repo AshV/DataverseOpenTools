@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FetchXML &amp; Web API Playground</title>
+  <title>FetchXML Runner</title>
 
   <script type="application/json" id="dvopentools-manifest">
   {
     "id":             "fetchxml-playground",
-    "name":           "FetchXML & Web API",
-    "version":        "1.1.0",
-    "description":    "Execute FetchXML queries (with paging & batch fallback) and OData Web API requests with table inspection, code generation, and CSV/JSON export.",
+    "name":           "FetchXML Runner",
+    "version":        "1.2.0",
+    "description":    "Execute FetchXML queries (with paging-cookie pagination, aggregates, $batch fallback, XML formatting, JS/Xrm snippets, and CSV/JSON export).",
     "icon":           "🔍",
     "category":       "Query",
     "author":         "Ashish Vishwakarma",
@@ -28,22 +28,15 @@
       resize: none; padding: 10px 14px !important; background: var(--code-bg) !important;
       font-family: 'Cascadia Code', 'Consolas', monospace !important; line-height: 1.5;
     }
-    .fx-odata-split { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
-    .fx-odata-col { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); }
-    .fx-odata-col:last-child { border-right: none; }
     .fx-raw-sub { display: block; font-size: 10px; color: var(--text-muted); font-family: monospace; }
   </style>
 </head>
 <body class="dv-app">
 
   <div class="dv-toolbar">
-    <div class="dv-seg-group">
-      <button class="dv-seg-btn active" data-mode="fetchxml">FetchXML</button>
-      <button class="dv-seg-btn" data-mode="odata">OData Web API</button>
-    </div>
     <select id="preset-select"><option value="">Load Preset…</option></select>
     <select id="history-select"><option value="">History (0)</option></select>
-    <button class="dv-btn" id="btn-format">✨ Format</button>
+    <button class="dv-btn" id="btn-format">✨ Format XML</button>
     <button class="dv-btn" id="btn-save">💾 Save</button>
     <div class="dv-spacer"></div>
     <span id="entity-map-status" style="font-size:11px;color:var(--text-muted);">Loading table map…</span>
@@ -62,28 +55,6 @@
     <textarea id="fetchxml-input" class="fx-code-area" spellcheck="false"></textarea>
   </div>
 
-  <div class="fx-editor-pane" id="pane-odata" style="display:none;">
-    <div class="dv-strip">
-      <select id="odata-method" style="width:95px;font-weight:700;">
-        <option value="GET">GET</option><option value="POST">POST</option>
-        <option value="PATCH">PATCH</option><option value="DELETE">DELETE</option>
-      </select>
-      <input type="text" id="odata-path" style="flex:1;font-family:monospace;" value="/accounts?$select=name,accountnumber,statecode,createdon&$top=20">
-    </div>
-    <div class="fx-odata-split">
-      <div class="fx-odata-col">
-        <div class="dv-strip" style="font-size:11px;font-weight:700;color:var(--text-sec);">Request Headers (JSON)</div>
-        <textarea id="odata-headers" class="fx-code-area" spellcheck="false">{
-  "Prefer": "odata.include-annotations=\"*\""
-}</textarea>
-      </div>
-      <div class="fx-odata-col">
-        <div class="dv-strip" style="font-size:11px;font-weight:700;color:var(--text-sec);">Request Body (JSON — POST / PATCH)</div>
-        <textarea id="odata-body" class="fx-code-area" spellcheck="false" placeholder='{\n  "name": "Contoso Ltd"\n}'></textarea>
-      </div>
-    </div>
-  </div>
-
   <div class="dv-toolbar" style="padding:6px 14px;">
     <div class="dv-seg-group">
       <button class="dv-seg-btn active" data-view="table">Table</button>
@@ -99,7 +70,7 @@
   </div>
 
   <div class="dv-scroll" id="results-body">
-    <div class="dv-empty">Enter a FetchXML query or OData path above and press <strong>Execute (Ctrl+Enter)</strong>.</div>
+    <div class="dv-empty">Enter a FetchXML query above and press <strong>Execute (Ctrl+Enter)</strong>.</div>
   </div>
 
   <footer class="dv-footer">
@@ -114,7 +85,7 @@
 
     const HOST_ORIGIN = window.location.origin;
     let context = null, store = null;
-    let activeMode = 'fetchxml', activeView = 'table';
+    let activeView = 'table';
     let entityMap = new Map(), lastRows = [], lastRawJson = null, nextPageInfo = null, history = [];
 
     const FETCHXML_PRESETS = {
@@ -122,13 +93,6 @@
       flows: `<fetch top="25">\n  <entity name="workflow">\n    <attribute name="workflowid" />\n    <attribute name="name" />\n    <attribute name="category" />\n    <attribute name="statecode" />\n    <attribute name="modifiedon" />\n    <filter>\n      <condition attribute="category" operator="eq" value="5" />\n      <condition attribute="type" operator="eq" value="1" />\n    </filter>\n    <order attribute="modifiedon" descending="true" />\n  </entity>\n</fetch>`,
       users: `<fetch top="25">\n  <entity name="systemuser">\n    <attribute name="systemuserid" />\n    <attribute name="fullname" />\n    <attribute name="internalemailaddress" />\n    <attribute name="isdisabled" />\n    <filter>\n      <condition attribute="isdisabled" operator="eq" value="0" />\n    </filter>\n  </entity>\n</fetch>`,
       aggregate: `<fetch aggregate="true">\n  <entity name="asyncoperation">\n    <attribute name="asyncoperationid" alias="job_count" aggregate="count" />\n    <attribute name="statuscode" alias="status" groupby="true" />\n  </entity>\n</fetch>`
-    };
-
-    const ODATA_PRESETS = {
-      whoami: { method: 'GET', path: '/WhoAmI', body: '' },
-      accounts: { method: 'GET', path: '/accounts?$select=name,accountnumber,statecode,createdon&$top=20', body: '' },
-      solutions: { method: 'GET', path: '/solutions?$select=uniquename,friendlyname,version,ismanaged&$filter=isvisible eq true&$orderby=friendlyname asc', body: '' },
-      plugins: { method: 'GET', path: '/plugintracelogs?$select=typename,messagename,primaryentity,performanceexecutionduration,createdon&$orderby=createdon desc&$top=20', body: '' }
     };
 
     window.parent?.postMessage({ source: 'dvopentools-tool', type: 'TOOL_READY', payload: {} }, HOST_ORIGIN);
@@ -141,15 +105,13 @@
     });
 
     function applyLaunchFetchXml(xml) {
-      document.querySelector('[data-mode="fetchxml"]').click();
       document.getElementById('fetchxml-input').value = xml;
     }
 
     function populatePresets() {
       const sel = document.getElementById('preset-select');
       sel.innerHTML = '<option value="">Load Preset…</option>';
-      const src = activeMode === 'fetchxml' ? FETCHXML_PRESETS : ODATA_PRESETS;
-      for (const k of Object.keys(src)) {
+      for (const k of Object.keys(FETCHXML_PRESETS)) {
         const opt = document.createElement('option');
         opt.value = k; opt.textContent = k.charAt(0).toUpperCase() + k.slice(1);
         sel.appendChild(opt);
@@ -161,17 +123,13 @@
       document.getElementById('tel-store').textContent = `Storage: ${store.type}`;
       document.getElementById('btn-run').disabled = false;
 
-      history = store.get('history', []) || [];
+      // Migrate legacy dual-mode history entries cleanly to FetchXML-only entries
+      const savedHist = store.get('history', []) || [];
+      history = savedHist.filter(h => !h.mode || h.mode === 'fetchxml');
       renderHistoryDropdown();
       populatePresets();
 
       document.getElementById('fetchxml-input').value = store.get('lastFetchXml') || FETCHXML_PRESETS.accounts;
-      const lastOData = store.get('lastOData');
-      if (lastOData) {
-        document.getElementById('odata-method').value = lastOData.method || 'GET';
-        document.getElementById('odata-path').value = lastOData.path || '/WhoAmI';
-        document.getElementById('odata-body').value = lastOData.body || '';
-      }
       if (context.launchData?.fetchXml) applyLaunchFetchXml(context.launchData.fetchXml);
       await loadEntityMap();
     }
@@ -220,8 +178,7 @@
       const btn = document.getElementById('btn-run');
       btn.disabled = true; btn.textContent = '⏳ Running…';
       try {
-        if (activeMode === 'fetchxml') await executeFetchXml(isNextPage);
-        else await executeOData(isNextPage);
+        await executeFetchXml(isNextPage);
       } catch (err) {
         document.getElementById('results-body').innerHTML = DV.ui.error(err.message);
         document.getElementById('res-count-badge').textContent = 'Error';
@@ -247,7 +204,7 @@
 
       if (!isNextPage) {
         store.set('lastFetchXml', xmlText);
-        addHistory('fetchxml', logicalName, xmlText);
+        addHistory(logicalName, xmlText);
       } else if (nextPageInfo?.type === 'fetchxml') {
         fetchEl.setAttribute('page', String(nextPageInfo.nextPage));
         if (nextPageInfo.cookie) fetchEl.setAttribute('paging-cookie', nextPageInfo.cookie);
@@ -295,40 +252,13 @@
       return parsed;
     }
 
-    async function executeOData(isNextPage) {
-      const method = document.getElementById('odata-method').value;
-      let path = isNextPage && nextPageInfo?.nextLink
-        ? nextPageInfo.nextLink.replace(`${context.environmentUrl}/api/data/v${context.apiVersion}`, '')
-        : document.getElementById('odata-path').value.trim();
-      if (!path) throw new Error('OData path cannot be empty.');
-      if (!path.startsWith('/')) path = '/' + path;
-
-      let customHeaders = {};
-      const hdrText = document.getElementById('odata-headers').value.trim();
-      if (hdrText) {
-        try { customHeaders = JSON.parse(hdrText); } catch { throw new Error('Request Headers must be valid JSON.'); }
-      }
-      let body = null;
-      const bodyText = document.getElementById('odata-body').value.trim();
-      if (method !== 'GET' && method !== 'DELETE' && bodyText) {
-        try { JSON.parse(bodyText); body = bodyText; } catch { throw new Error('Request Body must be valid JSON.'); }
-      }
-      if (!isNextPage) {
-        store.set('lastOData', { method, path, body: bodyText });
-        addHistory('odata', `${method} ${path}`, JSON.stringify({ method, path, body: bodyText }));
-      }
-      const json = await DV.fetch(path, { method, headers: customHeaders, body });
-      nextPageInfo = json['@odata.nextLink'] ? { type: 'odata', nextLink: json['@odata.nextLink'] } : null;
-      handleResultData(json, path.split('?')[0]);
-    }
-
     function handleResultData(json, label) {
-      lastRawJson = json;
-      lastRows = Array.isArray(json.value) ? json.value : (json && Object.keys(json).length ? [json] : []);
+      lastRawJson = json || {};
+      lastRows = Array.isArray(lastRawJson.value) ? lastRawJson.value : (Object.keys(lastRawJson).length ? [lastRawJson] : []);
       document.getElementById('btn-next-page').style.display = nextPageInfo ? 'inline-flex' : 'none';
       document.getElementById('btn-copy-json').disabled = !lastRawJson;
       document.getElementById('btn-export-csv').disabled = !lastRows.length;
-      DV.setTitle(`Query — ${lastRows.length} rows (${label})`);
+      DV.setTitle(`FetchXML — ${lastRows.length} rows (${label})`);
       renderActiveView();
     }
 
@@ -336,7 +266,7 @@
       const container = document.getElementById('results-body');
       const filter = document.getElementById('res-filter').value.trim().toLowerCase();
       if (activeView === 'code') { renderCodeSnippets(container); return; }
-      if (!lastRawJson) { container.innerHTML = DV.ui.empty('No results yet. Execute a query to inspect data.'); return; }
+      if (!lastRawJson) { container.innerHTML = DV.ui.empty('No results yet. Execute a FetchXML query to inspect data.'); return; }
       if (activeView === 'json') {
         document.getElementById('res-count-badge').textContent = `${lastRows.length} rows`;
         container.innerHTML = `<pre class="dv-code" style="border:none;border-radius:0;padding:12px 14px;">${DV.esc(JSON.stringify(lastRawJson, null, 2))}</pre>`;
@@ -370,24 +300,16 @@
 
     function renderCodeSnippets(container) {
       const baseUrl = `${context.environmentUrl}/api/data/v${context.apiVersion}`;
-      let snippet = '';
-      if (activeMode === 'fetchxml') {
-        const xml = document.getElementById('fetchxml-input').value.trim();
-        const entity = new DOMParser().parseFromString(xml, 'text/xml').querySelector('entity')?.getAttribute('name') || 'account';
-        const entitySet = entityMap.get(entity.toLowerCase())?.entitySetName || (entity + 's');
-        snippet = `// 1. Fetch API\nconst fetchXml = ${JSON.stringify(xml)};\nconst res = await fetch(\`${baseUrl}/${entitySet}?fetchXml=\${encodeURIComponent(fetchXml)}\`, {\n  headers: { "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json", "Prefer": "odata.include-annotations=\\"*\\"" }\n});\nconst data = await res.json();\n\n// 2. Xrm.WebApi\nconst result = await Xrm.WebApi.retrieveMultipleRecords("${entity}", "?fetchXml=" + encodeURIComponent(fetchXml));`;
-      } else {
-        const method = document.getElementById('odata-method').value;
-        const path = document.getElementById('odata-path').value.trim();
-        const body = document.getElementById('odata-body').value.trim();
-        snippet = `const res = await fetch("${baseUrl}${path.startsWith('/') ? path : '/' + path}", {\n  method: "${method}",\n  headers: { "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json", "Content-Type": "application/json" }${method !== 'GET' && method !== 'DELETE' && body ? `,\n  body: JSON.stringify(${body})` : ''}\n});\nconst data = res.status === 204 ? null : await res.json();`;
-      }
+      const xml = document.getElementById('fetchxml-input').value.trim();
+      const entity = new DOMParser().parseFromString(xml, 'text/xml').querySelector('entity')?.getAttribute('name') || 'account';
+      const entitySet = entityMap.get(entity.toLowerCase())?.entitySetName || (entity + 's');
+      const snippet = `// 1. JavaScript Fetch API\nconst fetchXml = ${JSON.stringify(xml)};\nconst res = await fetch(\`${baseUrl}/${entitySet}?fetchXml=\${encodeURIComponent(fetchXml)}\`, {\n  headers: { "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json", "Prefer": "odata.include-annotations=\\"*\\"" }\n});\nconst data = await res.json();\n\n// 2. Xrm.WebApi (Form / Web Resource JS)\nconst result = await Xrm.WebApi.retrieveMultipleRecords("${entity}", "?fetchXml=" + encodeURIComponent(fetchXml));\n\n// 3. C# (Dataverse ServiceClient)\nvar fetchXmlCs = ${JSON.stringify(xml)};\nvar ec = serviceClient.RetrieveMultiple(new FetchExpression(fetchXmlCs));`;
       container.innerHTML = `<pre class="dv-code" style="border:none;padding:12px 14px;">${DV.esc(snippet)}</pre>`;
     }
 
-    function addHistory(mode, label, data) {
+    function addHistory(label, data) {
       history = history.filter(h => h.data !== data);
-      history.unshift({ mode, label, data, ts: new Date().toLocaleTimeString() });
+      history.unshift({ mode: 'fetchxml', label, data, ts: new Date().toLocaleTimeString() });
       if (history.length > 20) history.pop();
       store.set('history', history);
       renderHistoryDropdown();
@@ -396,17 +318,8 @@
     function renderHistoryDropdown() {
       const sel = document.getElementById('history-select');
       sel.innerHTML = `<option value="">History (${history.length})</option>` +
-        history.map((h, i) => `<option value="${i}">[${h.mode.toUpperCase()}] ${DV.esc(h.label)} (${DV.esc(h.ts)})</option>`).join('');
+        history.map((h, i) => `<option value="${i}">${DV.esc(h.label)} (${DV.esc(h.ts)})</option>`).join('');
     }
-
-    document.querySelectorAll('[data-mode]').forEach(btn => btn.addEventListener('click', () => {
-      activeMode = btn.dataset.mode;
-      document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b === btn));
-      document.getElementById('pane-fetchxml').style.display = activeMode === 'fetchxml' ? 'flex' : 'none';
-      document.getElementById('pane-odata').style.display = activeMode === 'odata' ? 'flex' : 'none';
-      populatePresets();
-      if (activeView === 'code') renderActiveView();
-    }));
 
     document.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', () => {
       activeView = btn.dataset.view;
@@ -416,54 +329,33 @@
 
     document.getElementById('preset-select').addEventListener('change', e => {
       const k = e.target.value; if (!k) return;
-      if (activeMode === 'fetchxml') document.getElementById('fetchxml-input').value = FETCHXML_PRESETS[k];
-      else {
-        const p = ODATA_PRESETS[k];
-        document.getElementById('odata-method').value = p.method;
-        document.getElementById('odata-path').value = p.path;
-        document.getElementById('odata-body').value = p.body;
-      }
+      document.getElementById('fetchxml-input').value = FETCHXML_PRESETS[k];
       e.target.value = '';
     });
 
     document.getElementById('history-select').addEventListener('change', e => {
       if (e.target.value === '') return;
       const item = history[Number(e.target.value)]; if (!item) return;
-      document.querySelector(`[data-mode="${item.mode}"]`).click();
-      if (item.mode === 'fetchxml') document.getElementById('fetchxml-input').value = item.data;
-      else {
-        const p = JSON.parse(item.data);
-        document.getElementById('odata-method').value = p.method;
-        document.getElementById('odata-path').value = p.path;
-        document.getElementById('odata-body').value = p.body || '';
-      }
+      document.getElementById('fetchxml-input').value = item.data;
       e.target.value = '';
     });
 
     document.getElementById('btn-format').addEventListener('click', () => {
-      if (activeMode === 'odata') {
-        ['odata-body', 'odata-headers'].forEach(id => {
-          const el = document.getElementById(id);
-          try { if (el.value.trim()) el.value = JSON.stringify(JSON.parse(el.value), null, 2); } catch { DV.notify(`Invalid JSON in ${id}`, 'warning'); }
-        });
-      } else {
-        const el = document.getElementById('fetchxml-input');
-        const doc = new DOMParser().parseFromString(el.value.trim(), 'text/xml');
-        if (doc.querySelector('parsererror')) { DV.notify('Invalid XML cannot be formatted', 'warning'); return; }
-        let formatted = '', indent = '';
-        new XMLSerializer().serializeToString(doc).split(/>\s*</).forEach(node => {
-          if (node.match(/^\/\w/)) indent = indent.substring(2);
-          formatted += indent + '<' + node + '>\r\n';
-          if (node.match(/^<?\w[^>]*[^\/]$/) && !node.startsWith('?')) indent += '  ';
-        });
-        el.value = formatted.substring(1, formatted.length - 3);
-      }
+      const el = document.getElementById('fetchxml-input');
+      const doc = new DOMParser().parseFromString(el.value.trim(), 'text/xml');
+      if (doc.querySelector('parsererror')) { DV.notify('Invalid XML cannot be formatted', 'warning'); return; }
+      let formatted = '', indent = '';
+      new XMLSerializer().serializeToString(doc).split(/>\s*</).forEach(node => {
+        if (node.match(/^\/\w/)) indent = indent.substring(2);
+        formatted += indent + '<' + node + '>\r\n';
+        if (node.match(/^<?\w[^>]*[^\/]$/) && !node.startsWith('?')) indent += '  ';
+      });
+      el.value = formatted.substring(1, formatted.length - 3);
     });
 
     document.getElementById('btn-save').addEventListener('click', () => {
-      if (activeMode === 'fetchxml') store.set('lastFetchXml', document.getElementById('fetchxml-input').value);
-      else store.set('lastOData', { method: document.getElementById('odata-method').value, path: document.getElementById('odata-path').value, body: document.getElementById('odata-body').value });
-      DV.notify('Query saved to local tool storage', 'success');
+      store.set('lastFetchXml', document.getElementById('fetchxml-input').value);
+      DV.notify('FetchXML saved to local tool storage', 'success');
     });
 
     document.getElementById('btn-run').addEventListener('click', () => executeQuery(false));
@@ -473,7 +365,7 @@
     document.getElementById('btn-export-csv').addEventListener('click', () => {
       if (!lastRows.length) return;
       const cols = [...new Set(lastRows.flatMap(r => Object.keys(r).filter(k => !k.startsWith('@odata.') && !k.includes('@OData.'))))];
-      DV.exportCsv(`dataverse_query_${new Date().toISOString().slice(0, 10)}.csv`, cols, lastRows.map(r => cols.map(c => r[`${c}@OData.Community.Display.V1.FormattedValue`] ?? r[c])));
+      DV.exportCsv(`dataverse_fetchxml_${new Date().toISOString().slice(0, 10)}.csv`, cols, lastRows.map(r => cols.map(c => r[`${c}@OData.Community.Display.V1.FormattedValue`] ?? r[c])));
     });
     document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); executeQuery(false); } });
   </script>

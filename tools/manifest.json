@@ -255,13 +255,24 @@
   {
     "wrName": "dvot_fetchxml.html",
     "id": "fetchxml-playground",
-    "name": "FetchXML & Web API",
+    "name": "FetchXML Runner",
     "icon": "🔍",
     "category": "Query",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "minHostVersion": "2025.11.1",
-    "description": "Execute FetchXML queries (with paging & batch fallback) and OData Web API requests with table inspection, code generation, and CSV/JSON export.",
-    "sizeBytes": 26872
+    "description": "Execute FetchXML queries (with paging-cookie pagination, aggregates, $batch fallback, XML formatting, JS/Xrm snippets, and CSV/JSON export).",
+    "sizeBytes": 20541
+  },
+  {
+    "wrName": "dvot_webapi.html",
+    "id": "webapi-playground",
+    "name": "OData Web API",
+    "icon": "🌐",
+    "category": "Query",
+    "version": "1.0.0",
+    "minHostVersion": "2025.11.1",
+    "description": "Execute GET, POST, PATCH, PUT, and DELETE Dataverse OData Web API requests with custom headers, JSON body editor, @odata.nextLink paging, JS/C# code snippets, and CSV/JSON export.",
+    "sizeBytes": 18664
   },
   {
     "wrName": "dvot_accesschecker.html",
