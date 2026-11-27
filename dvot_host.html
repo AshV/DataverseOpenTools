@@ -18,6 +18,7 @@
       --sidebar-hover:  rgba(255,255,255,0.08);
       --sidebar-active: rgba(0,120,212,0.18);
       --sidebar-width:  220px;
+      --sidebar-rail-width: 46px;
       --main-bg:        #f4f4f4;
       --tab-bar-bg:     #e4e4e4;
       --tab-active-bg:  #ffffff;
@@ -112,13 +113,35 @@
     .sidebar {
       width: var(--sidebar-width);
       background: var(--sidebar-bg);
-      display: flex; flex-direction: column;
       flex-shrink: 0;
       min-height: 0;
-      overflow: hidden;
+      position: relative;
       transition: width .22s ease;
     }
-    .sidebar.collapsed { width: 0; }
+    .sidebar-panel {
+      width: 100%;
+      height: 100%;
+      background: var(--sidebar-bg);
+      display: flex; flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+      transition: width .2s ease, box-shadow .2s ease;
+    }
+    .sidebar.collapsed {
+      width: var(--sidebar-rail-width);
+      overflow: visible;
+      z-index: 45;
+    }
+    .sidebar.collapsed .sidebar-panel {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: var(--sidebar-rail-width);
+    }
+    .sidebar.collapsed:hover .sidebar-panel,
+    .sidebar.collapsed:focus-within .sidebar-panel {
+      width: var(--sidebar-width);
+      box-shadow: 6px 0 24px rgba(0,0,0,0.35);
+    }
 
     .sidebar-hdr {
       padding: 10px 12px 6px;
@@ -126,7 +149,7 @@
       text-transform: uppercase; letter-spacing: 1px;
       color: rgba(255,255,255,0.35);
       display: flex; align-items: center; justify-content: space-between;
-      flex-shrink: 0;
+      flex-shrink: 0; white-space: nowrap;
     }
     .sb-refresh {
       background: none; border: none; cursor: pointer;
@@ -136,7 +159,7 @@
     .sb-refresh:hover { color: #fff; background: rgba(255,255,255,0.1); }
 
     .sidebar-list {
-      flex: 1; min-height: 0; overflow-y: auto; padding: 4px 0;
+      flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 4px 0;
     }
     .sidebar-list::-webkit-scrollbar { width: 3px; }
     .sidebar-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 2px; }
@@ -145,6 +168,7 @@
       padding: 10px 12px 3px;
       font-size: 10px; font-weight: 700; text-transform: uppercase;
       letter-spacing: .8px; color: rgba(255,255,255,0.28);
+      white-space: nowrap; overflow: hidden; position: relative;
     }
     .tool-item {
       display: flex; align-items: center; gap: 9px;
@@ -176,6 +200,11 @@
 
     .sb-search-wrap {
       padding: 4px 10px 6px; position: relative; flex-shrink: 0;
+    }
+    .sb-search-ico {
+      display: none; position: absolute; inset: 0;
+      align-items: center; justify-content: center;
+      font-size: 13px; color: rgba(255,255,255,0.45); pointer-events: none;
     }
     .sb-search {
       width: 100%; padding: 5px 24px 5px 8px; border-radius: 4px;
@@ -211,8 +240,33 @@
       color: var(--sidebar-text); cursor: pointer;
       border-radius: 4px; font-size: 13px; text-align: left;
       transition: background .1s; width: 100%; font-family: inherit;
+      white-space: nowrap; overflow: hidden;
     }
     .sb-action:hover { background: var(--sidebar-hover); color: #fff; }
+    .sb-act-ico { font-size: 14px; flex-shrink: 0; }
+
+    /* Collapsed icon-rail mode (expands smoothly on hover/focus) */
+    .sidebar.collapsed:not(:hover):not(:focus-within) .sidebar-hdr { justify-content: center; padding: 10px 0 6px; }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .sb-hdr-title { display: none; }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .sb-search-wrap { padding: 4px 6px 6px; }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .sb-search { opacity: 0; pointer-events: none; padding-left: 0; padding-right: 0; }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .sb-search-ico { display: flex; }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .sb-clear { display: none; }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .cat-label { color: transparent; padding-left: 0; padding-right: 0; }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .cat-label::after {
+      content: ''; position: absolute; left: 13px; right: 13px; top: 55%; height: 1px; background: rgba(255,255,255,0.12);
+    }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .tool-item { justify-content: center; padding: 7px 0; gap: 0; }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .tool-name,
+    .sidebar.collapsed:not(:hover):not(:focus-within) .tool-warn,
+    .sidebar.collapsed:not(:hover):not(:focus-within) .tool-count,
+    .sidebar.collapsed:not(:hover):not(:focus-within) .tool-newtab,
+    .sidebar.collapsed:not(:hover):not(:focus-within) .tool-pin { display: none; }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .sb-action { justify-content: center; padding: 7px 0; gap: 0; }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .sb-act-lbl { display: none; }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .sb-loading { justify-content: center; padding: 10px 0; }
+    .sidebar.collapsed:not(:hover):not(:focus-within) .sb-loading-txt,
+    .sidebar.collapsed:not(:hover):not(:focus-within) .sb-empty { display: none; }
 
     /* ═══════════════════════════════════════════
        MAIN AREA
@@ -489,7 +543,7 @@
 
   <!-- ══════════════ HEADER ══════════════ -->
   <header class="header">
-    <button class="hdr-btn" id="sidebar-toggle" title="Toggle Sidebar  Ctrl+B">☰</button>
+    <button class="hdr-btn" id="sidebar-toggle" title="Collapse Sidebar to Icons  Ctrl+B">☰</button>
     <div class="header-logo">⚡ DV <em>Open</em> Tools</div>
     <button class="hdr-pill-btn" id="cmd-palette-btn" title="Quick Open Tools &amp; Commands  Ctrl+K">🔍 Quick Open <kbd>Ctrl+K</kbd></button>
     <button class="hdr-pill-btn" id="proxy-btn" style="display:none;background:rgba(255,165,0,0.22);border-color:rgba(255,165,0,0.5);" title="Configure Local Proxy URL">🔌 Proxy URL</button>
@@ -506,20 +560,23 @@
 
     <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-hdr">
-        Tools
-        <button class="sb-refresh" id="refresh-btn" title="Refresh tool list">↻</button>
-      </div>
-      <div class="sb-search-wrap">
-        <input type="text" class="sb-search" id="sb-search" placeholder="Filter tools…">
-        <button class="sb-clear" id="sb-clear" title="Clear search">×</button>
-      </div>
-      <div class="sidebar-list" id="sidebar-list">
-        <div class="sb-loading"><span class="spin"></span> Discovering tools…</div>
-      </div>
-      <div class="sb-actions">
-        <button class="sb-action" id="load-file-btn">📂 Load from File</button>
-        <button class="sb-action" id="settings-btn">⚙️ Settings</button>
+      <div class="sidebar-panel">
+        <div class="sidebar-hdr">
+          <span class="sb-hdr-title">Tools</span>
+          <button class="sb-refresh" id="refresh-btn" title="Refresh tool list">↻</button>
+        </div>
+        <div class="sb-search-wrap">
+          <span class="sb-search-ico" aria-hidden="true">🔍</span>
+          <input type="text" class="sb-search" id="sb-search" placeholder="Filter tools…">
+          <button class="sb-clear" id="sb-clear" title="Clear search">×</button>
+        </div>
+        <div class="sidebar-list" id="sidebar-list">
+          <div class="sb-loading"><span class="spin"></span> <span class="sb-loading-txt">Discovering tools…</span></div>
+        </div>
+        <div class="sb-actions">
+          <button class="sb-action" id="load-file-btn" title="Load from File"><span class="sb-act-ico">📂</span><span class="sb-act-lbl">Load from File</span></button>
+          <button class="sb-action" id="settings-btn" title="Settings"><span class="sb-act-ico">⚙️</span><span class="sb-act-lbl">Settings</span></button>
+        </div>
       </div>
     </aside>
 
@@ -1434,7 +1491,7 @@
     /* ─── Sidebar rendering ──────────────────────────────────── */
     function setSidebarLoading() {
       document.getElementById('sidebar-list').innerHTML =
-        '<div class="sb-loading"><span class="spin"></span> Discovering tools…</div>';
+        '<div class="sb-loading"><span class="spin"></span> <span class="sb-loading-txt">Discovering tools…</span></div>';
     }
 
     function togglePin(toolId, e) {
@@ -2945,11 +3002,15 @@
       if (changed) { ls.set(`cache::${getApiBaseUrl()}::${prefix}`, null); discoverTools(true); }
     }
 
-    /* ─── UI event bindings ──────────────────────────────────── */
-    document.getElementById('sidebar-toggle').addEventListener('click', () => {
-      S.sidebarOpen = !S.sidebarOpen;
+    function toggleSidebar(forceOpen = null) {
+      S.sidebarOpen = forceOpen === null ? !S.sidebarOpen : !!forceOpen;
       document.getElementById('sidebar').classList.toggle('collapsed', !S.sidebarOpen);
-    });
+      const btn = document.getElementById('sidebar-toggle');
+      if (btn) btn.title = S.sidebarOpen ? 'Collapse Sidebar to Icons  Ctrl+B' : 'Expand Sidebar  Ctrl+B';
+    }
+
+    /* ─── UI event bindings ──────────────────────────────────── */
+    document.getElementById('sidebar-toggle').addEventListener('click', () => toggleSidebar());
     document.getElementById('theme-btn').addEventListener('click', () => { applyTheme(S.cfg.theme === 'dark' ? 'light' : 'dark'); ls.set('cfg', S.cfg); });
     document.getElementById('refresh-btn').addEventListener('click', () => discoverTools(true));
 
