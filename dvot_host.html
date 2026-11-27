@@ -158,11 +158,31 @@
     }
     .sb-refresh:hover { color: #fff; background: rgba(255,255,255,0.1); }
 
+    .sidebar-list-wrap {
+      flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column;
+    }
     .sidebar-list {
       flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 4px 0;
     }
     .sidebar-list::-webkit-scrollbar { width: 3px; }
     .sidebar-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 2px; }
+    .sb-scroll-cue {
+      position: absolute; left: 0; right: 0; height: 22px; z-index: 3;
+      display: flex; align-items: center; justify-content: center;
+      border: none; padding: 0; cursor: pointer;
+      font-size: 11px; line-height: 1; color: rgba(255,255,255,0.6);
+      opacity: 0; pointer-events: none; transition: opacity .15s, color .15s;
+    }
+    .sb-scroll-cue.top {
+      top: 0; align-items: flex-start; padding-top: 2px;
+      background: linear-gradient(to bottom, var(--sidebar-bg) 38%, rgba(22,33,62,0));
+    }
+    .sb-scroll-cue.bottom {
+      bottom: 0; align-items: flex-end; padding-bottom: 2px;
+      background: linear-gradient(to top, var(--sidebar-bg) 38%, rgba(22,33,62,0));
+    }
+    .sb-scroll-cue.visible { opacity: 1; pointer-events: auto; }
+    .sb-scroll-cue:hover { color: #fff; }
 
     .cat-label {
       padding: 10px 12px 3px;
@@ -571,8 +591,12 @@
           <input type="text" class="sb-search" id="sb-search" placeholder="Filter tools…">
           <button class="sb-clear" id="sb-clear" title="Clear search">×</button>
         </div>
-        <div class="sidebar-list" id="sidebar-list">
-          <div class="sb-loading"><span class="spin"></span> <span class="sb-loading-txt">Discovering tools…</span></div>
+        <div class="sidebar-list-wrap">
+          <button class="sb-scroll-cue top" id="sb-scroll-up" title="Scroll up" aria-label="Scroll tools up">▴</button>
+          <div class="sidebar-list" id="sidebar-list">
+            <div class="sb-loading"><span class="spin"></span> <span class="sb-loading-txt">Discovering tools…</span></div>
+          </div>
+          <button class="sb-scroll-cue bottom" id="sb-scroll-dn" title="Scroll down" aria-label="Scroll tools down">▾</button>
         </div>
         <div class="sb-actions">
           <button class="sb-action" id="load-file-btn" title="Load from File"><span class="sb-act-ico">📂</span><span class="sb-act-lbl">Load from File</span></button>
@@ -1493,6 +1517,7 @@
     function setSidebarLoading() {
       document.getElementById('sidebar-list').innerHTML =
         '<div class="sb-loading"><span class="spin"></span> <span class="sb-loading-txt">Discovering tools…</span></div>';
+      scheduleSidebarScrollCues();
     }
 
     function togglePin(toolId, e) {
@@ -1501,6 +1526,21 @@
       else S.pinnedTools.add(toolId);
       ls.set('pinnedTools', [...S.pinnedTools]);
       renderSidebar();
+    }
+
+    function updateSidebarScrollCues() {
+      const list = document.getElementById('sidebar-list');
+      const up   = document.getElementById('sb-scroll-up');
+      const dn   = document.getElementById('sb-scroll-dn');
+      if (!list || !up || !dn) return;
+      const canScroll = list.scrollHeight - list.clientHeight > 4;
+      up.classList.toggle('visible', canScroll && list.scrollTop > 4);
+      dn.classList.toggle('visible', canScroll && (list.scrollTop + list.clientHeight) < (list.scrollHeight - 4));
+    }
+
+    function scheduleSidebarScrollCues() {
+      updateSidebarScrollCues();
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(updateSidebarScrollCues);
     }
 
     function renderSidebar() {
@@ -1513,6 +1553,7 @@
         } else {
           el.innerHTML = `<div class="sb-empty">No tools found.<br>Upload web resources named<br><code>${esc(S.cfg.prefix)}*.html</code></div>`;
         }
+        scheduleSidebarScrollCues();
         return;
       }
 
@@ -1523,6 +1564,7 @@
 
       if (!filtered.length) {
         el.innerHTML = `<div class="sb-empty">No tools match "<strong>${esc(q)}</strong>".</div>`;
+        scheduleSidebarScrollCues();
         return;
       }
 
@@ -1580,6 +1622,7 @@
           }
         });
       });
+      scheduleSidebarScrollCues();
     }
 
     /* ─── Tab management ─────────────────────────────────────── */
@@ -3012,6 +3055,17 @@
 
     /* ─── UI event bindings ──────────────────────────────────── */
     document.getElementById('sidebar-toggle').addEventListener('click', () => toggleSidebar());
+    document.getElementById('sidebar-list').addEventListener('scroll', updateSidebarScrollCues, { passive: true });
+    document.getElementById('sb-scroll-up').addEventListener('click', () => {
+      document.getElementById('sidebar-list').scrollBy({ top: -150, behavior: 'smooth' });
+    });
+    document.getElementById('sb-scroll-dn').addEventListener('click', () => {
+      document.getElementById('sidebar-list').scrollBy({ top: 150, behavior: 'smooth' });
+    });
+    window.addEventListener('resize', updateSidebarScrollCues);
+    if (typeof ResizeObserver === 'function') {
+      new ResizeObserver(updateSidebarScrollCues).observe(document.getElementById('sidebar-list'));
+    }
     document.getElementById('theme-btn').addEventListener('click', () => { applyTheme(S.cfg.theme === 'dark' ? 'light' : 'dark'); ls.set('cfg', S.cfg); });
     document.getElementById('refresh-btn').addEventListener('click', () => discoverTools(true));
 
